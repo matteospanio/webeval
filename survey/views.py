@@ -18,6 +18,7 @@ from typing import Any
 
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import F
 from django.http import (
     Http404,
     HttpResponseBadRequest,
@@ -217,6 +218,9 @@ def consent(request, slug: str):
             return redirect("survey:audio_check", slug=slug)
         return redirect("survey:instructions", slug=slug)
 
+    Experiment.objects.filter(pk=experiment.pk).update(
+        consent_page_views=F("consent_page_views") + 1
+    )
     ctx = _base_context(experiment, session)
     ctx["consent_first"] = consent_first
     ctx["consent_rest"] = consent_rest
@@ -421,6 +425,7 @@ def play(request, slug: str):
             "has_more_after_stimuli": _ordered_section_questions(
                 experiment, Question.Section.DEMOGRAPHIC
             ),
+            "show_prompt": any(q.show_prompt for q in page_questions),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -453,6 +458,7 @@ def _save_page_answers(
                     session.current_assignment_index == len(assignments) - 1
                     and session.current_page_index == len(pages) - 1
                 ),
+                "show_prompt": any(q.show_prompt for q in page_questions),
             }
         )
         return render(request, "survey/play.html", ctx, status=400)
@@ -631,6 +637,7 @@ def pairwise_play(request, slug: str):
                 "has_demographics": has_demographics,
                 "pair_number": session.current_pair_index + 1,
                 "pairs_total": len(pairs),
+                "show_prompt": any(q.show_prompt for q in questions),
             })
             return render(request, "survey/pairwise_play.html", ctx, status=400)
 
@@ -659,6 +666,7 @@ def pairwise_play(request, slug: str):
         "has_demographics": has_demographics,
         "pair_number": session.current_pair_index + 1,
         "pairs_total": len(pairs),
+        "show_prompt": any(q.show_prompt for q in questions),
     })
     return render(request, "survey/pairwise_play.html", ctx)
 

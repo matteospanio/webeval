@@ -79,6 +79,13 @@ main.container,
   padding-left: 1rem;
   font-size: 1.05rem;
 }
+.stimulus-prompt {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  background: var(--pico-card-background-color, #f8f9fa);
+  border-left: 3px solid var(--pico-primary, #1095c1);
+  border-radius: 4px;
+}
 .form-actions {
   margin-top: 1.5rem;
 }

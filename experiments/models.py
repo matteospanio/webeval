@@ -98,6 +98,12 @@ class Experiment(models.Model):
         default="balanced_random",
         help_text="Identifier of a strategy registered in experiments.assignment.",
     )
+    consent_page_views = models.PositiveIntegerField(
+        default=0,
+        editable=False,
+        help_text="Number of times the consent page was loaded by a visitor.",
+    )
+
     require_audio_check = models.BooleanField(
         default=True,
         help_text=(
@@ -441,6 +447,13 @@ class Question(models.Model):
             "break). The first question of a section always starts a new "
             "page implicitly; check this to split subsequent questions "
             "onto their own pages."
+        ),
+    )
+    show_prompt = models.BooleanField(
+        default=False,
+        help_text=(
+            "Display the stimulus generation prompt to the participant "
+            "on this question's page."
         ),
     )
 

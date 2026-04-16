@@ -30,6 +30,12 @@
       {% endif %}
     </div>
 
+    {% if show_prompt and stimulus.prompt_group %}
+      <div class="stimulus-prompt">
+        <p><strong>Prompt:</strong> {{ stimulus.prompt_group }}</p>
+      </div>
+    {% endif %}
+
     {% if messages %}
       {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
     {% endif %}

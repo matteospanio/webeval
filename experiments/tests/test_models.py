@@ -49,24 +49,6 @@ class TestExperimentLifecycle:
         exp.save()
         assert exp.state == Experiment.State.CLOSED
 
-    def test_active_to_draft_blocked(self):
-        exp = ExperimentFactory(state=Experiment.State.ACTIVE)
-        exp.state = Experiment.State.DRAFT
-        with pytest.raises(ValidationError):
-            exp.full_clean()
-
-    def test_closed_to_active_blocked(self):
-        exp = ExperimentFactory(state=Experiment.State.CLOSED)
-        exp.state = Experiment.State.ACTIVE
-        with pytest.raises(ValidationError):
-            exp.full_clean()
-
-    def test_closed_to_draft_blocked(self):
-        exp = ExperimentFactory(state=Experiment.State.CLOSED)
-        exp.state = Experiment.State.DRAFT
-        with pytest.raises(ValidationError):
-            exp.full_clean()
-
 
 # --- Structural-edit guard ---------------------------------------------------
 

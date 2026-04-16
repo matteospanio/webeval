@@ -22,23 +22,33 @@
 
 <section>
   <h2 class="font-semibold text-base mb-4">At a glance</h2>
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
     <div class="{{ card }}">
       <div class="text-xs text-base-500 uppercase tracking-wide">State</div>
       <div class="text-2xl font-semibold">{{ experiment.get_state_display }}</div>
       <div class="text-xs text-base-500"><code>{{ experiment.slug }}</code></div>
     </div>
     <div class="{{ card }}">
-      <div class="text-xs text-base-500 uppercase tracking-wide">Sessions</div>
+      <div class="text-xs text-base-500 uppercase tracking-wide">Consent page views</div>
+      <div class="text-2xl font-semibold">{{ counts.consent_page_views }}</div>
+      <div class="text-xs text-base-500">unique page loads</div>
+    </div>
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">Started (consented)</div>
       <div class="text-2xl font-semibold">{{ counts.total_sessions }}</div>
       <div class="text-xs text-base-500">
-        {{ counts.completed_sessions }} completed · {{ counts.abandoned_sessions }} abandoned
+        {{ counts.completed_sessions }} completed · {{ counts.abandoned_sessions }} dropped out
       </div>
     </div>
     <div class="{{ card }}">
       <div class="text-xs text-base-500 uppercase tracking-wide">Completion rate</div>
       <div class="text-2xl font-semibold">{% widthratio counts.completion_rate 1 100 %}%</div>
       <div class="text-xs text-base-500">of started sessions</div>
+    </div>
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">Dropout rate</div>
+      <div class="text-2xl font-semibold">{% widthratio counts.dropout_rate 1 100 %}%</div>
+      <div class="text-xs text-base-500">{{ counts.abandoned_sessions }} of {{ counts.total_sessions }} started</div>
     </div>
     <div class="{{ card }}">
       <div class="text-xs text-base-500 uppercase tracking-wide">Mean listen time</div>

@@ -20,6 +20,7 @@ from survey.models import PairAssignment, ParticipantSession, Response
 
 @dataclass
 class ExperimentCounts:
+    consent_page_views: int
     total_sessions: int
     completed_sessions: int
     abandoned_sessions: int
@@ -29,6 +30,12 @@ class ExperimentCounts:
         if self.total_sessions == 0:
             return 0.0
         return self.completed_sessions / self.total_sessions
+
+    @property
+    def dropout_rate(self) -> float:
+        if self.total_sessions == 0:
+            return 0.0
+        return self.abandoned_sessions / self.total_sessions
 
 
 @dataclass
@@ -74,11 +81,12 @@ def global_summary() -> GlobalSummary:
 
 
 def experiment_counts(experiment: Experiment) -> ExperimentCounts:
-    """Return (total, completed, abandoned) session counts for ``experiment``."""
+    """Return consent views, total, completed, abandoned session counts."""
     sessions = ParticipantSession.objects.filter(experiment=experiment)
     total = sessions.count()
     completed = sessions.filter(submitted_at__isnull=False).count()
     return ExperimentCounts(
+        consent_page_views=experiment.consent_page_views,
         total_sessions=total,
         completed_sessions=completed,
         abandoned_sessions=total - completed,

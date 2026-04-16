@@ -75,7 +75,7 @@ class QuestionInline(_ReadOnlyWhenLockedMixin, UnfoldTabularInline):
     # Keep the inline lean — per-type config is edited on the Question
     # changeform, where QuestionAdminForm renders flat helper fields
     # instead of raw JSON.
-    fields = ("section", "type", "prompt", "required", "page_break_before", "sort_order")
+    fields = ("section", "type", "prompt", "required", "page_break_before", "show_prompt", "sort_order")
     show_change_link = True
 
 
@@ -294,9 +294,10 @@ class ExperimentAdmin(UnfoldModelAdmin):
 
         return format_html(
             '<dl style="display:grid;grid-template-columns:max-content 1fr;gap:0.25rem 1rem;">'
-            "<dt>Total sessions</dt><dd>{}</dd>"
+            "<dt>Consent page views</dt><dd>{}</dd>"
+            "<dt>Started (consented)</dt><dd>{}</dd>"
             "<dt>Completed</dt><dd>{}</dd>"
-            "<dt>Abandoned</dt><dd>{}</dd>"
+            "<dt>Dropped out</dt><dd>{}</dd>"
             "<dt>Completion rate</dt><dd>{:.0%}</dd>"
             "<dt>Mean listen duration</dt><dd>{}</dd>"
             "</dl>"
@@ -310,6 +311,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
             "</p>"
             '<img src="{}" alt="{}" '
             'style="max-width:100%;margin-top:1rem;">',
+            counts.consent_page_views,
             counts.total_sessions,
             counts.completed_sessions,
             counts.abandoned_sessions,
@@ -403,6 +405,7 @@ class QuestionAdmin(UnfoldModelAdmin):
         "type",
         "required",
         "page_break_before",
+        "show_prompt",
         "sort_order",
     )
     list_filter = ("experiment", "section", "type")
@@ -419,6 +422,7 @@ class QuestionAdmin(UnfoldModelAdmin):
                     "help_text",
                     "required",
                     "page_break_before",
+                    "show_prompt",
                     "sort_order",
                 ),
             },
