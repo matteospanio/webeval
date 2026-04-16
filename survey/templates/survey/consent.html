@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% load markdown_extras %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <p><small>Informed consent</small></p>
+    </header>
+
+    <section class="consent-text">
+      <div>{{ consent_first|markdown|safe }}</div>
+      {% if consent_rest %}
+        <details class="consent-more">
+          <summary>Read more</summary>
+          <div>{{ consent_rest|markdown|safe }}</div>
+        </details>
+      {% endif %}
+    </section>
+
+    {% if experiment.privacy_contact or experiment.privacy_policy_url %}
+      <section>
+        <h3>Contact and privacy</h3>
+        {% if experiment.privacy_contact %}<p>If you have questions about this study, contact <strong>{{ experiment.privacy_contact }}</strong>.</p>{% endif %}
+        {% if experiment.privacy_policy_url %}<p><a href="{{ experiment.privacy_policy_url }}" rel="noopener">Privacy policy</a></p>{% endif %}
+      </section>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if messages %}
+        {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+      {% endif %}
+      <label>
+        <input type="checkbox" name="agree" required>
+        I have read and understood the information above, and I agree to take part.
+      </label>
+      <div class="form-actions">
+        <button type="submit">Begin the study</button>
+      </div>
+    </form>
+  </article>
+{% endblock %}

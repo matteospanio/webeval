@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% load markdown_extras %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    {% if experiment.thanks_content %}
+      {{ experiment.thanks_content|markdown|safe }}
+    {% else %}
+      <header>
+        <h1>Thank you</h1>
+      </header>
+      <p>
+        Your responses have been recorded. Your participation is greatly appreciated.
+      </p>
+    {% endif %}
+    <p>
+      If you would like to take the study again with a new set of items, you can
+      <a href="{% url 'survey:consent' slug=experiment.slug %}">start a fresh session</a>.
+    </p>
+  </article>
+{% endblock %}

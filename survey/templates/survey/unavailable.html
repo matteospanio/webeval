@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>{{ experiment.name }}</h1>
+    </header>
+    <p>
+      This survey is not currently accepting responses. If you were expecting
+      to take part, please get in touch with whoever shared the link with you.
+    </p>
+  </article>
+{% endblock %}

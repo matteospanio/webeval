@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>A few questions about you</h1>
+      <p><small>These responses are stored anonymously and are used only to characterise the sample.</small></p>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for q in page_questions %}
+        {% include "survey/_question.html" %}
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit">{% if is_last_page %}Finish{% else %}Next{% endif %}</button>
+      </div>
+    </form>
+  </article>
+{% endblock %}

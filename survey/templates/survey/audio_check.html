@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Audio check — {{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>Audio check</h1>
+      <p><small>A quick test before the study begins.</small></p>
+    </header>
+
+    <p>
+      Please put on your headphones (or sit in front of your speakers) and
+      adjust the volume to a comfortable level. Play the short clip below
+      and confirm you can hear it clearly before continuing.
+    </p>
+
+    {% if messages %}
+      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      <section class="audio-check-clip">
+        <audio controls preload="auto" src="{% static 'survey/audio/check-tone.mp3' %}"></audio>
+      </section>
+
+      <label>
+        <input type="checkbox" name="can_hear" value="yes" {% if can_hear %}checked{% endif %}>
+        I can hear the audio clearly at a comfortable volume.
+      </label>
+
+      <div class="form-actions">
+        <button type="submit">Continue</button>
+      </div>
+    </form>
+  </article>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% comment %}
+  Render a single question input (rating / choice / text / likert). Expects
+  `q` in the local context.
+{% endcomment %}
+{% load markdown_extras %}
+<fieldset>
+  <legend>{{ q.prompt|markdown|safe }}{% if not q.required %} <small>(optional)</small>{% endif %}</legend>
+  {% if q.help_text %}<small>{{ q.help_text|markdown|safe }}</small>{% endif %}
+
+  {% if q.type == "rating" %}
+    <div class="rating-row">
+      <input
+        type="range"
+        name="q_{{ q.pk }}"
+        id="q_{{ q.pk }}"
+        min="{{ q.config.min|default:0 }}"
+        max="{{ q.config.max|default:100 }}"
+        step="{{ q.config.step|default:1 }}"
+        value="{{ q.submitted_value|default:q.config.min|default:0 }}"
+        oninput="this.nextElementSibling.value = this.value"
+      >
+      <output for="q_{{ q.pk }}">{{ q.submitted_value|default:q.config.min|default:0 }}</output>
+    </div>
+    <div class="rating-scale-labels">
+      <span>{{ q.config.min_label|default:q.config.min|default:0 }}</span>
+      <span>{{ q.config.max_label|default:q.config.max|default:100 }}</span>
+    </div>
+
+  {% elif q.type == "choice" %}
+    <div class="choice-list">
+      {% for choice in q.config.choices %}
+        <label>
+          <input
+            type="{% if q.config.multi %}checkbox{% else %}radio{% endif %}"
+            name="q_{{ q.pk }}"
+            value="{{ choice }}"
+            {% if q.required and not q.config.multi %}required{% endif %}
+            {% if q.config.multi %}{% if choice in q.submitted_values %}checked{% endif %}{% else %}{% if q.submitted_value == choice|stringformat:"s" %}checked{% endif %}{% endif %}
+          >
+          {{ choice }}
+        </label>
+      {% endfor %}
+    </div>
+
+  {% elif q.type == "likert" %}
+    <div class="likert-row">
+      {% for label in q.config.labels %}
+        <label class="likert-option">
+          <input
+            type="radio"
+            name="q_{{ q.pk }}"
+            value="{{ forloop.counter0 }}"
+            {% if q.required %}required{% endif %}
+            {% if q.submitted_value == forloop.counter0|stringformat:"s" %}checked{% endif %}
+          >
+          <span>{{ label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+
+  {% elif q.type == "text" %}
+    <input
+      type="text"
+      name="q_{{ q.pk }}"
+      maxlength="{{ q.config.max_length|default:500 }}"
+      value="{{ q.submitted_value|default:'' }}"
+      {% if q.required %}required{% endif %}
+    >
+  {% endif %}
+</fieldset>

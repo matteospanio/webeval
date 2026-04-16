@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <p class="trial-counter">Comparison {{ pair_number }} of {{ pairs_total }}</p>
+
+    <div class="pairwise-grid">
+      <div class="pairwise-sample">
+        <div class="sample-label">Sample A</div>
+        {% with stim=pair.left_stimulus %}
+          {% if stim.kind == "audio" %}
+            <audio
+              id="stimulus-audio-left"
+              controls
+              preload="auto"
+              data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
+              data-listen-side="{% if pair.position_a == 'left' %}a{% else %}b{% endif %}"
+              data-csrf-token="{{ csrf_token }}"
+            >
+              <source src="{{ stim.audio.url }}">
+              Your browser does not support the audio element.
+            </audio>
+          {% elif stim.kind == "image" %}
+            <figure>
+              <img src="{{ stim.image.url }}" alt="Sample A">
+            </figure>
+          {% elif stim.kind == "text" %}
+            <blockquote>{{ stim.text_body|linebreaks }}</blockquote>
+          {% endif %}
+        {% endwith %}
+      </div>
+
+      <div class="pairwise-sample">
+        <div class="sample-label">Sample B</div>
+        {% with stim=pair.right_stimulus %}
+          {% if stim.kind == "audio" %}
+            <audio
+              id="stimulus-audio-right"
+              controls
+              preload="auto"
+              data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
+              data-listen-side="{% if pair.position_a == 'right' %}a{% else %}b{% endif %}"
+              data-csrf-token="{{ csrf_token }}"
+            >
+              <source src="{{ stim.audio.url }}">
+              Your browser does not support the audio element.
+            </audio>
+          {% elif stim.kind == "image" %}
+            <figure>
+              <img src="{{ stim.image.url }}" alt="Sample B">
+            </figure>
+          {% elif stim.kind == "text" %}
+            <blockquote>{{ stim.text_body|linebreaks }}</blockquote>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+
+      {% comment %}
+        Render A/B choice questions as a compact comparison table.
+        Non-choice questions (if any) fall back to the standard partial.
+      {% endcomment %}
+      {% load markdown_extras %}
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th class="comparison-col-header">A</th>
+            <th class="comparison-col-header">B</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for q in questions %}
+            {% if q.type == "choice" and q.config.choices|length == 2 %}
+              <tr>
+                <td class="comparison-attribute">
+                  {{ q.prompt|markdown|safe }}
+                  {% if q.help_text %}<br><small class="comparison-help">{{ q.help_text }}</small>{% endif %}
+                </td>
+                <td class="comparison-radio">
+                  <input type="radio" name="q_{{ q.pk }}" value="{{ q.config.choices.0 }}" {% if q.required %}required{% endif %}{% if q.submitted_value == q.config.choices.0|stringformat:"s" %} checked{% endif %}>
+                </td>
+                <td class="comparison-radio">
+                  <input type="radio" name="q_{{ q.pk }}" value="{{ q.config.choices.1 }}"{% if q.submitted_value == q.config.choices.1|stringformat:"s" %} checked{% endif %}>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="3">{% include "survey/_question.html" %}</td>
+              </tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="form-actions">
+        <button type="submit">{% if is_last_pair and not has_demographics %}Finish{% else %}Next{% endif %}</button>
+      </div>
+    </form>
+  </article>
+  <script src="{% static 'survey/js/pairwise-audio-tracker.js' %}" defer></script>
+{% endblock %}

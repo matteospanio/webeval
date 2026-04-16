@@ -1,0 +1,53 @@
+{% extends 'admin/base.html' %}
+
+{% load i18n %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+    {% if webeval_summary %}
+    <section class="webeval-summary">
+        <h2 class="font-semibold text-base mb-4">At a glance</h2>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
+                <div class="text-xs text-base-500 uppercase tracking-wide">Experiments</div>
+                <div class="text-2xl font-semibold">{{ webeval_summary.total_experiments }}</div>
+                <div class="text-xs text-base-500">
+                    {{ webeval_summary.drafts }} draft ·
+                    {{ webeval_summary.active }} active ·
+                    {{ webeval_summary.closed }} closed
+                </div>
+            </div>
+            <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
+                <div class="text-xs text-base-500 uppercase tracking-wide">Sessions</div>
+                <div class="text-2xl font-semibold">{{ webeval_summary.total_sessions }}</div>
+                <div class="text-xs text-base-500">started by participants</div>
+            </div>
+            <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
+                <div class="text-xs text-base-500 uppercase tracking-wide">Completed</div>
+                <div class="text-2xl font-semibold">{{ webeval_summary.completed_sessions }}</div>
+                <div class="text-xs text-base-500">
+                    {% widthratio webeval_summary.completion_rate 1 100 %}% completion rate
+                </div>
+            </div>
+            <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
+                <div class="text-xs text-base-500 uppercase tracking-wide">Answers</div>
+                <div class="text-2xl font-semibold">{{ webeval_summary.total_responses }}</div>
+                <div class="text-xs text-base-500">from completed sessions</div>
+            </div>
+        </div>
+    </section>
+    {% endif %}
+
+    <div class="flex flex-col lg:flex-row lg:gap-8">
+        <div class="grow">
+            {% include "unfold/helpers/app_list_default.html" %}
+        </div>
+
+        {% include "unfold/helpers/history.html" %}
+    </div>
+{% endblock %}

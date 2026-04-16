@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% load markdown_extras %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    {% if experiment.instructions_content %}
+      {{ experiment.instructions_content|markdown|safe }}
+    {% else %}
+      <header>
+        <h1>How the study works</h1>
+      </header>
+      <p>
+        You will be shown a short sequence of stimuli — they may be audio
+        excerpts, images, or passages of text. After each one you will be
+        asked a few brief questions about what you just saw or heard. At
+        the end you will be asked a small number of background questions
+        (for example age or prior training). The whole study takes a few
+        minutes.
+      </p>
+      <p>
+        Please answer honestly — there are no right or wrong answers, and
+        your responses are stored anonymously.
+      </p>
+    {% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="form-actions">
+        <button type="submit">Start</button>
+      </div>
+    </form>
+  </article>
+{% endblock %}

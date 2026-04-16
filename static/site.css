@@ -1,0 +1,248 @@
+/* webeval: academic-research overrides on top of Pico.classless. */
+
+:root {
+  --pico-font-family: Roboto, "Helvetica Neue", Helvetica, Arial,
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --pico-font-size: 18px;
+  --pico-line-height: 1.7;
+  --pico-border-radius: 0.125rem;
+  --pico-spacing: 1.25rem;
+}
+
+main.container,
+.survey-main {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding-inline: 1.25rem;
+}
+
+/* PsyToolkit-style header + thin progress bar pinned below it. */
+.survey-header {
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  background: var(--pico-background-color);
+}
+.survey-header-inner {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 0.5rem;
+}
+.survey-brand {
+  display: block;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
+}
+.survey-header .progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--pico-muted-border-color);
+  overflow: hidden;
+}
+.survey-header .progress-bar-fill {
+  height: 100%;
+  background: var(--pico-primary);
+  transition: width 0.3s ease-out;
+}
+.survey-footer {
+  max-width: 44rem;
+  margin: 3rem auto 1.5rem;
+  padding-inline: 1.25rem;
+  color: var(--pico-muted-color);
+}
+.survey-main {
+  padding-top: 2rem;
+}
+/* One stacked label per row for choice questions (PsyToolkit style). */
+.choice-list label {
+  display: block;
+  padding: 0.35rem 0;
+}
+/* Rating scale labels below the slider. */
+.rating-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+}
+/* Stimulus media container. */
+.stimulus-media {
+  margin-bottom: 1.5rem;
+}
+.stimulus-media img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+.stimulus-media blockquote {
+  border-left: 3px solid var(--pico-muted-border-color);
+  padding-left: 1rem;
+  font-size: 1.05rem;
+}
+.form-actions {
+  margin-top: 1.5rem;
+}
+
+h1, h2, h3 {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  font-size: 1.75rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  padding-bottom: 0.5rem;
+}
+
+article header {
+  margin-bottom: 1.5rem;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  background: #fff;
+  padding: 0.5rem 1rem;
+  border: 2px solid currentColor;
+  z-index: 1000;
+}
+
+/* Rating-slider widget used by survey question forms (M3). */
+.rating-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  align-items: center;
+}
+.rating-row input[type="range"] {
+  width: 100%;
+}
+.rating-row output {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  min-width: 3ch;
+  text-align: right;
+}
+
+/* Dashboard polish (M4): tighten the stats list, constrain SVG width. */
+main.container > section {
+  margin-block: 2rem;
+}
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+}
+dl dt {
+  font-weight: 600;
+  color: var(--pico-muted-color);
+}
+dl dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+figure svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Pairwise comparison layout. */
+.pairwise-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+.pairwise-sample {
+  text-align: center;
+}
+.pairwise-sample .sample-label {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+.pairwise-sample audio {
+  width: 100%;
+}
+.trial-counter {
+  text-align: center;
+  color: var(--pico-muted-color);
+  font-size: 0.9rem;
+  margin-bottom: 1.5rem;
+}
+@media (max-width: 600px) {
+  .pairwise-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+/* Pairwise A/B comparison table. */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+}
+.comparison-table thead th {
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  font-weight: 700;
+  border-bottom: 2px solid var(--pico-muted-border-color);
+}
+.comparison-col-header {
+  width: 4rem;
+}
+.comparison-table tbody td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--pico-muted-border-color);
+  vertical-align: middle;
+}
+.comparison-attribute {
+  font-weight: 600;
+}
+.comparison-attribute p {
+  margin: 0;
+}
+.comparison-help {
+  font-weight: 400;
+  color: var(--pico-muted-color);
+}
+.comparison-radio {
+  text-align: center;
+  width: 4rem;
+}
+.comparison-radio input[type="radio"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Likert scale (horizontal radio row). */
+.likert-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+.likert-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  font-size: 0.82rem;
+  flex: 1;
+  cursor: pointer;
+}
+.likert-option input[type="radio"] {
+  margin-bottom: 0.25rem;
+}
+@media (max-width: 600px) {
+  .likert-row {
+    flex-wrap: wrap;
+  }
+}

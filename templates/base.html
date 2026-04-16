@@ -1,0 +1,37 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ brand|default:"Survey" }}{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
+  <link rel="stylesheet" href="{% static 'site.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="survey-header">
+    <div class="survey-header-inner">
+      <strong class="survey-brand">{{ brand|default:"Survey" }}</strong>
+      {% block tagline %}{% endblock %}
+    </div>
+    {% block progress %}
+      {% if progress_percent is not None %}
+      <div class="progress-bar" role="progressbar"
+           aria-label="Survey progress"
+           aria-valuenow="{{ progress_percent }}"
+           aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-bar-fill" style="width: {{ progress_percent }}%"></div>
+      </div>
+      {% endif %}
+    {% endblock %}
+  </header>
+  <main id="main" class="survey-main">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="survey-footer">
+    {% block footer %}
+      <small>Anonymous research survey. Responses are stored for research purposes only.</small>
+    {% endblock %}
+  </footer>
+</body>
+</html>

@@ -1,0 +1,93 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ experiment.name }} · Details | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:experiments_experiment_changelist' %}">Experiments</a>
+  &rsaquo; <a href="{% url 'admin:experiments_experiment_change' experiment.pk %}">{{ experiment.name }}</a>
+  &rsaquo; Details
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">{{ experiment.name }}</h1>
+<p class="text-base-500 text-sm mb-6">Experiment details</p>
+{% endblock %}
+
+{% block content %}
+{% with card="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900" %}
+
+<section>
+  <h2 class="font-semibold text-base mb-4">At a glance</h2>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">State</div>
+      <div class="text-2xl font-semibold">{{ experiment.get_state_display }}</div>
+      <div class="text-xs text-base-500"><code>{{ experiment.slug }}</code></div>
+    </div>
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">Sessions</div>
+      <div class="text-2xl font-semibold">{{ counts.total_sessions }}</div>
+      <div class="text-xs text-base-500">
+        {{ counts.completed_sessions }} completed · {{ counts.abandoned_sessions }} abandoned
+      </div>
+    </div>
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">Completion rate</div>
+      <div class="text-2xl font-semibold">{% widthratio counts.completion_rate 1 100 %}%</div>
+      <div class="text-xs text-base-500">of started sessions</div>
+    </div>
+    <div class="{{ card }}">
+      <div class="text-xs text-base-500 uppercase tracking-wide">Mean listen time</div>
+      <div class="text-2xl font-semibold">
+        {% if mean_listen_ms is not None %}{{ mean_listen_ms|floatformat:0 }} ms{% else %}—{% endif %}
+      </div>
+      <div class="text-xs text-base-500">across completed sessions</div>
+    </div>
+  </div>
+</section>
+
+<section class="{{ card }} mb-8">
+  <h2 class="font-semibold text-base mb-4">Per-stimulus mean ratings</h2>
+  {% if per_stimulus %}
+  <table class="w-full text-sm">
+    <thead class="text-xs text-base-500 uppercase tracking-wide">
+      <tr>
+        <th class="text-left py-2">Stimulus</th>
+        <th class="text-left py-2">Condition</th>
+        <th class="text-right py-2">Mean</th>
+        <th class="text-right py-2">n</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-base-200 dark:divide-base-800">
+      {% for row in per_stimulus %}
+      <tr>
+        <td class="py-2">{{ row.title }}</td>
+        <td class="py-2">{{ row.condition }}</td>
+        <td class="py-2 text-right">{{ row.mean|floatformat:2 }}</td>
+        <td class="py-2 text-right">{{ row.n }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="text-sm text-base-500">No rating responses yet.</p>
+  {% endif %}
+  <figure class="mt-4">{{ chart_svg|safe }}</figure>
+</section>
+
+<section class="{{ card }}">
+  <h2 class="font-semibold text-base mb-4">Downloads</h2>
+  <ul class="flex flex-wrap gap-4 text-sm">
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_answers_csv' slug=experiment.slug %}">Answers CSV (long format)</a></li>
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_demographics_csv' slug=experiment.slug %}">Demographics CSV</a></li>
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_chart_mean_ratings' slug=experiment.slug %}">Mean-ratings chart SVG</a></li>
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_change' experiment.pk %}">Edit in admin →</a></li>
+  </ul>
+</section>
+
+{% endwith %}
+{% endblock %}

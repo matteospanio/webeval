@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }} — study documentation{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>{{ experiment.name }}</h1>
+      <p><small>Slug: <code>{{ experiment.slug }}</code> · State: {{ experiment.get_state_display }}</small></p>
+      <p>
+        <a href="{% url 'experiments:repro_json' slug=experiment.slug %}">
+          Download reproducibility bundle (JSON)
+        </a>
+      </p>
+    </header>
+
+    {% if experiment.description %}
+      <section>
+        <h2>Description</h2>
+        <p>{{ experiment.description|linebreaksbr }}</p>
+      </section>
+    {% endif %}
+
+    <section>
+      <h2>Assignment</h2>
+      <ul>
+        <li>Strategy: <code>{{ experiment.assignment_strategy }}</code></li>
+        <li>Stimuli per participant:
+          {% if experiment.stimuli_per_participant %}{{ experiment.stimuli_per_participant }}{% else %}all active{% endif %}
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Conditions</h2>
+      <ol>
+        {% for cond in bundle.conditions %}
+          <li><strong>{{ cond.name }}</strong>{% if cond.description %} — {{ cond.description }}{% endif %}</li>
+        {% empty %}
+          <li><em>No conditions defined.</em></li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section>
+      <h2>Stimuli</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Condition</th><th>Title</th><th>File</th><th>Duration</th><th>SHA-256</th></tr>
+        </thead>
+        <tbody>
+          {% for s in bundle.stimuli %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ s.condition_name }}</td>
+              <td>{{ s.title }}</td>
+              <td><code>{{ s.filename }}</code></td>
+              <td>{% if s.duration_seconds %}{{ s.duration_seconds|floatformat:2 }} s{% else %}—{% endif %}</td>
+              <td><small><code>{{ s.sha256|default:"—" }}</code></small></td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="6"><em>No stimuli uploaded.</em></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Questions</h2>
+      <ol>
+        {% for q in bundle.questions %}
+          <li>
+            <strong>{{ q.prompt }}</strong>
+            <small>({{ q.section }} · {{ q.type }}{% if q.required %} · required{% endif %})</small>
+            {% if q.config %}<br><small>Config: <code>{{ q.config }}</code></small>{% endif %}
+            {% if q.help_text %}<br><small>{{ q.help_text }}</small>{% endif %}
+          </li>
+        {% empty %}
+          <li><em>No questions defined.</em></li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section>
+      <h2>Consent text</h2>
+      <blockquote>{{ experiment.consent_text|linebreaksbr|default:"(not set)" }}</blockquote>
+      {% if experiment.privacy_contact %}<p><small>Contact: {{ experiment.privacy_contact }}</small></p>{% endif %}
+      {% if experiment.privacy_policy_url %}<p><small>Privacy policy: <a href="{{ experiment.privacy_policy_url }}">{{ experiment.privacy_policy_url }}</a></small></p>{% endif %}
+    </section>
+  </article>
+{% endblock %}

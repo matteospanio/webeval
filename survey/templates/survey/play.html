@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <div class="stimulus-media">
+      {% if stimulus.kind == "audio" %}
+        <figure>
+          <audio
+            id="stimulus-audio"
+            controls
+            preload="auto"
+            data-listen-endpoint="{% url 'survey:record_listen' slug=experiment.slug assignment_id=assignment.id %}"
+            data-csrf-token="{{ csrf_token }}"
+          >
+            <source src="{{ stimulus.audio.url }}">
+            Your browser does not support the audio element.
+          </audio>
+          <figcaption><small>You may play the excerpt more than once.</small></figcaption>
+        </figure>
+      {% elif stimulus.kind == "image" %}
+        <figure>
+          <img src="{{ stimulus.image.url }}" alt="{{ stimulus.title }}">
+          {% if stimulus.description %}<figcaption><small>{{ stimulus.description }}</small></figcaption>{% endif %}
+        </figure>
+      {% elif stimulus.kind == "text" %}
+        <blockquote>{{ stimulus.text_body|linebreaks }}</blockquote>
+      {% endif %}
+    </div>
+
+    {% if messages %}
+      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for q in page_questions %}
+        {% include "survey/_question.html" %}
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit">{% if is_last_page and not has_more_after_stimuli %}Finish{% else %}Next{% endif %}</button>
+      </div>
+    </form>
+  </article>
+  <script src="{% static 'survey/js/audio-tracker.js' %}" defer></script>
+{% endblock %}
