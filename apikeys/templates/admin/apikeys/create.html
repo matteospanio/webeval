@@ -1,0 +1,72 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Create API key | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'apikeys:list' %}">API keys</a>
+  &rsaquo; New
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Create API key</h1>
+<p class="text-base-500 text-sm mb-6">The raw key is shown exactly once; store it somewhere safe.</p>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="max-w-xl">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+  <div class="mb-4 rounded-default border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+    {{ form.non_field_errors }}
+  </div>
+  {% endif %}
+
+  <div class="mb-4">
+    <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium mb-1">Name</label>
+    {{ form.name }}
+    <p class="text-xs text-base-500 mt-1">{{ form.name.help_text }}</p>
+    {% for err in form.name.errors %}<p class="text-xs text-red-600 mt-1">{{ err }}</p>{% endfor %}
+  </div>
+
+  <div class="mb-4">
+    <div class="block text-sm font-medium mb-1">Scopes</div>
+    <div class="rounded-default border border-base-200 dark:border-base-700 bg-white dark:bg-base-900 px-3 py-2 space-y-2">
+      {% for choice in form.scopes %}
+      <label class="flex items-start gap-2 text-sm">
+        {{ choice.tag }}
+        <span>
+          <span class="font-mono text-xs">{{ choice.choice_value }}</span>
+          <span class="text-base-500"> — {{ choice.choice_label }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="text-xs text-base-500 mt-1">{{ form.scopes.help_text }}</p>
+    {% for err in form.scopes.errors %}<p class="text-xs text-red-600 mt-1">{{ err }}</p>{% endfor %}
+  </div>
+
+  <div class="mb-6">
+    <label for="{{ form.expires_at.id_for_label }}" class="block text-sm font-medium mb-1">Expiry (optional)</label>
+    {{ form.expires_at }}
+    <p class="text-xs text-base-500 mt-1">{{ form.expires_at.help_text }}</p>
+    {% for err in form.expires_at.errors %}<p class="text-xs text-red-600 mt-1">{{ err }}</p>{% endfor %}
+  </div>
+
+  <div class="flex items-center gap-2">
+    <button type="submit"
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+      <span class="material-symbols-outlined -ml-0.5">key</span>
+      Create key
+    </button>
+    <a href="{% url 'apikeys:list' %}"
+       class="font-medium inline-flex items-center gap-1 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-base-900 dark:text-base-200 px-3 py-2 text-sm hover:bg-base-50 dark:hover:bg-base-800">
+      Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}

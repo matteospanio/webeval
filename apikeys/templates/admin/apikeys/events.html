@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Events for {{ api_key.name }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'apikeys:list' %}">API keys</a>
+  &rsaquo; {{ api_key.name }}
+  &rsaquo; Events
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Events · {{ api_key.name }}</h1>
+<p class="text-base-500 text-sm mb-6">
+  Prefix <code class="font-mono">{{ api_key.prefix }}…</code> · status {{ api_key.status }}
+</p>
+{% endblock %}
+
+{% block content %}
+<section class="rounded-default border border-base-200 dark:border-base-700 bg-white dark:bg-base-900 p-4">
+  {% if page_obj.object_list %}
+  <table class="w-full text-sm">
+    <thead class="text-xs text-base-500 uppercase tracking-wide">
+      <tr>
+        <th class="text-left py-2 pr-3">When</th>
+        <th class="text-left py-2 pr-3">Event</th>
+        <th class="text-left py-2 pr-3">Method</th>
+        <th class="text-left py-2 pr-3">Path</th>
+        <th class="text-left py-2 pr-3">Status</th>
+        <th class="text-left py-2 pr-3">IP</th>
+        <th class="text-left py-2">Detail</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-base-200 dark:divide-base-800">
+      {% for e in page_obj.object_list %}
+      <tr>
+        <td class="py-2 pr-3 text-xs text-base-500 whitespace-nowrap">{{ e.created_at|date:"Y-m-d H:i:s" }}</td>
+        <td class="py-2 pr-3">
+          {% if e.event_type == "used" %}
+            <span class="inline-block rounded-default bg-base-100 dark:bg-base-800 border border-base-200 dark:border-base-700 text-xs px-2 py-0.5">used</span>
+          {% elif e.event_type == "auth_failed" %}
+            <span class="inline-block rounded-default bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900 text-xs px-2 py-0.5">auth_failed</span>
+          {% elif e.event_type == "created" %}
+            <span class="inline-block rounded-default bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-900 text-xs px-2 py-0.5">created</span>
+          {% elif e.event_type == "rotated" %}
+            <span class="inline-block rounded-default bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900 text-xs px-2 py-0.5">rotated</span>
+          {% elif e.event_type == "revoked" %}
+            <span class="inline-block rounded-default bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900 text-xs px-2 py-0.5">revoked</span>
+          {% else %}
+            <span class="inline-block rounded-default bg-base-100 dark:bg-base-800 border border-base-200 dark:border-base-700 text-xs px-2 py-0.5">{{ e.event_type }}</span>
+          {% endif %}
+        </td>
+        <td class="py-2 pr-3 text-xs font-mono">{{ e.request_method }}</td>
+        <td class="py-2 pr-3 text-xs truncate max-w-xs" title="{{ e.request_path }}">{{ e.request_path }}</td>
+        <td class="py-2 pr-3 text-xs">{{ e.response_status|default:"—" }}</td>
+        <td class="py-2 pr-3 text-xs font-mono">{{ e.ip_address|default:"—" }}</td>
+        <td class="py-2 text-xs text-base-500">{{ e.detail|default:"" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if page_obj.has_other_pages %}
+  <div class="flex items-center gap-3 mt-4 text-sm">
+    {% if page_obj.has_previous %}<a class="text-primary-600 hover:underline" href="?page={{ page_obj.previous_page_number }}">← Prev</a>{% endif %}
+    <span class="text-base-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    {% if page_obj.has_next %}<a class="text-primary-600 hover:underline" href="?page={{ page_obj.next_page_number }}">Next →</a>{% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <p class="text-sm text-base-500">No events yet for this key.</p>
+  {% endif %}
+</section>
+
+<p class="text-sm mt-4">
+  <a class="text-primary-600 hover:underline" href="{% url 'apikeys:list' %}">← Back to API keys</a>
+</p>
+{% endblock %}

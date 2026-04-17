@@ -10,9 +10,9 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
+from apikeys.models import APIKey
 from experiments.models import Condition, Experiment, Stimulus
 from experiments.tests.factories import (
     ChoiceQuestionFactory,
@@ -33,13 +33,15 @@ def _url(slug: str) -> str:
     return reverse("api_stimulus_upload", kwargs={"slug": slug})
 
 
-def _staff_client() -> tuple[APIClient, User]:
+def _staff_client(
+    scopes=("stimuli:upload", "pairwise-answers:read"),
+) -> tuple[APIClient, User]:
     user = User.objects.create_user(
         "apiuser", "api@example.org", "pw", is_staff=True
     )
-    token = Token.objects.create(user=user)
+    _, raw = APIKey.generate(user=user, name="test", scopes=list(scopes))
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    client.credentials(HTTP_AUTHORIZATION=f"Token {raw}")
     return client, user
 
 
@@ -55,11 +57,27 @@ def test_requires_authentication():
 
 def test_rejects_non_staff_tokens():
     user = User.objects.create_user("joe", "j@e.org", "pw", is_staff=False)
-    token = Token.objects.create(user=user)
+    _, raw = APIKey.generate(user=user, name="t", scopes=["stimuli:upload"])
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
+    client.credentials(HTTP_AUTHORIZATION=f"Token {raw}")
     exp = ExperimentFactory()
     response = client.post(_url(exp.slug), {}, format="multipart")
+    assert response.status_code == 401
+
+
+def test_rejects_token_without_scope():
+    client, _ = _staff_client(scopes=["pairwise-answers:read"])
+    exp = ExperimentFactory()
+    response = client.post(
+        _url(exp.slug),
+        {
+            "condition": "A",
+            "title": "sample",
+            "kind": Stimulus.Kind.AUDIO,
+            "audio": _upload(MP3_BLOB),
+        },
+        format="multipart",
+    )
     assert response.status_code == 403
 
 

@@ -154,6 +154,49 @@ Common settings:
 
 If `GEOIP_PATH` is unset or the database is missing, participant country lookup is skipped without breaking the app.
 
+## API keys
+
+The staff REST API (`/api/v1/…`) is authenticated with per-user, scoped,
+auditable API keys. Staff users manage their own keys at **Admin →
+sidebar → Account → API keys** (`/admin/api-keys/`):
+
+- **Create** a key with a name, one or more scopes, and an optional
+  expiry. The raw key is shown exactly once — copy it then.
+- **Rotate** creates a new key with the same name + scopes and revokes
+  the old one immediately.
+- **Revoke** invalidates a key; subsequent requests fail with 401.
+- **Events** per key: creation, rotation, revocation, every successful
+  use (with method, path, and response status), and every failed
+  authentication attempt (with reason: `unknown`, `revoked`, `expired`,
+  `user_not_staff`, …).
+
+Available scopes are declared in [`apikeys/scopes.py`](apikeys/scopes.py):
+
+| Scope                     | Grants                                     |
+|---------------------------|--------------------------------------------|
+| `stimuli:upload`          | `POST /api/v1/experiments/<slug>/stimuli/` |
+| `pairwise-answers:read`   | `GET  /api/v1/experiments/<slug>/pairwise-answers/` |
+
+Superusers also see a cross-user overview at `/admin/api-keys/?scope=all`
+and can revoke any key. The full event log is additionally browsable via
+the standard admin changelists for `APIKey` and `APIKey event`.
+
+The wire format is unchanged — clients keep sending
+`Authorization: Token <key>`. Scripts read the key from
+`WEBEVAL_API_TOKEN`:
+
+```
+export WEBEVAL_API_TOKEN=webeval_…
+uv run python scripts/batch_upload_stimuli.py --slug my-study ./clips/
+```
+
+**Upgrading from `rest_framework.authtoken`**: this release drops the old
+single-token-per-user system. After deploying, any existing
+`WEBEVAL_API_TOKEN` will 401 — log into the admin, create a new key with
+the scopes you need, and update your `.env`. The orphaned
+`authtoken_token` SQLite table can be left in place or dropped at your
+leisure.
+
 ## Deployment Notes
 
 webeval is a self-hosted Django application. The repository is ready for local development and research deployments, but production hardening is still the operator's responsibility.

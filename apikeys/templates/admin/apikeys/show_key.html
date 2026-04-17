@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Your new API key | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'apikeys:list' %}">API keys</a>
+  &rsaquo; {{ api_key.name }}
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Your new API key</h1>
+<p class="text-base-500 text-sm mb-6">Copy it now — it will never be shown again.</p>
+{% endblock %}
+
+{% block content %}
+<section class="max-w-2xl mb-6 rounded-default border border-base-200 dark:border-base-700 bg-white dark:bg-base-900 p-4">
+  <div class="text-xs text-base-500 uppercase tracking-wide mb-2">
+    {{ api_key.name }} · scopes: {{ api_key.scopes|join:", " }}
+  </div>
+  <div class="flex items-center gap-2">
+    <input id="rawkey" type="text" readonly value="{{ raw }}"
+           class="block w-full font-mono text-sm rounded-default border border-base-200 dark:border-base-700 bg-base-50 dark:bg-base-800 px-3 py-2">
+    <button type="button"
+            onclick="navigator.clipboard.writeText(document.getElementById('rawkey').value)"
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+      <span class="material-symbols-outlined -ml-0.5">content_copy</span>
+      Copy
+    </button>
+  </div>
+  <p class="text-xs text-red-600 dark:text-red-400 mt-3">
+    ⚠ This key grants API access as <strong>{{ api_key.user.username }}</strong>.
+    Treat it like a password: store it in a secrets manager and never commit it.
+  </p>
+</section>
+
+<p class="text-sm">
+  <a class="text-primary-600 hover:underline" href="{% url 'apikeys:list' %}">← Back to API keys</a>
+</p>
+{% endblock %}

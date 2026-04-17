@@ -14,6 +14,10 @@ urlpatterns = [
         database_export,
         name="webeval_database_export",
     ),
+    path(
+        "admin/api-keys/",
+        include(("apikeys.admin_urls", "apikeys"), namespace="apikeys"),
+    ),
     path("admin/", admin.site.urls),
     path("api/v1/", include("experiments.api_urls")),
     path("experiments/", include("experiments.urls")),

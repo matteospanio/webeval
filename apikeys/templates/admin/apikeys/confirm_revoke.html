@@ -1,0 +1,45 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Revoke API key | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'apikeys:list' %}">API keys</a>
+  &rsaquo; Revoke
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Revoke "{{ api_key.name }}"?</h1>
+<p class="text-base-500 text-sm mb-6">This is immediate and cannot be undone.</p>
+{% endblock %}
+
+{% block content %}
+<section class="max-w-xl rounded-default border border-base-200 dark:border-base-700 bg-white dark:bg-base-900 p-4">
+  <dl class="text-sm mb-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+    <dt class="text-xs text-base-500 uppercase tracking-wide">Prefix</dt>
+    <dd class="font-mono">{{ api_key.prefix }}…</dd>
+    <dt class="text-xs text-base-500 uppercase tracking-wide">Scopes</dt>
+    <dd>{{ api_key.scopes|join:", " }}</dd>
+    <dt class="text-xs text-base-500 uppercase tracking-wide">Created</dt>
+    <dd>{{ api_key.created_at|date:"Y-m-d H:i" }}</dd>
+    <dt class="text-xs text-base-500 uppercase tracking-wide">Last used</dt>
+    <dd>{{ api_key.last_used_at|date:"Y-m-d H:i"|default:"—" }}</dd>
+  </dl>
+
+  <form method="post" class="flex items-center gap-2">
+    {% csrf_token %}
+    <button type="submit"
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-red-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-red-700">
+      <span class="material-symbols-outlined -ml-0.5">delete</span>
+      Revoke now
+    </button>
+    <a href="{% url 'apikeys:list' %}"
+       class="font-medium inline-flex items-center gap-1 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-base-900 dark:text-base-200 px-3 py-2 text-sm hover:bg-base-50 dark:hover:bg-base-800">
+      Cancel
+    </a>
+  </form>
+</section>
+{% endblock %}

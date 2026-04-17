@@ -18,6 +18,9 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apikeys.mixins import LogAPIKeyUsageMixin
+from apikeys.permissions import HasScope
+
 from .csv_exports import iter_pairwise_answers
 from .models import Condition, Experiment, Stimulus
 
@@ -63,7 +66,7 @@ def _hash_upload(upload) -> str:
     return hasher.hexdigest()
 
 
-class StimulusUploadView(APIView):
+class StimulusUploadView(LogAPIKeyUsageMixin, APIView):
     """Create one ``Stimulus`` under a draft experiment.
 
     Response shape:
@@ -78,6 +81,8 @@ class StimulusUploadView(APIView):
     * ``404`` — experiment slug unknown.
     * ``409`` — experiment is not in DRAFT state.
     """
+
+    permission_classes = [HasScope("stimuli:upload")]
 
     def post(self, request, slug: str):
         experiment = get_object_or_404(Experiment, slug=slug)
@@ -156,7 +161,7 @@ class StimulusUploadView(APIView):
         )
 
 
-class PairwiseAnswersView(APIView):
+class PairwiseAnswersView(LogAPIKeyUsageMixin, APIView):
     """Return all submitted pairwise-comparison answers for an experiment as JSON.
 
     One row per (session, pair, question). Only sessions with a
@@ -166,6 +171,8 @@ class PairwiseAnswersView(APIView):
 
     Consumed by :mod:`scripts.analyze_pairwise`.
     """
+
+    permission_classes = [HasScope("pairwise-answers:read")]
 
     def get(self, request, slug: str):
         experiment = get_object_or_404(Experiment, slug=slug)

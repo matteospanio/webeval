@@ -39,14 +39,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "rest_framework.authtoken",
+    "apikeys",
     "experiments",
     "survey",
 ]
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        "apikeys.auth.APIKeyAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAdminUser",
@@ -224,6 +224,17 @@ UNFOLD = {
                         "link": reverse_lazy(
                             "admin:survey_response_changelist"
                         ),
+                    },
+                ],
+            },
+            {
+                "title": "Account",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "API keys",
+                        "icon": "key",
+                        "link": reverse_lazy("apikeys:list"),
                     },
                 ],
             },
