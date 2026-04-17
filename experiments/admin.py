@@ -15,12 +15,14 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
+from unfold.decorators import action
 
 from .assignment import available_pairwise_strategies, available_strategies
 from .charts import bradley_terry_svg, mean_ratings_svg, pairwise_win_rates_svg
@@ -29,7 +31,9 @@ from .csv_exports import (
     demographics_csv_response,
     pairwise_answers_csv_response,
 )
+from .exports import build_experiment_archive
 from .forms import QuestionAdminForm
+from .imports import import_experiment_archive
 from .models import Condition, Experiment, Question, Stimulus
 from .stats import (
     bradley_terry_analysis,
@@ -120,6 +124,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     inlines = (ConditionInline, QuestionInline)
     actions = (export_repro_json, open_printable)
+    actions_list = ("import_experiment",)
     readonly_fields = ("live_stats",)
 
     fieldsets = (
@@ -234,6 +239,16 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 self.admin_site.admin_view(self.chart_bt_scores_view),
                 name="experiments_experiment_chart_bt_scores",
             ),
+            path(
+                "<slug:slug>/export.zip",
+                self.admin_site.admin_view(self.experiment_export_zip_view),
+                name="experiments_experiment_export_zip",
+            ),
+            path(
+                "import/",
+                self.admin_site.admin_view(self.experiment_import_view),
+                name="experiments_experiment_import",
+            ),
         ]
         # Custom routes must come before the generic ``<path:object_id>/``
         # entry Django registers for change/delete views, otherwise the
@@ -287,6 +302,64 @@ class ExperimentAdmin(UnfoldModelAdmin):
             bradley_terry_svg(experiment), content_type="image/svg+xml"
         )
 
+    def experiment_export_zip_view(self, request, slug: str):
+        experiment = get_object_or_404(Experiment, slug=slug)
+        payload = build_experiment_archive(experiment)
+        response = HttpResponse(payload, content_type="application/zip")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{experiment.slug}.zip"'
+        )
+        response["Content-Length"] = str(len(payload))
+        return response
+
+    def experiment_import_view(self, request):
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Import experiment",
+            "form_error": None,
+            "slug_override": "",
+        }
+        if request.method == "POST":
+            uploaded = request.FILES.get("archive")
+            slug_override = (request.POST.get("slug_override") or "").strip() or None
+            context["slug_override"] = slug_override or ""
+            if uploaded is None:
+                context["form_error"] = "Select a ZIP archive to upload."
+            else:
+                try:
+                    experiment = import_experiment_archive(
+                        uploaded, slug_override=slug_override
+                    )
+                except ValidationError as exc:
+                    context["form_error"] = "; ".join(exc.messages)
+                else:
+                    self.message_user(
+                        request,
+                        f"Imported experiment '{experiment.name}' as draft.",
+                        level=messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(
+                        reverse(
+                            "admin:experiments_experiment_change",
+                            args=[experiment.pk],
+                        )
+                    )
+        return render(
+            request,
+            "admin/experiments/experiment/import.html",
+            context,
+        )
+
+    @action(
+        description="Import experiment",
+        url_path="import-action",
+        icon="upload",
+    )
+    def import_experiment(self, request):
+        return HttpResponseRedirect(
+            reverse("admin:experiments_experiment_import")
+        )
+
     @admin.display(description="Live stats")
     def live_stats(self, obj):
         if obj is None or obj.pk is None:
@@ -336,6 +409,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
             '<a href="{}">{}</a> · '
             '<a href="{}">Demographics CSV</a> · '
             '<a href="{}">Reproducibility JSON</a> · '
+            '<a href="{}">Reproducibility ZIP</a> · '
             '<a href="{}">Printable</a> · '
             '<a href="{}">Shareable survey link</a>'
             "</p>"
@@ -352,6 +426,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
             csv_label,
             reverse("admin:experiments_experiment_demographics_csv", kwargs={"slug": obj.slug}),
             reverse("experiments:repro_json", kwargs={"slug": obj.slug}),
+            reverse("admin:experiments_experiment_export_zip", kwargs={"slug": obj.slug}),
             reverse("experiments:printable", kwargs={"slug": obj.slug}),
             survey_url,
             chart_url,
@@ -363,10 +438,12 @@ class ExperimentAdmin(UnfoldModelAdmin):
         return format_html(
             '<a href="{}">Details</a> · '
             '<a href="{}">JSON</a> · '
+            '<a href="{}">ZIP</a> · '
             '<a href="{}">Printable</a> · '
             '<a href="{}">Survey link</a>',
             reverse("admin:experiments_experiment_details", kwargs={"slug": obj.slug}),
             reverse("experiments:repro_json", kwargs={"slug": obj.slug}),
+            reverse("admin:experiments_experiment_export_zip", kwargs={"slug": obj.slug}),
             reverse("experiments:printable", kwargs={"slug": obj.slug}),
             reverse("survey:consent", kwargs={"slug": obj.slug}),
         )

@@ -11,12 +11,20 @@
 {% block content %}
     {% if webeval_summary %}
     <section class="webeval-summary">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h2 class="font-semibold text-base">At a glance</h2>
-            <a href="{% url 'webeval_database_export' %}"
-               class="text-sm text-primary-600 dark:text-primary-400 underline">
-                Export entire database (JSON)
-            </a>
+            <div class="flex items-center gap-2">
+                <a href="{% url 'admin:experiments_experiment_import' %}"
+                   class="font-medium inline-flex items-center gap-1 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-base-900 dark:text-base-200 px-3 py-2 text-sm hover:bg-base-50 dark:hover:bg-base-800">
+                    <span class="material-symbols-outlined -ml-0.5">upload</span>
+                    Import experiment
+                </a>
+                <a href="{% url 'webeval_database_export' %}"
+                   class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+                    <span class="material-symbols-outlined -ml-0.5">download</span>
+                    Export database
+                </a>
+            </div>
         </div>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">

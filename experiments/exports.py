@@ -15,13 +15,17 @@ experiment configuration.
 """
 from __future__ import annotations
 
+import io
+import json
 import os
+import zipfile
 from typing import Any
 
 from .models import Experiment
 
 
 SCHEMA_VERSION = 1
+ARCHIVE_SCHEMA_VERSION = 2
 
 
 def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
@@ -65,7 +69,12 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
         .prefetch_related("stimuli")
     ):
         for s in stim.stimuli.all().order_by("sort_order", "title"):
-            filename = os.path.basename(s.audio.name) if s.audio else None
+            if s.kind == s.Kind.AUDIO and s.audio:
+                filename = os.path.basename(s.audio.name)
+            elif s.kind == s.Kind.IMAGE and s.image:
+                filename = os.path.basename(s.image.name)
+            else:
+                filename = None
             stimuli.append(
                 {
                     "id": s.pk,
@@ -80,6 +89,7 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
                     "duration_seconds": s.duration_seconds,
                     "is_active": s.is_active,
                     "sort_order": s.sort_order,
+                    "text_body": s.text_body if s.kind == s.Kind.TEXT else "",
                 }
             )
 
@@ -93,6 +103,8 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
             "required": q.required,
             "config": q.config,
             "sort_order": q.sort_order,
+            "page_break_before": q.page_break_before,
+            "show_prompt": q.show_prompt,
         }
         for q in experiment.questions.all().order_by("section", "sort_order", "pk")
     ]
@@ -104,3 +116,64 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
         "stimuli": stimuli,
         "questions": questions,
     }
+
+
+def _stimulus_media_source(stim):
+    """Return (field_file, filename) for the media attached to a stimulus, or (None, None)."""
+    if stim.kind == stim.Kind.AUDIO and stim.audio:
+        return stim.audio, os.path.basename(stim.audio.name)
+    if stim.kind == stim.Kind.IMAGE and stim.image:
+        return stim.image, os.path.basename(stim.image.name)
+    return None, None
+
+
+def build_experiment_archive(experiment: Experiment) -> bytes:
+    """Return the raw bytes of a single-file ZIP bundling ``experiment``.
+
+    The archive contains:
+
+    * ``manifest.json`` — the reproducibility bundle from
+      :func:`build_reproducibility_bundle` upgraded to
+      ``schema_version = 2`` with each stimulus entry carrying an
+      ``archive_path`` pointing at its media file (``None`` for text).
+    * ``media/<stimulus_pk>.<ext>`` — the raw bytes of each audio / image
+      stimulus, named by pk so renames at import time cannot break the link.
+
+    The companion import path at :func:`experiments.imports.import_experiment_archive`
+    consumes this format.
+    """
+    bundle = build_reproducibility_bundle(experiment)
+    bundle["schema_version"] = ARCHIVE_SCHEMA_VERSION
+
+    stimuli_by_id = {s.pk: s for s in _iter_stimuli(experiment)}
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for entry in bundle["stimuli"]:
+            stim = stimuli_by_id.get(entry["id"])
+            archive_path = None
+            if stim is not None:
+                field_file, filename = _stimulus_media_source(stim)
+                if field_file is not None and filename:
+                    _, ext = os.path.splitext(filename)
+                    archive_path = f"media/{stim.pk}{ext}"
+                    try:
+                        field_file.open("rb")
+                        field_file.seek(0)
+                        data = field_file.read()
+                    finally:
+                        try:
+                            field_file.seek(0)
+                        except Exception:
+                            pass
+                    zf.writestr(archive_path, data)
+                    entry["filename"] = filename
+            entry["archive_path"] = archive_path
+        zf.writestr("manifest.json", json.dumps(bundle, indent=2))
+    return buf.getvalue()
+
+
+def _iter_stimuli(experiment: Experiment):
+    for cond in experiment.conditions.all().prefetch_related("stimuli"):
+        for s in cond.stimuli.all():
+            yield s

@@ -1,0 +1,55 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Import experiment | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:experiments_experiment_changelist' %}">Experiments</a>
+  &rsaquo; Import
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Import experiment</h1>
+<p class="text-base-500 text-sm mb-6">Upload a ZIP produced by the per-experiment export. The imported experiment is always created in draft state.</p>
+{% endblock %}
+
+{% block content %}
+<form method="post" enctype="multipart/form-data" class="max-w-xl">
+  {% csrf_token %}
+
+  {% if form_error %}
+  <div class="mb-4 rounded-default border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+    {{ form_error }}
+  </div>
+  {% endif %}
+
+  <div class="mb-4">
+    <label for="id_archive" class="block text-sm font-medium mb-1">Archive (.zip)</label>
+    <input type="file" name="archive" id="id_archive" accept=".zip,application/zip" required
+           class="block w-full text-sm">
+    <p class="text-xs text-base-500 mt-1">Must contain <code>manifest.json</code> and (optionally) a <code>media/</code> folder.</p>
+  </div>
+
+  <div class="mb-6">
+    <label for="id_slug_override" class="block text-sm font-medium mb-1">Slug override (optional)</label>
+    <input type="text" name="slug_override" id="id_slug_override" value="{{ slug_override }}"
+           class="block w-full rounded-default border border-base-200 dark:border-base-700 bg-white dark:bg-base-900 px-3 py-2 text-sm">
+    <p class="text-xs text-base-500 mt-1">Use when the manifest's slug already exists in this database.</p>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <button type="submit"
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+      <span class="material-symbols-outlined -ml-0.5">upload</span>
+      Import
+    </button>
+    <a href="{% url 'admin:experiments_experiment_changelist' %}"
+       class="font-medium inline-flex items-center gap-1 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-base-900 dark:text-base-200 px-3 py-2 text-sm hover:bg-base-50 dark:hover:bg-base-800">
+      Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}
