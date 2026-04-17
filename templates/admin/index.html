@@ -11,7 +11,13 @@
 {% block content %}
     {% if webeval_summary %}
     <section class="webeval-summary">
-        <h2 class="font-semibold text-base mb-4">At a glance</h2>
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-base">At a glance</h2>
+            <a href="{% url 'webeval_database_export' %}"
+               class="text-sm text-primary-600 dark:text-primary-400 underline">
+                Export entire database (JSON)
+            </a>
+        </div>
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
                 <div class="text-xs text-base-500 uppercase tracking-wide">Experiments</div>
