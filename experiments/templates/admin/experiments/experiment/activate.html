@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Activate {{ experiment.name }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:experiments_experiment_changelist' %}">Experiments</a>
+  &rsaquo; <a href="{{ change_url }}">{{ experiment.name }}</a>
+  &rsaquo; Activate
+</div>
+{% endblock %}
+
+{% block content_title %}
+<h1 class="font-semibold text-lg">Activate <em>{{ experiment.name }}</em></h1>
+<p class="text-base-500 text-sm mb-6">Promote this experiment from <strong>Test</strong> to <strong>Active</strong>. Once active, new participants will contribute to the real dataset.</p>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="max-w-2xl">
+  {% csrf_token %}
+
+  <div class="mb-6 rounded-default border border-base-200 dark:border-base-800 bg-white dark:bg-base-900 p-4">
+    <div class="text-xs text-base-500 uppercase tracking-wide mb-2">Test-phase data</div>
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+      <dt class="text-base-500">Sessions started</dt>
+      <dd class="font-medium">{{ counts.total_sessions }}</dd>
+      <dt class="text-base-500">Completed</dt>
+      <dd class="font-medium">{{ counts.completed_sessions }}</dd>
+      <dt class="text-base-500">Abandoned</dt>
+      <dd class="font-medium">{{ counts.abandoned_sessions }}</dd>
+    </dl>
+  </div>
+
+  <div class="mb-6 rounded-default border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950 px-4 py-3 text-sm">
+    <label class="flex items-start gap-2 cursor-pointer">
+      <input type="checkbox" name="purge" checked class="mt-0.5">
+      <span>
+        <strong>Reset participant data collected during testing.</strong><br>
+        All sessions, stimulus assignments, and responses recorded while the experiment was in test mode will be deleted. The experiment configuration (conditions, stimuli, questions) is kept. Uncheck only if you want the test-phase data to be part of your final dataset.
+      </span>
+    </label>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <button type="submit"
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+      <span class="material-symbols-outlined -ml-0.5">rocket_launch</span>
+      Activate
+    </button>
+    <a href="{{ change_url }}"
+       class="font-medium inline-flex items-center gap-1 rounded-default border border-base-200 bg-white shadow-xs text-important dark:border-base-700 dark:bg-base-900 dark:text-base-200 px-3 py-2 text-sm hover:bg-base-50 dark:hover:bg-base-800">
+      Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}

@@ -43,6 +43,7 @@ class ExperimentCounts:
 class GlobalSummary:
     total_experiments: int
     drafts: int
+    test: int
     active: int
     closed: int
     total_sessions: int
@@ -73,6 +74,7 @@ def global_summary() -> GlobalSummary:
     return GlobalSummary(
         total_experiments=total_experiments,
         drafts=by_state.get(Experiment.State.DRAFT, 0),
+        test=by_state.get(Experiment.State.TEST, 0),
         active=by_state.get(Experiment.State.ACTIVE, 0),
         closed=by_state.get(Experiment.State.CLOSED, 0),
         total_sessions=total_sessions,

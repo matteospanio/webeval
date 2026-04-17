@@ -31,6 +31,7 @@ from .csv_exports import (
     demographics_csv_response,
     pairwise_answers_csv_response,
 )
+from .data_ops import purge_participant_data
 from .exports import build_experiment_archive
 from .forms import QuestionAdminForm
 from .imports import import_experiment_archive
@@ -249,6 +250,11 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 self.admin_site.admin_view(self.experiment_import_view),
                 name="experiments_experiment_import",
             ),
+            path(
+                "<slug:slug>/activate/",
+                self.admin_site.admin_view(self.activate_view),
+                name="experiments_experiment_activate",
+            ),
         ]
         # Custom routes must come before the generic ``<path:object_id>/``
         # entry Django registers for change/delete views, otherwise the
@@ -360,6 +366,74 @@ class ExperimentAdmin(UnfoldModelAdmin):
             reverse("admin:experiments_experiment_import")
         )
 
+    def activate_view(self, request, slug: str):
+        experiment = get_object_or_404(Experiment, slug=slug)
+        if not self.has_change_permission(request, experiment):
+            return HttpResponseRedirect(reverse("admin:index"))
+
+        change_url = reverse(
+            "admin:experiments_experiment_change", args=[experiment.pk]
+        )
+
+        if experiment.state != Experiment.State.TEST:
+            self.message_user(
+                request,
+                (
+                    f"Experiment '{experiment.name}' is "
+                    f"{experiment.get_state_display().lower()}; the Activate "
+                    "confirmation page is only for test-phase experiments."
+                ),
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(change_url)
+
+        counts = experiment_counts(experiment)
+
+        if request.method == "POST":
+            purge = request.POST.get("purge") == "on"
+            purged_counts = None
+            if purge:
+                purged_counts = purge_participant_data(experiment)
+            experiment.state = Experiment.State.ACTIVE
+            # Bypass the clean() guard that blocks direct TEST→ACTIVE via
+            # the normal change form: we've just walked the user through
+            # the confirmation page, so the transition is intentional.
+            experiment._activate_confirmed = True
+            experiment.save(update_fields=["state"])
+            if purged_counts is not None:
+                self.message_user(
+                    request,
+                    (
+                        f"Activated '{experiment.name}' and purged "
+                        f"{purged_counts.sessions} sessions, "
+                        f"{purged_counts.responses} responses collected "
+                        "during testing."
+                    ),
+                    level=messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    (
+                        f"Activated '{experiment.name}' — test-phase data "
+                        "was kept."
+                    ),
+                    level=messages.SUCCESS,
+                )
+            return HttpResponseRedirect(change_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "experiment": experiment,
+            "counts": counts,
+            "change_url": change_url,
+        }
+        return render(
+            request,
+            "admin/experiments/experiment/activate.html",
+            context,
+        )
+
     @admin.display(description="Live stats")
     def live_stats(self, obj):
         if obj is None or obj.pk is None:
@@ -395,7 +469,22 @@ class ExperimentAdmin(UnfoldModelAdmin):
             )
             chart_alt = "Per-stimulus mean ratings"
 
-        return format_html(
+        activate_banner = ""
+        if obj.state == Experiment.State.TEST:
+            activate_url = reverse(
+                "admin:experiments_experiment_activate", kwargs={"slug": obj.slug}
+            )
+            activate_banner = format_html(
+                '<p style="margin-top:1rem;padding:0.75rem 1rem;'
+                'border:1px solid var(--base-200,#e5e7eb);border-radius:6px;">'
+                "This experiment is in <strong>Test</strong> mode. "
+                'Responses collected here are testing data — '
+                '<a href="{}"><strong>Activate</strong></a> to promote it to '
+                "live data collection.</p>",
+                activate_url,
+            )
+
+        base_html = format_html(
             '<dl style="display:grid;grid-template-columns:max-content 1fr;gap:0.25rem 1rem;">'
             "<dt>Consent page views</dt><dd>{}</dd>"
             "<dt>Started (consented)</dt><dd>{}</dd>"
@@ -432,10 +521,13 @@ class ExperimentAdmin(UnfoldModelAdmin):
             chart_url,
             chart_alt,
         )
+        if activate_banner:
+            return format_html("{}{}", activate_banner, base_html)
+        return base_html
 
     @admin.display(description="Shortcuts")
     def shortcuts(self, obj):
-        return format_html(
+        base = format_html(
             '<a href="{}">Details</a> · '
             '<a href="{}">JSON</a> · '
             '<a href="{}">ZIP</a> · '
@@ -447,6 +539,16 @@ class ExperimentAdmin(UnfoldModelAdmin):
             reverse("experiments:printable", kwargs={"slug": obj.slug}),
             reverse("survey:consent", kwargs={"slug": obj.slug}),
         )
+        if obj.state == Experiment.State.TEST:
+            return format_html(
+                '{} · <a href="{}"><strong>Activate</strong></a>',
+                base,
+                reverse(
+                    "admin:experiments_experiment_activate",
+                    kwargs={"slug": obj.slug},
+                ),
+            )
+        return base
 
 
 @admin.register(Condition)

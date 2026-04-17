@@ -253,3 +253,14 @@ figure svg {
     flex-wrap: wrap;
   }
 }
+
+/* Test-mode banner: shown on participant pages when the experiment is in
+   TEST state so testers know their data may be wiped before launch. */
+.test-mode-banner {
+  background: #fef3c7;
+  color: #92400e;
+  border-bottom: 1px solid #fcd34d;
+  padding: 0.5rem 1.25rem;
+  text-align: center;
+  font-size: 0.95rem;
+}

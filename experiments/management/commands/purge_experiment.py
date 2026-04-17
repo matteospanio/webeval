@@ -1,10 +1,11 @@
 """Delete all participant data for an experiment while preserving its config.
 
 This is the GDPR / end-of-project data-deletion command. It wipes every
-:class:`ParticipantSession`, its :class:`StimulusAssignment` rows, and all
-:class:`Response` rows attached to the targeted experiment; the experiment
-itself (and its conditions, stimuli, and questions) stay put so the study
-remains reproducible from the reproducibility bundle alone.
+:class:`ParticipantSession`, its :class:`StimulusAssignment` /
+:class:`PairAssignment` rows, and all :class:`Response` rows attached
+to the targeted experiment; the experiment itself (and its conditions,
+stimuli, and questions) stay put so the study remains reproducible
+from the reproducibility bundle alone.
 
 The ``--yes`` flag is required: without it the command refuses to run and
 exits with a non-zero status, so it's safe to drop into cron/CI by mistake.
@@ -15,8 +16,8 @@ import sys
 
 from django.core.management.base import BaseCommand, CommandError
 
+from experiments.data_ops import purge_participant_data
 from experiments.models import Experiment
-from survey.models import ParticipantSession, Response, StimulusAssignment
 
 
 class Command(BaseCommand):
@@ -47,24 +48,12 @@ class Command(BaseCommand):
             )
             sys.exit(1)
 
-        responses = Response.objects.filter(session__experiment=experiment)
-        assignments = StimulusAssignment.objects.filter(
-            session__experiment=experiment
-        )
-        sessions = ParticipantSession.objects.filter(experiment=experiment)
-
-        n_responses = responses.count()
-        n_assignments = assignments.count()
-        n_sessions = sessions.count()
-
-        # Delete in FK-dependency order: responses → assignments → sessions.
-        responses.delete()
-        assignments.delete()
-        sessions.delete()
+        counts = purge_participant_data(experiment)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Purged {n_sessions} sessions, {n_assignments} assignments, "
-                f"{n_responses} responses for experiment {experiment.slug!r}."
+                f"Purged {counts.sessions} sessions, {counts.assignments} assignments, "
+                f"{counts.pair_assignments} pair assignments, {counts.responses} "
+                f"responses for experiment {experiment.slug!r}."
             )
         )

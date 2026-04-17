@@ -49,6 +49,14 @@ from .models import PairAssignment, ParticipantSession, Response, StimulusAssign
 # --- helpers ---------------------------------------------------------------
 
 
+# States in which the survey is reachable by participants. ACTIVE collects
+# real data; TEST behaves identically but is a pre-launch rehearsal — a
+# banner is rendered and the data can be wiped on TEST→ACTIVE promotion.
+RUNNABLE_STATES: frozenset[str] = frozenset(
+    {Experiment.State.ACTIVE, Experiment.State.TEST}
+)
+
+
 def _session_key(slug: str) -> str:
     return f"webeval:session:{slug}"
 
@@ -173,6 +181,7 @@ def _base_context(experiment: Experiment, session: ParticipantSession | None) ->
     ctx: dict[str, Any] = {
         "experiment": experiment,
         "brand": experiment.name,
+        "is_test_mode": experiment.state == Experiment.State.TEST,
     }
     if session is not None:
         ctx["session"] = session
@@ -188,7 +197,7 @@ def _base_context(experiment: Experiment, session: ParticipantSession | None) ->
 @require_http_methods(["GET", "POST"])
 def consent(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
 
     consent_first, consent_rest = _split_consent_text(experiment.consent_text)
@@ -245,7 +254,7 @@ def _create_session(request, experiment: Experiment) -> ParticipantSession:
 @require_http_methods(["GET", "POST"])
 def instructions(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
@@ -324,7 +333,7 @@ def _fetch_counts(experiment: Experiment) -> dict[int, int]:
 @require_http_methods(["GET", "POST"])
 def audio_check(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
@@ -360,7 +369,7 @@ def audio_check(request, slug: str):
 @require_http_methods(["GET", "POST"])
 def play(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
@@ -606,7 +615,7 @@ def _fetch_stimulus_counts(experiment: Experiment) -> dict[int, int]:
 @require_http_methods(["GET", "POST"])
 def pairwise_play(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
@@ -787,7 +796,7 @@ def record_listen_pair(request, slug: str, pair_id: int):
 @require_http_methods(["GET", "POST"])
 def demographics(request, slug: str):
     experiment, session = _load_session(request, slug)
-    if experiment.state != Experiment.State.ACTIVE:
+    if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
@@ -844,5 +853,10 @@ def thanks(request, slug: str):
     return render(
         request,
         "survey/thanks.html",
-        {"experiment": experiment, "brand": experiment.name, "progress_percent": 100},
+        {
+            "experiment": experiment,
+            "brand": experiment.name,
+            "progress_percent": 100,
+            "is_test_mode": experiment.state == Experiment.State.TEST,
+        },
     )

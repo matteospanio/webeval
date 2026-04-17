@@ -9,6 +9,11 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
+  {% if is_test_mode %}
+  <div class="test-mode-banner" role="status">
+    <strong>Test mode</strong> — this study is being rehearsed. Your responses may be discarded when it goes live.
+  </div>
+  {% endif %}
   <header class="survey-header">
     <div class="survey-header-inner">
       <strong class="survey-brand">{{ brand|default:"Survey" }}</strong>

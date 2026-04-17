@@ -41,14 +41,16 @@ from .validators import (
 class Experiment(models.Model):
     class State(models.TextChoices):
         DRAFT = "draft", "Draft"
+        TEST = "test", "Test"
         ACTIVE = "active", "Active"
         CLOSED = "closed", "Closed"
 
     # Lifecycle transitions allowed when full_clean() is called on an update.
     _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-        State.DRAFT: {State.DRAFT, State.ACTIVE, State.CLOSED},
-        State.ACTIVE: {State.DRAFT, State.ACTIVE, State.CLOSED},
-        State.CLOSED: {State.DRAFT, State.ACTIVE, State.CLOSED},
+        State.DRAFT: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
+        State.TEST: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
+        State.ACTIVE: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
+        State.CLOSED: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
     }
 
     class Mode(models.TextChoices):
@@ -144,6 +146,24 @@ class Experiment(models.Model):
                             "state": (
                                 f"Cannot transition from {old_state} to {self.state}. "
                                 f"Allowed targets: {sorted(allowed)}."
+                            )
+                        }
+                    )
+                # TEST → ACTIVE must go through the admin activate confirmation
+                # page so the author explicitly chooses whether to wipe the
+                # data collected during testing. The activate view bypasses
+                # full_clean() by saving with update_fields=["state"].
+                if (
+                    old_state == self.State.TEST
+                    and self.state == self.State.ACTIVE
+                    and not getattr(self, "_activate_confirmed", False)
+                ):
+                    raise ValidationError(
+                        {
+                            "state": (
+                                "Use the Activate button to promote a test "
+                                "experiment to active — this lets you confirm "
+                                "whether to reset data collected during testing."
                             )
                         }
                     )
