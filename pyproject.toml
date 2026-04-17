@@ -29,6 +29,11 @@ dev = [
     "factory-boy>=3.3",
     "selenium>=4.20",
 ]
+analysis = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.11",
+]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "core.settings"

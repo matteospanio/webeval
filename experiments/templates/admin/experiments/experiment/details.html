@@ -60,6 +60,47 @@
   </div>
 </section>
 
+{% if bt_stats and bt_stats.dimensions %}
+{# ── Pairwise: Bradley-Terry ranking tables + grouped bar chart ── #}
+{% for dim in bt_stats.dimensions %}
+<section class="{{ card }} mb-8">
+  <h2 class="font-semibold text-base mb-4">{{ dim.dimension }}</h2>
+  <table class="w-full text-sm">
+    <thead class="text-xs text-base-500 uppercase tracking-wide">
+      <tr>
+        <th class="text-left py-2">Rank</th>
+        <th class="text-left py-2">Model</th>
+        <th class="text-right py-2">BT Score</th>
+        <th class="text-right py-2">95% CI</th>
+        <th class="text-right py-2">Wins</th>
+        <th class="text-right py-2">Total</th>
+        <th class="text-right py-2">Win %</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-base-200 dark:divide-base-800">
+      {% for row in dim.rows %}
+      <tr>
+        <td class="py-2">{{ row.rank }}</td>
+        <td class="py-2 font-medium">{{ row.model }}</td>
+        <td class="py-2 text-right font-mono">{{ row.score|floatformat:3 }}</td>
+        <td class="py-2 text-right font-mono text-base-500">[{{ row.ci_lo|floatformat:2 }}, {{ row.ci_hi|floatformat:2 }}]</td>
+        <td class="py-2 text-right">{{ row.wins }}</td>
+        <td class="py-2 text-right">{{ row.total }}</td>
+        <td class="py-2 text-right">{{ row.win_pct|floatformat:1 }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endfor %}
+
+<section class="{{ card }} mb-8">
+  <h2 class="font-semibold text-base mb-4">Bradley–Terry scores overview</h2>
+  <figure>{{ bt_chart_svg|safe }}</figure>
+</section>
+
+{% else %}
+{# ── Standard: Per-stimulus mean ratings ── #}
 <section class="{{ card }} mb-8">
   <h2 class="font-semibold text-base mb-4">Per-stimulus mean ratings</h2>
   {% if per_stimulus %}
@@ -88,13 +129,20 @@
   {% endif %}
   <figure class="mt-4">{{ chart_svg|safe }}</figure>
 </section>
+{% endif %}
 
 <section class="{{ card }}">
   <h2 class="font-semibold text-base mb-4">Downloads</h2>
   <ul class="flex flex-wrap gap-4 text-sm">
+    {% if bt_stats and bt_stats.dimensions %}
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_pairwise_answers_csv' slug=experiment.slug %}">Pairwise answers CSV</a></li>
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_demographics_csv' slug=experiment.slug %}">Demographics CSV</a></li>
+    <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_chart_bt_scores' slug=experiment.slug %}">Bradley–Terry chart SVG</a></li>
+    {% else %}
     <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_answers_csv' slug=experiment.slug %}">Answers CSV (long format)</a></li>
     <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_demographics_csv' slug=experiment.slug %}">Demographics CSV</a></li>
     <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_chart_mean_ratings' slug=experiment.slug %}">Mean-ratings chart SVG</a></li>
+    {% endif %}
     <li><a class="text-primary-600 hover:underline" href="{% url 'admin:experiments_experiment_change' experiment.pk %}">Edit in admin →</a></li>
   </ul>
 </section>

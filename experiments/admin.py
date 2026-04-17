@@ -21,7 +21,7 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
 
-from .charts import mean_ratings_svg, pairwise_win_rates_svg
+from .charts import bradley_terry_svg, mean_ratings_svg, pairwise_win_rates_svg
 from .csv_exports import (
     answers_csv_response,
     demographics_csv_response,
@@ -30,6 +30,7 @@ from .csv_exports import (
 from .forms import QuestionAdminForm
 from .models import Condition, Experiment, Question, Stimulus
 from .stats import (
+    bradley_terry_analysis,
     experiment_counts,
     mean_listen_duration_ms,
     pairwise_experiment_stats,
@@ -211,6 +212,11 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 self.admin_site.admin_view(self.chart_pairwise_wins_view),
                 name="experiments_experiment_chart_pairwise_wins",
             ),
+            path(
+                "<slug:slug>/chart/bt-scores.svg",
+                self.admin_site.admin_view(self.chart_bt_scores_view),
+                name="experiments_experiment_chart_bt_scores",
+            ),
         ]
         # Custom routes must come before the generic ``<path:object_id>/``
         # entry Django registers for change/delete views, otherwise the
@@ -227,7 +233,8 @@ class ExperimentAdmin(UnfoldModelAdmin):
         }
         if experiment.mode == Experiment.Mode.PAIRWISE:
             context["pairwise_stats"] = pairwise_experiment_stats(experiment)
-            context["chart_svg"] = pairwise_win_rates_svg(experiment)
+            context["bt_stats"] = bradley_terry_analysis(experiment)
+            context["bt_chart_svg"] = bradley_terry_svg(experiment)
         else:
             context["per_stimulus"] = per_stimulus_mean_ratings(experiment)
             context["chart_svg"] = mean_ratings_svg(experiment)
@@ -255,6 +262,12 @@ class ExperimentAdmin(UnfoldModelAdmin):
         experiment = get_object_or_404(Experiment, slug=slug)
         return HttpResponse(
             pairwise_win_rates_svg(experiment), content_type="image/svg+xml"
+        )
+
+    def chart_bt_scores_view(self, request, slug: str):
+        experiment = get_object_or_404(Experiment, slug=slug)
+        return HttpResponse(
+            bradley_terry_svg(experiment), content_type="image/svg+xml"
         )
 
     @admin.display(description="Live stats")
