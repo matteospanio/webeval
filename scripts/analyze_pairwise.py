@@ -1,16 +1,18 @@
 """Bradley-Terry analysis of pairwise comparison data.
 
-Reads a pairwise answers CSV exported from the webeval admin (or queries the
-database directly) and fits a Bradley-Terry model per evaluation dimension.
-Outputs paper-ready ranking tables in plain text and LaTeX.
+Reads a pairwise answers CSV exported from the webeval admin (or fetches the
+same data over the REST API) and fits a Bradley-Terry model per evaluation
+dimension. Outputs paper-ready ranking tables in plain text and LaTeX.
 
 Usage examples::
 
     # From an exported CSV
     uv run --group analysis python scripts/analyze_pairwise.py data/pairwise-answers.csv
 
-    # Directly from the Django database
-    uv run --group analysis python scripts/analyze_pairwise.py --from-db --experiment my-study
+    # Over the REST API (needs a staff DRF token; mint one with
+    #   uv run ./manage.py drf_create_token <staff-username>)
+    WEBEVAL_API_TOKEN=<token> uv run --group analysis python \\
+        scripts/analyze_pairwise.py --from-api --experiment my-study
 
     # Write LaTeX to a file
     uv run --group analysis python scripts/analyze_pairwise.py data.csv --output-file results.tex
@@ -25,6 +27,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import requests
 from scipy.optimize import minimize
 
 
@@ -42,13 +45,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Path to the exported pairwise-answers CSV file.",
     )
     p.add_argument(
-        "--from-db",
+        "--from-api",
         action="store_true",
-        help="Load data from the Django database instead of a CSV file.",
+        help="Fetch data from the webeval REST API instead of a CSV file.",
     )
     p.add_argument(
         "--experiment",
-        help="Experiment slug (required when --from-db is used).",
+        help="Experiment slug (required when --from-api is used).",
+    )
+    p.add_argument(
+        "--api-url",
+        default="http://127.0.0.1:8000",
+        help="Base URL of the webeval webapp (default: %(default)s).",
+    )
+    p.add_argument(
+        "--token",
+        default=os.environ.get("WEBEVAL_API_TOKEN", ""),
+        help="DRF auth token. Defaults to $WEBEVAL_API_TOKEN.",
     )
     p.add_argument(
         "--output-format",
@@ -62,11 +75,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     args = p.parse_args(argv)
 
-    if args.from_db:
+    if args.from_api:
         if not args.experiment:
-            p.error("--experiment is required when using --from-db")
+            p.error("--experiment is required when using --from-api")
+        if not args.token:
+            p.error("--token is required (or set WEBEVAL_API_TOKEN) when using --from-api")
     elif not args.csv_path:
-        p.error("a CSV path is required (or use --from-db --experiment <slug>)")
+        p.error("a CSV path is required (or use --from-api --experiment <slug>)")
 
     return args
 
@@ -108,67 +123,29 @@ def load_from_csv(path: str) -> pd.DataFrame:
     return df
 
 
-def load_from_db(experiment_slug: str) -> pd.DataFrame:
-    # Set up Django
-    project_root = str(Path(__file__).resolve().parent.parent)
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "core.settings")
+def load_from_api(api_url: str, token: str, experiment_slug: str) -> pd.DataFrame:
+    """Fetch pairwise answers from ``/api/v1/experiments/<slug>/pairwise-answers/``.
 
-    import django
-    django.setup()
-
-    from experiments.models import Experiment  # noqa: E402
-    from survey.models import Response  # noqa: E402
-
-    try:
-        experiment = Experiment.objects.get(slug=experiment_slug)
-    except Experiment.DoesNotExist:
-        raise SystemExit(f"Experiment '{experiment_slug}' not found.")
-
-    rows = (
-        Response.objects.filter(
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            pair_assignment__isnull=False,
+    The endpoint returns a list of dicts whose keys match the CSV export
+    schema. The ``preferred`` column arrives JSON-encoded (same shape as
+    ``Response.answer_value`` in the database) and is decoded into plain
+    strings here so downstream logic is identical to the CSV path.
+    """
+    url = f"{api_url.rstrip('/')}/api/v1/experiments/{experiment_slug}/pairwise-answers/"
+    resp = requests.get(url, headers={"Authorization": f"Token {token}"}, timeout=60)
+    if resp.status_code == 404:
+        raise SystemExit(f"Experiment '{experiment_slug}' not found at {api_url}.")
+    if resp.status_code in (401, 403):
+        raise SystemExit(
+            f"API returned {resp.status_code}: check that the token belongs to a staff user."
         )
-        .select_related(
-            "session",
-            "pair_assignment",
-            "pair_assignment__stimulus_a__condition",
-            "pair_assignment__stimulus_b__condition",
-            "question",
-        )
-        .order_by("session__id", "pair_assignment__sort_order", "question__sort_order")
-    )
-
-    records = []
-    for r in rows:
-        pa = r.pair_assignment
-        records.append(
-            {
-                "session_id": str(r.session_id),
-                "submitted_at": (
-                    r.session.submitted_at.isoformat()
-                    if r.session.submitted_at
-                    else ""
-                ),
-                "experiment": experiment.slug,
-                "pair_index": pa.sort_order,
-                "model_a": pa.stimulus_a.condition.name,
-                "model_b": pa.stimulus_b.condition.name,
-                "prompt_group": pa.prompt_group,
-                "position_a": pa.position_a,
-                "question_id": r.question_id,
-                "question_prompt": r.question.prompt[:100],
-                "preferred": r.get_answer(),
-                "listen_duration_a_ms": pa.listen_duration_a_ms,
-                "listen_duration_b_ms": pa.listen_duration_b_ms,
-            }
-        )
+    resp.raise_for_status()
+    records = resp.json()
     if not records:
         raise SystemExit(f"No pairwise data found for experiment '{experiment_slug}'.")
-    return pd.DataFrame(records)
+    df = pd.DataFrame(records)
+    df["preferred"] = df["preferred"].astype(str).apply(_parse_preferred)
+    return df
 
 
 # ---------------------------------------------------------------------------
@@ -482,8 +459,8 @@ def format_latex(
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
-    if args.from_db:
-        df = load_from_db(args.experiment)
+    if args.from_api:
+        df = load_from_api(args.api_url, args.token, args.experiment)
     else:
         df = load_from_csv(args.csv_path)
 

@@ -150,13 +150,13 @@ PAIRWISE_FIELDNAMES = [
 ]
 
 
-def write_pairwise_answers_csv(
-    experiment: Experiment, response: HttpResponse
-) -> HttpResponse:
-    """Bradley-Terry format: one row per attribute per pair per session."""
-    writer = csv.DictWriter(response, fieldnames=PAIRWISE_FIELDNAMES)
-    writer.writeheader()
+def iter_pairwise_answers(experiment: Experiment):
+    """Yield one dict per pairwise-comparison answer from submitted sessions.
 
+    Used both by the CSV export and the JSON API endpoint
+    (:class:`experiments.api.PairwiseAnswersView`). Keeping the query and
+    row-shaping logic in a single helper keeps those two consumers in sync.
+    """
     rows = (
         Response.objects.filter(
             session__experiment=experiment,
@@ -175,25 +175,33 @@ def write_pairwise_answers_csv(
 
     for r in rows:
         pa = r.pair_assignment
-        writer.writerow(
-            {
-                "session_id": str(r.session_id),
-                "submitted_at": r.session.submitted_at.isoformat()
-                if r.session.submitted_at
-                else "",
-                "experiment": experiment.slug,
-                "pair_index": pa.sort_order,
-                "model_a": pa.stimulus_a.condition.name,
-                "model_b": pa.stimulus_b.condition.name,
-                "prompt_group": pa.prompt_group,
-                "position_a": pa.position_a,
-                "question_id": r.question_id,
-                "question_prompt": r.question.prompt[:100],
-                "preferred": r.answer_value,
-                "listen_duration_a_ms": pa.listen_duration_a_ms,
-                "listen_duration_b_ms": pa.listen_duration_b_ms,
-            }
-        )
+        yield {
+            "session_id": str(r.session_id),
+            "submitted_at": r.session.submitted_at.isoformat()
+            if r.session.submitted_at
+            else "",
+            "experiment": experiment.slug,
+            "pair_index": pa.sort_order,
+            "model_a": pa.stimulus_a.condition.name,
+            "model_b": pa.stimulus_b.condition.name,
+            "prompt_group": pa.prompt_group,
+            "position_a": pa.position_a,
+            "question_id": r.question_id,
+            "question_prompt": r.question.prompt[:100],
+            "preferred": r.answer_value,
+            "listen_duration_a_ms": pa.listen_duration_a_ms,
+            "listen_duration_b_ms": pa.listen_duration_b_ms,
+        }
+
+
+def write_pairwise_answers_csv(
+    experiment: Experiment, response: HttpResponse
+) -> HttpResponse:
+    """Bradley-Terry format: one row per attribute per pair per session."""
+    writer = csv.DictWriter(response, fieldnames=PAIRWISE_FIELDNAMES)
+    writer.writeheader()
+    for row in iter_pairwise_answers(experiment):
+        writer.writerow(row)
     return response
 
 

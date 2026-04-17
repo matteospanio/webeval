@@ -15,6 +15,7 @@ urlpatterns = [
         name="webeval_database_export",
     ),
     path("admin/", admin.site.urls),
+    path("api/v1/", include("experiments.api_urls")),
     path("experiments/", include("experiments.urls")),
     path("", include("survey.urls")),
 ]

@@ -16,6 +16,7 @@ dependencies = [
     "matplotlib>=3.9",
     "mutagen>=1.47",
     "django-unfold>=0.40,<1.0",
+    "djangorestframework>=3.15,<4.0",
 ]
 
 [tool.uv]
@@ -33,6 +34,10 @@ analysis = [
     "pandas>=2.0",
     "numpy>=1.24",
     "scipy>=1.11",
+    "requests>=2.32,<3.0",
+]
+scripts = [
+    "requests>=2.32,<3.0",
 ]
 
 [tool.pytest.ini_options]
