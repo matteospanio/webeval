@@ -1,165 +1,177 @@
 # webeval
 
-A web app to collect human evaluations of LLM outputs.
+![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
+![Django 5.2](https://img.shields.io/badge/django-5.2-0C4B33?logo=django&logoColor=white)
+![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
+![Modes: standard + pairwise](https://img.shields.io/badge/modes-standard%20%2B%20pairwise-6C5CE7)
 
-This repository contains the code for a Django web app that runs **PsyToolkit-style** evaluation surveys: a researcher configures an experiment in the admin, and participants walk through a single-column, per-page questionnaire answering questions about each stimulus. Stimuli come in three flavours — **audio clips**, **images**, and **text-only prompts** — so a single study can mix kinds (e.g. "rate this generated MIDI clip" and "rate this generated lyric") without a parallel model hierarchy.
+webeval is a Django app for running anonymous online evaluation studies with audio, image, and text stimuli.
 
-The survey consists of a section with the stimuli and per-stimulus questions, followed by a section with demographic questions about the participants. The survey is in English.
+It was originally built for LLM-output evaluation, but the current architecture is broader than that: researchers can configure single-stimulus or pairwise-comparison studies, collect structured participant responses, and review results from the Django admin without building a separate dashboard.
 
-The app is anonymous: no login, and participants can submit multiple sessions. Surveys are shared via **direct per-experiment links** (`/s/<slug>/`); there is no public index of active studies. A non-active experiment at that URL renders a friendly "not currently accepting responses" page instead of leaking a 404.
+## Features
 
-Staff use Django admin (themed with django-unfold) to manage the experiment lifecycle, upload stimuli, and edit questions. The `/admin/` landing page shows summary cards (total experiments by state, total sessions started and completed, total answers collected); per-experiment statistics, CSV exports, and the mean-rating SVG chart all live under `/admin/experiments/experiment/<slug>/…`, reachable from the Experiment change view's **Statistics** fieldset and the changelist "Shortcuts" column.
+- Standard single-stimulus studies and pairwise comparison studies
+- Audio, image, and text stimuli in one experiment model
+- Rating, multiple-choice, free-text, and Likert questions
+- PsyToolkit-style pagination with author-controlled page breaks
+- Balanced assignment strategies across conditions
+- Optional audio playback check before the study begins
+- Direct per-experiment participant links with no public study index
+- Admin-native analytics, SVG charts, and CSV exports
+- Reproducibility exports as printable HTML, JSON, and ZIP archives
+- Experiment archive import for cloning or sharing studies across instances
+- Lightweight participant metadata capture: device type, browser family, and country code
 
-At the beginning of the survey, participants are asked to give their consent to the processing of their data. The collected data is anonymous and will be used for research purposes only. Any publication of the results will publish only aggregated data, without any personal information. The collected data will be stored securely and will be deleted after the end of the research project.
+## Current Scope
 
-## How it works
+webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
 
-### Per-survey direct link
+Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, conditional branching, longitudinal scheduling, or richer stimulus types such as video.
 
-Each experiment has a unique URL at `/s/<slug>/`. That is the *only* entry point for participants — there is no landing page listing every active study, so a researcher can share one study without leaking the others. Draft and closed experiments at the same URL show a polite "this survey is not currently accepting responses" message rather than a 404.
+## Quick Start
 
-### PsyToolkit-style paged flow
+### Requirements
 
-Inside the survey the participant walks through a fixed sequence of pages:
+- Python 3.11+
+- `uv`
 
-1. Consent page (tick a checkbox, then Next).
-2. Instructions page (Next).
-3. One or more **stimulus pages** per assigned stimulus — the stimulus media stays visible on every page that hosts a question about it, so the participant can re-listen / re-view while answering.
-4. One or more **demographic pages**.
-5. A thanks page.
+### Installation
 
-The author controls how questions are grouped into pages by checking **"Start new page before this question"** (`page_break_before`) on a Question. A question with that flag starts its own page; a question without it joins the previous page. This is the same mechanism PsyToolkit uses: you can put one item on a page, or pack ten items onto a page, without a global "questions-per-page" constant.
+```bash
+uv sync
+cp .env.example .env
+uv run ./manage.py migrate
+uv run ./manage.py createsuperuser
+uv run ./manage.py runserver
+```
 
-Every Next button POSTs only the current page's answers. If the participant abandons the survey their partial responses are discarded silently; the `/admin/` summary counts the session as "started but not completed." There is no separate "review and submit" step — the last Next on the last demographic page finishes the session.
+Then open:
 
-A thin PsyToolkit-style progress bar sits below the header and fills from 0% to 100% across all the pages the participant will walk (consent, instructions, every stimulus page, every demographic page, thanks). No step-counter text, no "question X of N"; just a visual cue.
+- `http://127.0.0.1:8000/admin/` for the staff interface
+- `http://127.0.0.1:8000/s/<slug>/` for a participant-facing study
 
-### Stimulus kinds
+The default setup uses SQLite. Environment variables are documented in `.env.example`.
 
-`Stimulus.kind` is one of:
+## How It Works
 
-* **audio** — an uploaded audio file (`audio/*`), validated for extension and max size, with SHA-256 and duration auto-computed on save.
-* **image** — an uploaded image file (`png`, `jpg`, `jpeg`, `webp`, `gif`), validated for extension and max size, with SHA-256 auto-computed on save.
-* **text** — a `text_body` the participant reads inline (rendered with `|linebreaks`). No file upload.
+### Experiment lifecycle
 
-The kind discriminator decides which media block the `play.html` template renders (audio tag, figure+img, or blockquote); everything else (assignment strategy, question rendering, per-page cursor) is kind-agnostic.
+Experiments move through three states:
 
-### Admin summary dashboard
+- `draft`
+- `active`
+- `closed`
 
-When staff open `/admin/` they see a card grid summarising the project state:
+Conditions, stimuli, and questions can only be structurally edited while an experiment is in `draft`. This protects active studies from accidental mid-run changes.
 
-* Total experiments, broken down by draft / active / closed.
-* Total sessions started by participants.
-* Completed sessions (and the completion rate).
-* Total answers collected from completed sessions.
+### Participant flow
 
-Each Experiment change view carries a **Statistics** fieldset with live per-experiment counts and links into a dedicated, admin-mounted **Details** view (`/admin/experiments/experiment/<slug>/details/`) that shows the same stats as Unfold-themed cards, the per-stimulus mean-rating table, the embedded SVG chart, and download links for the long-format answers CSV, the demographics CSV, and the JSON/printable reproducibility bundles. Everything staff-facing lives inside `/admin/` — there is no separate dashboard app.
+For standard studies, participants move through:
 
-## Details
+1. Consent
+2. Optional audio check
+3. Instructions
+4. One or more stimulus pages
+5. One or more demographic pages
+6. Thanks
 
-- Musical stimuli will last 20 seconds
-- users cannot skip listening
-- we track duration of listening and timestamps of question responses
-- stimuli sampling logic will be configurable (each user sees N random stimuli from pool)
-- Balanced assignment across conditions (e.g. generation methods)
-- The database will be django's default (SQLite)
-- experiment logic layer will include (Experiment, Condition, Stimulus assignment strategy)
-- Add response metadata:
-    - device type
-    - browser
-    - approx location
-- Log drop-off rates, completion time and any possible metrics that make sense
+Questions are grouped into pages with a PsyToolkit-style `page_break_before` flag. Each page posts only the answers visible on that page.
 
-## Functional requirements
+### Study modes
 
-### Participant-facing survey
+#### Standard mode
 
-- Users can:
-    - Access the survey via public URL (no auth required).
-    - Read and accept a conset form before proceeding
-    - Listen to audio stimuli (music players).
-    - Answer:
-        - Quality evaluation questions (using a scale from 0 to 100), e.g. "Is the music free of inharmonious notes, unnatural
-rhythms, and awkward phrasing?", "Is the sample musically / harmonically interesting?", "Subjectively, how much do you like the generation?"
-    - Complete demographic questionnaire (age, gender, musical background, etc.)
-    - Submit responses
-- System must:
-    - Allow multiple submussions per user
-    - Randomize:
-        - Order of stimuli for each user
-        - Order of questions
-    - Validate required fields and input formats
-    - Store responses atomically in a database
+Participants evaluate one stimulus at a time. Each session receives either all eligible stimuli or a balanced subset, depending on `stimuli_per_participant`.
 
-### Stimuli management
+#### Pairwise mode
 
-- Admin users can:
-    - Upload new audio stimuli (with metadata like title, description, generation method)
-    - View a list of existing stimuli and their metadata
-    - Edit or delete stimuli
-    - Group stimuli into survey/experiments
-    - Activate/deactivate stimuli
+Participants compare two stimuli side by side. Pairings are built across conditions using shared `prompt_group` values, and results can be summarized with win-rate charts and Bradley-Terry analysis.
 
-### Admin panel
+### Stimulus types
 
-- Password-protected access with django's built-in auth system
-- Features:
-    - CRUD operations for:
-        - Surveys
-        - Stimuli
-        - Questions (that could have different types: rating scales, multiple choice, free text)
-    - View responses:
-        - Tabular format
-        - Filter/search
-    - Export responses as CSV
-    - Print/export the survey questions and stimuli for documentation purposes
-    - export the survey questions and stimuli in a machine-readable format (e.g. JSON) for reproducibility and sharing with other researchers
-    - Dashboard
-        - Visualize aggregated statistics (e.g. average ratings per stimulus, demographic breakdowns)
-        - Charts and graphs for insights
+- `audio`: uploaded audio file with validation, SHA-256 checksum, and duration extraction
+- `image`: uploaded image file with validation and SHA-256 checksum
+- `text`: inline text body with no uploaded media
 
-### Data collection
+### Question types
 
-- Store:
-    - resoibses to all survey questions
-    - timestamps
-    - session identifier
-- Ensure
-    - No personally identifiable information is required
-    - Data is stored securely
+- Rating slider
+- Multiple choice
+- Free text
+- Likert scale
 
-### Consent & ethics
+Questions can be marked as required, split onto separate pages, and optionally show the originating stimulus prompt to participants.
 
-- Before survey:
-    - Show informed consent page
-    - Require explicit agreement (checkbox)
-- Store consent flag+timestamp
-- Provide link to privacy policy and contact info for questions/withdrawal requests
+## Admin and Exports
 
-## Non-functional requirements
+The admin UI is built on Django admin with django-unfold and contains the full staff workflow:
 
-### Performance
-- Handle 20 concurrent users
-- Audio streaming should be smooth with minimal buffering
+- experiment authoring
+- condition, stimulus, and question management
+- global summary cards on `/admin/`
+- per-experiment detail views
+- CSV exports for answers and demographics
+- pairwise CSV exports for comparison studies
+- SVG charts for mean ratings, pairwise win rates, and Bradley-Terry scores
+- printable and machine-readable reproducibility exports
+- ZIP archive export and import for study portability
 
-### Security
-- Admin panel protected via authentication
-- Protect against common web vulnerabilities (CSRF, XSS, SQL injection)
-- Secure storage of collected data (HTTPS required)
+## Project Layout
 
-### Data protection
-- GDPR compliance:
-    - Right to withdraw
-    - Data minimization
-    - retention policy (delete data after project end)
-- Data deletion mechanism after project end
+- `experiments/`: experiment models, admin, assignment strategies, exports, analytics, and charts
+- `survey/`: participant sessions, response capture, flow control, metadata capture, and participant-facing views
+- `core/`: Django settings, URL wiring, and project-level integration
+- `tests/`: end-to-end, admin, pairwise, and regression coverage
 
-### Reliability
+## Running Tests
 
-- Backup data regularly
+```bash
+uv run pytest
+```
 
-### Usability
+Useful variants:
 
-- Mobile-friendly design
-- Simple, low-friction UX
-- Accessible audio controls and survey interface
+```bash
+uv run pytest -m "not selenium"
+uv run pytest -m selenium
+uv run pytest -k <keyword>
+uv run pytest --cov=experiments --cov=survey
+uv run ./manage.py makemigrations --check --dry-run
+```
+
+## Configuration
+
+The application is configured with environment variables via `django-environ`.
+
+Common settings:
+
+- `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS`, `DATABASE_URL`
+- `GEOIP_PATH` for optional country lookup via MaxMind GeoLite2
+- `STIMULUS_MAX_UPLOAD_BYTES`, `STIMULUS_ALLOWED_EXTENSIONS`, `STIMULUS_ALLOWED_MIME_TYPES`
+- `STIMULUS_MAX_IMAGE_UPLOAD_BYTES`, `STIMULUS_ALLOWED_IMAGE_EXTENSIONS`
+
+If `GEOIP_PATH` is unset or the database is missing, participant country lookup is skipped without breaking the app.
+
+## Deployment Notes
+
+webeval is a self-hosted Django application. The repository is ready for local development and research deployments, but production hardening is still the operator's responsibility.
+
+For public deployments, you should at least provide:
+
+- HTTPS
+- a proper production database strategy
+- media storage and backups
+- secure admin credentials
+- monitoring and log retention
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+If you contribute code, keep changes aligned with the existing architecture and add or update tests for behavior changes, especially around participant flow, assignment logic, exports, and admin views.
+
+## License
+
+This project is released under the MIT License. See `LICENSE`.
