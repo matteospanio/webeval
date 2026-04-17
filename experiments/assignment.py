@@ -185,6 +185,7 @@ class PairwiseStrategyBase:
         experiment: "Experiment",
         n: int | None,
         pair_counts: Mapping[tuple[int, int], int],
+        stimulus_counts: Mapping[int, int] | None = None,
         rng: random.Random | None = None,
     ) -> list[PairSpec]:
         raise NotImplementedError
@@ -199,7 +200,11 @@ class PairwiseBalancedStrategy(PairwiseStrategyBase):
        first. Ties broken randomly.
     3. Select top ``n`` pairs.
     4. For each pair, pick a random prompt_group present in both conditions.
-    5. For each pair, pick one active stimulus per condition for that prompt.
+    5. For each pair, pick the least-historically-used active stimulus per
+       condition for that prompt (random tiebreak). ``stimulus_counts`` is an
+       optional ``{stimulus_id: int}`` mapping of prior appearances; when
+       supplied, newly-added stimuli (count 0) are preferentially picked
+       until they catch up to the rest of the pool.
     6. Randomize left/right positioning.
     7. Shuffle trial order.
     """
@@ -211,6 +216,7 @@ class PairwiseBalancedStrategy(PairwiseStrategyBase):
         experiment: "Experiment",
         n: int | None,
         pair_counts: Mapping[tuple[int, int], int],
+        stimulus_counts: Mapping[int, int] | None = None,
         rng: random.Random | None = None,
     ) -> list[PairSpec]:
         from experiments.models import Stimulus
@@ -272,6 +278,14 @@ class PairwiseBalancedStrategy(PairwiseStrategyBase):
             selected_pairs.append(deficit_list[idx % len(deficit_list)][0])
             idx += 1
 
+        counts_map: Mapping[int, int] = stimulus_counts or {}
+
+        def _least_used(pool: list["Stimulus"]) -> "Stimulus":
+            lo = min(counts_map.get(s.id, 0) for s in pool)
+            candidates = [s for s in pool if counts_map.get(s.id, 0) == lo]
+            rng.shuffle(candidates)
+            return candidates[0]
+
         # Build PairSpec for each selected pair.
         specs: list[PairSpec] = []
         for cond_a, cond_b in selected_pairs:
@@ -280,8 +294,8 @@ class PairwiseBalancedStrategy(PairwiseStrategyBase):
             )
             prompt = rng.choice(shared_prompts)
 
-            stim_a = rng.choice(by_cond_prompt[cond_a][prompt])
-            stim_b = rng.choice(by_cond_prompt[cond_b][prompt])
+            stim_a = _least_used(by_cond_prompt[cond_a][prompt])
+            stim_b = _least_used(by_cond_prompt[cond_b][prompt])
             position_a = "left" if rng.random() < 0.5 else "right"
 
             specs.append(

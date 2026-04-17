@@ -145,3 +145,124 @@ class TestPairwiseBalancedStrategy:
         strategy = PairwiseBalancedStrategy()
         specs = strategy.select_pairs(exp, n=5, pair_counts={})
         assert specs == []
+
+    def test_stimulus_counts_parameter_is_optional(self, pairwise_experiment):
+        """Calling select_pairs without stimulus_counts= still works."""
+        strategy = PairwiseBalancedStrategy()
+        specs = strategy.select_pairs(
+            pairwise_experiment, n=3, pair_counts={}, rng=random.Random(7)
+        )
+        assert len(specs) == 3
+
+    def test_least_used_stimulus_is_preferred(self, db):
+        """When stimulus_counts is imbalanced, the low-count stimulus is picked."""
+        exp = PairwiseExperimentFactory(stimuli_per_participant=10)
+        cond_a = ConditionFactory(experiment=exp, name="Model-A")
+        cond_b = ConditionFactory(experiment=exp, name="Model-B")
+        # 3 stimuli per condition, all sharing one prompt_group.
+        stims_a = [
+            StimulusFactory(
+                condition=cond_a, title=f"a{i}", prompt_group="p0"
+            )
+            for i in range(3)
+        ]
+        stims_b = [
+            StimulusFactory(
+                condition=cond_b, title=f"b{i}", prompt_group="p0"
+            )
+            for i in range(3)
+        ]
+        new_a = stims_a[0]
+        new_b = stims_b[0]
+        # All other stimuli have 10 prior appearances; new_a / new_b have 0.
+        counts = {s.id: 10 for s in stims_a + stims_b}
+        counts[new_a.id] = 0
+        counts[new_b.id] = 0
+
+        strategy = PairwiseBalancedStrategy()
+        specs = strategy.select_pairs(
+            exp,
+            n=10,
+            pair_counts={},
+            stimulus_counts=counts,
+            rng=random.Random(0),
+        )
+        assert len(specs) == 10
+        # Only one viable condition pair exists, so every spec draws one stim
+        # from each condition. The strictly-least-used pick must always choose
+        # new_a and new_b.
+        for spec in specs:
+            pair = {spec.stimulus_a_id, spec.stimulus_b_id}
+            assert new_a.id in pair
+            assert new_b.id in pair
+
+    def test_new_stimulus_catches_up(self, db):
+        """A stimulus added mid-experiment gets oversampled until it catches up."""
+        exp = PairwiseExperimentFactory(stimuli_per_participant=20)
+        cond_a = ConditionFactory(experiment=exp, name="A")
+        cond_b = ConditionFactory(experiment=exp, name="B")
+        old_a = [
+            StimulusFactory(condition=cond_a, title=f"a_old_{i}", prompt_group="p0")
+            for i in range(3)
+        ]
+        old_b = [
+            StimulusFactory(condition=cond_b, title=f"b_old_{i}", prompt_group="p0")
+            for i in range(3)
+        ]
+
+        strategy = PairwiseBalancedStrategy()
+        stim_counts: dict[int, int] = {}
+        pair_counts: dict[tuple[int, int], int] = {}
+
+        # Phase 1: 5 participants with only the original stimuli.
+        for seed in range(5):
+            specs = strategy.select_pairs(
+                exp,
+                n=20,
+                pair_counts=pair_counts,
+                stimulus_counts=stim_counts,
+                rng=random.Random(seed),
+            )
+            for spec in specs:
+                key = (
+                    min(spec.condition_a_id, spec.condition_b_id),
+                    max(spec.condition_a_id, spec.condition_b_id),
+                )
+                pair_counts[key] = pair_counts.get(key, 0) + 1
+                stim_counts[spec.stimulus_a_id] = (
+                    stim_counts.get(spec.stimulus_a_id, 0) + 1
+                )
+                stim_counts[spec.stimulus_b_id] = (
+                    stim_counts.get(spec.stimulus_b_id, 0) + 1
+                )
+
+        # Phase 2: add one new stimulus per condition, then run 5 more rounds.
+        new_a = StimulusFactory(condition=cond_a, title="a_new", prompt_group="p0")
+        new_b = StimulusFactory(condition=cond_b, title="b_new", prompt_group="p0")
+
+        for seed in range(5, 10):
+            specs = strategy.select_pairs(
+                exp,
+                n=20,
+                pair_counts=pair_counts,
+                stimulus_counts=stim_counts,
+                rng=random.Random(seed),
+            )
+            for spec in specs:
+                key = (
+                    min(spec.condition_a_id, spec.condition_b_id),
+                    max(spec.condition_a_id, spec.condition_b_id),
+                )
+                pair_counts[key] = pair_counts.get(key, 0) + 1
+                stim_counts[spec.stimulus_a_id] = (
+                    stim_counts.get(spec.stimulus_a_id, 0) + 1
+                )
+                stim_counts[spec.stimulus_b_id] = (
+                    stim_counts.get(spec.stimulus_b_id, 0) + 1
+                )
+
+        # By the end, new_a/new_b should be close to the average of their peers.
+        avg_old_a = sum(stim_counts[s.id] for s in old_a) / len(old_a)
+        avg_old_b = sum(stim_counts[s.id] for s in old_b) / len(old_b)
+        assert stim_counts[new_a.id] >= 0.7 * avg_old_a
+        assert stim_counts[new_b.id] >= 0.7 * avg_old_b

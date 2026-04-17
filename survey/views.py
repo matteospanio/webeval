@@ -549,10 +549,12 @@ def _build_pair_assignments(session: ParticipantSession) -> None:
     except UnknownStrategyError:
         strategy = get_pairwise_strategy("pairwise_balanced")
     pair_counts = _fetch_pair_counts(session.experiment)
+    stimulus_counts = _fetch_stimulus_counts(session.experiment)
     specs = strategy.select_pairs(
         experiment=session.experiment,
         n=session.experiment.stimuli_per_participant,
         pair_counts=pair_counts,
+        stimulus_counts=stimulus_counts,
         rng=random.Random(str(session.id)),
     )
     for order, spec in enumerate(specs):
@@ -580,6 +582,21 @@ def _fetch_pair_counts(experiment: Experiment) -> dict[tuple[int, int], int]:
         b = row["stimulus_b__condition_id"]
         key = (min(a, b), max(a, b))
         counts[key] = counts.get(key, 0) + row["n"]
+    return counts
+
+
+def _fetch_stimulus_counts(experiment: Experiment) -> dict[int, int]:
+    from django.db.models import Count
+
+    counts: dict[int, int] = {}
+    for field in ("stimulus_a_id", "stimulus_b_id"):
+        rows = (
+            PairAssignment.objects.filter(session__experiment=experiment)
+            .values(field)
+            .annotate(n=Count("pk"))
+        )
+        for row in rows:
+            counts[row[field]] = counts.get(row[field], 0) + row["n"]
     return counts
 
 
