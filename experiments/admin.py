@@ -13,6 +13,7 @@ there is no separate "dashboard" app.
 """
 from __future__ import annotations
 
+from django import forms
 from django.contrib import admin, messages
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
@@ -21,6 +22,7 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
 
+from .assignment import available_pairwise_strategies, available_strategies
 from .charts import bradley_terry_svg, mean_ratings_svg, pairwise_win_rates_svg
 from .csv_exports import (
     answers_csv_response,
@@ -170,6 +172,21 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 ),
             )
         return super().get_fieldsets(request, obj)
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "assignment_strategy":
+            choices = [
+                (name, f"{name} (standard)") for name in available_strategies()
+            ] + [
+                (name, f"{name} (pairwise)") for name in available_pairwise_strategies()
+            ]
+            return forms.ChoiceField(
+                choices=choices,
+                initial=db_field.default,
+                help_text=db_field.help_text,
+                label=db_field.verbose_name.capitalize(),
+            )
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_urls(self):
         """Mount per-experiment detail, CSV, and chart views under the admin.
