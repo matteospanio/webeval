@@ -59,9 +59,9 @@
       </div>
     </div>
 
-    {% if show_prompt and pair.left_stimulus.prompt_group %}
+    {% if show_prompt and pair.left_stimulus.description %}
       <div class="stimulus-prompt" style="text-align: center;">
-        <p><strong>Prompt:</strong> {{ pair.left_stimulus.prompt_group }}</p>
+        <p><strong>Prompt:</strong> {{ pair.left_stimulus.description }}</p>
       </div>
     {% endif %}
 
