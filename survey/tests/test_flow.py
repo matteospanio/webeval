@@ -293,6 +293,10 @@ class TestListenDuration:
 
 
 class TestQuestionRandomization:
+    def test_randomize_stimulus_questions_defaults_true(self):
+        exp = ExperimentFactory(slug="defaults-study")
+        assert exp.randomize_stimulus_questions is True
+
     def test_stimulus_question_order_is_randomized_but_stable(self, active_experiment):
         # Add enough questions to make randomization observable.
         for i in range(6):
@@ -312,6 +316,47 @@ class TestQuestionRandomization:
         first_q_positions = [i for i in range(len(first.content)) if first.content[i:i+8] == q_pattern]
         second_q_positions = [i for i in range(len(second.content)) if second.content[i:i+8] == q_pattern]
         assert first_q_positions == second_q_positions
+
+    def test_stimulus_question_order_fixed_when_randomize_off(self):
+        import re
+
+        exp = ExperimentFactory(slug="fixed-order-study")
+        exp.randomize_stimulus_questions = False
+        cond = ConditionFactory(experiment=exp, name="A")
+        StimulusFactory(condition=cond, title="a1")
+        # Ensure all questions sit on one page so we can read their full
+        # order in the rendered HTML. Sort_order values are intentionally
+        # non-contiguous to prove we're ordering by the field, not by pk.
+        expected_ids: list[int] = []
+        for idx, sort in enumerate([40, 10, 30, 20, 50]):
+            q = RatingQuestionFactory(
+                experiment=exp, prompt=f"q{idx}", sort_order=sort
+            )
+            expected_ids.append(q.pk)
+        expected_ids_by_sort = [
+            pk for _, pk in sorted(
+                [(40, expected_ids[0]), (10, expected_ids[1]),
+                 (30, expected_ids[2]), (20, expected_ids[3]),
+                 (50, expected_ids[4])],
+                key=lambda p: p[0],
+            )
+        ]
+
+        exp.state = Experiment.State.ACTIVE
+        exp.save(update_fields=["state", "randomize_stimulus_questions"])
+
+        def _run_once() -> list[int]:
+            client = Client()
+            client.post(reverse("survey:consent", kwargs={"slug": exp.slug}), data={"agree": "on"})
+            client.post(reverse("survey:instructions", kwargs={"slug": exp.slug}))
+            resp = client.get(reverse("survey:play", kwargs={"slug": exp.slug}))
+            assert resp.status_code == 200
+            return [int(m) for m in re.findall(r'name="q_(\d+)"', resp.content.decode())]
+
+        first = _run_once()
+        second = _run_once()
+        assert first == expected_ids_by_sort
+        assert second == first
 
 
 # --- author-controlled page breaks -----------------------------------------

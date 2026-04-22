@@ -116,6 +116,16 @@ class Experiment(models.Model):
         ),
     )
 
+    randomize_stimulus_questions = models.BooleanField(
+        default=True,
+        help_text=(
+            "If enabled (default), each participant sees the per-stimulus "
+            "questions in a randomised order seeded by their session so the "
+            "order is stable across page refreshes. Disable to show all "
+            "participants the same order defined by Question.sort_order."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

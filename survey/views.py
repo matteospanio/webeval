@@ -127,16 +127,23 @@ def _ordered_section_questions(
 
 
 def _stimulus_questions(experiment: Experiment, session: ParticipantSession) -> list[Question]:
-    """Return stimulus-section questions in the session-randomised order."""
-    key = f"webeval:q_order:{session.id}:stimulus"
+    """Return stimulus-section questions in per-session order.
+
+    Shuffled with a session-seeded RNG when
+    ``experiment.randomize_stimulus_questions`` is true (stable across
+    refreshes); otherwise returned in the author-defined ``sort_order``.
+    """
     cached = getattr(session, "_cached_question_order", None)
     if cached is None:
         questions = _ordered_section_questions(experiment, Question.Section.STIMULUS)
-        ids_to_q = {q.pk: q for q in questions}
-        ordered_ids = list(ids_to_q.keys())
-        rng = random.Random(str(session.id))
-        rng.shuffle(ordered_ids)
-        cached = [ids_to_q[i] for i in ordered_ids]
+        if experiment.randomize_stimulus_questions:
+            ids_to_q = {q.pk: q for q in questions}
+            ordered_ids = list(ids_to_q.keys())
+            rng = random.Random(str(session.id))
+            rng.shuffle(ordered_ids)
+            cached = [ids_to_q[i] for i in ordered_ids]
+        else:
+            cached = questions
         session._cached_question_order = cached  # type: ignore[attr-defined]
     return cached  # type: ignore[return-value]
 

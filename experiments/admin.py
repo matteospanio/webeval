@@ -150,6 +150,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
                     "stimuli_per_participant",
                     "assignment_strategy",
                     "require_audio_check",
+                    "randomize_stimulus_questions",
                 )
             },
         ),

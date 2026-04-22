@@ -21,7 +21,6 @@
           <source src="{{ prompt.audio.url }}">
           Your browser does not support the audio element.
         </audio>
-        {% if prompt.description %}<p>{{ prompt.description }}</p>{% endif %}
       </section>
     {% endif %}
 
@@ -77,7 +76,7 @@
       </div>
     </div>
 
-    {% if show_prompt and pair.left_stimulus.description %}
+    {% if show_prompt and pair.left_stimulus.description and experiment.mode != "pairwise_audio" %}
       <div class="stimulus-prompt" style="text-align: center;">
         <p><strong>Prompt:</strong> {{ pair.left_stimulus.description }}</p>
       </div>

@@ -145,3 +145,98 @@ def test_pairwise_audio_selects_pairs_sharing_prompt_group():
     pa = pa_qs.first()
     assert pa.prompt_group == "song-01"
     assert pa.stimulus_a.condition.name != pa.stimulus_b.condition.name
+
+
+# --- Pure-listening invariant: no textual information about the audio ------
+
+
+def test_pairwise_audio_hides_prompt_description():
+    """The reference Prompt.description must never appear on the play page."""
+    exp = _build_pairwise_audio_experiment()
+    # Sanity: the fixture above set a non-empty description on the prompt.
+    from experiments.models import Prompt
+
+    prompt = Prompt.objects.get(experiment=exp)
+    assert prompt.description == "First 4 measures"
+
+    client = Client()
+    client.post(
+        reverse("survey:consent", kwargs={"slug": exp.slug}), data={"agree": "on"}
+    )
+    client.post(reverse("survey:instructions", kwargs={"slug": exp.slug}))
+    resp = client.get(reverse("survey:pairwise_play", kwargs={"slug": exp.slug}))
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "First 4 measures" not in body
+    # The prompt audio player is still rendered.
+    assert 'id="stimulus-audio-prompt"' in body
+
+
+def test_pairwise_audio_ignores_show_prompt():
+    """Even with Question.show_prompt=True, stimulus descriptions stay hidden."""
+    exp = _build_pairwise_audio_experiment()
+    # Flip show_prompt on the stimulus question and give stimuli a description.
+    q = Question.objects.get(experiment=exp, section=Question.Section.STIMULUS)
+    q.show_prompt = True
+    q.save(update_fields=["show_prompt"])
+    from experiments.models import Stimulus
+
+    Stimulus.objects.filter(condition__experiment=exp).update(
+        description="Secret generation prompt"
+    )
+
+    client = Client()
+    client.post(
+        reverse("survey:consent", kwargs={"slug": exp.slug}), data={"agree": "on"}
+    )
+    client.post(reverse("survey:instructions", kwargs={"slug": exp.slug}))
+    resp = client.get(reverse("survey:pairwise_play", kwargs={"slug": exp.slug}))
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "Secret generation prompt" not in body
+    assert "stimulus-prompt" not in body
+
+
+def test_plain_pairwise_still_renders_show_prompt():
+    """Regression: plain PAIRWISE (non-audio) must keep rendering the prompt
+    when Question.show_prompt=True — only PAIRWISE_AUDIO suppresses it."""
+    from experiments.models import Stimulus
+    from experiments.tests.factories import (
+        ChoiceQuestionFactory,
+        ConditionFactory,
+        PairwiseExperimentFactory,
+        StimulusFactory,
+    )
+
+    exp = PairwiseExperimentFactory(
+        slug="plain-pairwise-prompt",
+        stimuli_per_participant=1,
+        require_audio_check=False,
+    )
+    cond_a = ConditionFactory(experiment=exp, name="A")
+    cond_b = ConditionFactory(experiment=exp, name="B")
+    StimulusFactory(
+        condition=cond_a, prompt_group="pg", description="Visible prompt"
+    )
+    StimulusFactory(condition=cond_b, prompt_group="pg", description="Visible prompt")
+    ChoiceQuestionFactory(
+        experiment=exp,
+        section=Question.Section.STIMULUS,
+        prompt="A or B?",
+        config={"choices": ["A", "B"], "multi": False},
+        required=True,
+        show_prompt=True,
+    )
+    exp.state = Experiment.State.ACTIVE
+    exp.save(update_fields=["state"])
+
+    client = Client()
+    client.post(
+        reverse("survey:consent", kwargs={"slug": exp.slug}), data={"agree": "on"}
+    )
+    client.post(reverse("survey:instructions", kwargs={"slug": exp.slug}))
+    resp = client.get(reverse("survey:pairwise_play", kwargs={"slug": exp.slug}))
+    assert resp.status_code == 200
+    body = resp.content.decode()
+    assert "Visible prompt" in body
+    assert "stimulus-prompt" in body
