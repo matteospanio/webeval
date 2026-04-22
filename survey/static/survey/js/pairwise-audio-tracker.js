@@ -63,4 +63,5 @@
 
   trackAudio(document.getElementById("stimulus-audio-left"));
   trackAudio(document.getElementById("stimulus-audio-right"));
+  trackAudio(document.getElementById("stimulus-audio-prompt"));
 })();

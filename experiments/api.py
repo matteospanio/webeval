@@ -22,7 +22,7 @@ from apikeys.mixins import LogAPIKeyUsageMixin
 from apikeys.permissions import HasScope
 
 from .csv_exports import iter_pairwise_answers
-from .models import Condition, Experiment, Stimulus
+from .models import Condition, Experiment, Prompt, Stimulus
 
 
 class StimulusUploadSerializer(serializers.Serializer):
@@ -156,6 +156,98 @@ class StimulusUploadView(LogAPIKeyUsageMixin, APIView):
                 "duration_seconds": stimulus.duration_seconds,
                 "condition": condition.name,
                 "created_condition": created,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class PromptUploadSerializer(serializers.Serializer):
+    prompt_group = serializers.CharField(max_length=200)
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    audio = serializers.FileField()
+
+
+class PromptUploadView(LogAPIKeyUsageMixin, APIView):
+    """Create or update one ``Prompt`` under a draft experiment.
+
+    Response shape mirrors :class:`StimulusUploadView`:
+
+    * ``201`` — prompt created. Body: ``{"id", "sha256", "duration_seconds",
+      "prompt_group"}``.
+    * ``200`` + ``{"skipped": true, "reason": "duplicate_sha256", "sha256",
+      "prompt_id"}`` when a prompt with the same SHA-256 already exists
+      under the same experiment.
+    * ``400`` — validation errors (bad extension, oversized file, duplicate
+      ``prompt_group`` with a different audio file).
+    * ``404`` — experiment slug unknown.
+    * ``409`` — experiment is not in DRAFT state.
+    """
+
+    permission_classes = [HasScope("prompts:upload")]
+
+    def post(self, request, slug: str):
+        experiment = get_object_or_404(Experiment, slug=slug)
+        if experiment.state != Experiment.State.DRAFT:
+            return Response(
+                {
+                    "detail": (
+                        f"Experiment '{experiment.slug}' is "
+                        f"{experiment.get_state_display().lower()}; prompts can "
+                        "only be added while it is in draft state."
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        serializer = PromptUploadSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        digest = _hash_upload(data["audio"])
+        existing = Prompt.objects.filter(
+            experiment=experiment, sha256=digest
+        ).first()
+        if existing is not None:
+            return Response(
+                {
+                    "skipped": True,
+                    "reason": "duplicate_sha256",
+                    "sha256": digest,
+                    "prompt_id": existing.pk,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        try:
+            with transaction.atomic():
+                prompt = Prompt(
+                    experiment=experiment,
+                    prompt_group=data["prompt_group"],
+                    title=data.get("title", ""),
+                    description=data.get("description", ""),
+                    audio=data["audio"],
+                )
+                prompt.full_clean()
+                prompt.save()
+        except DjangoValidationError as exc:
+            return Response(
+                {
+                    "detail": "validation_error",
+                    "errors": exc.message_dict
+                    if hasattr(exc, "message_dict")
+                    else exc.messages,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        prompt.refresh_from_db()
+        return Response(
+            {
+                "id": prompt.pk,
+                "sha256": prompt.sha256,
+                "duration_seconds": prompt.duration_seconds,
+                "prompt_group": prompt.prompt_group,
             },
             status=status.HTTP_201_CREATED,
         )

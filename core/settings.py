@@ -205,6 +205,13 @@ UNFOLD = {
                             "admin:experiments_question_changelist"
                         ),
                     },
+                    {
+                        "title": "Prompts",
+                        "icon": "graphic_eq",
+                        "link": reverse_lazy(
+                            "admin:experiments_prompt_changelist"
+                        ),
+                    },
                 ],
             },
             {

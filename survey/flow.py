@@ -46,7 +46,7 @@ def required_step_url(session: ParticipantSession) -> str:
     step = session.last_step
     if (
         step == ParticipantSession.Step.STIMULI
-        and session.experiment.mode == "pairwise"
+        and session.experiment.is_pairwise
     ):
         name = "survey:pairwise_play"
     else:

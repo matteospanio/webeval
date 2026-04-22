@@ -9,7 +9,7 @@ from __future__ import annotations
 import factory
 from factory.django import DjangoModelFactory
 
-from experiments.models import Condition, Experiment, Question, Stimulus
+from experiments.models import Condition, Experiment, Prompt, Question, Stimulus
 
 
 class ExperimentFactory(DjangoModelFactory):
@@ -137,3 +137,24 @@ class PairwiseExperimentFactory(ExperimentFactory):
     mode = Experiment.Mode.PAIRWISE
     assignment_strategy = "pairwise_balanced"
     stimuli_per_participant = 5
+
+
+class PairwiseAudioExperimentFactory(ExperimentFactory):
+    """A pairwise-audio-mode experiment (audio prompt + two continuations)."""
+
+    mode = Experiment.Mode.PAIRWISE_AUDIO
+    assignment_strategy = "pairwise_balanced"
+    stimuli_per_participant = 5
+
+
+class PromptFactory(DjangoModelFactory):
+    class Meta:
+        model = Prompt
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    prompt_group = factory.Sequence(lambda n: f"prompt-{n}")
+    title = factory.Sequence(lambda n: f"Prompt {n}")
+    audio = factory.django.FileField(
+        filename="prompt.mp3",
+        data=b"ID3\x03\x00\x00\x00\x00\x00\x00",  # minimal MP3 header
+    )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 SCOPES: dict[str, str] = {
     "stimuli:upload": "Upload stimuli to draft experiments",
+    "prompts:upload": "Upload audio prompts to draft experiments",
     "pairwise-answers:read": "Export pairwise comparison answers",
 }
 

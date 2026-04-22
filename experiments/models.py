@@ -56,6 +56,7 @@ class Experiment(models.Model):
     class Mode(models.TextChoices):
         STANDARD = "standard", "Standard (single stimulus)"
         PAIRWISE = "pairwise", "Pairwise comparison"
+        PAIRWISE_AUDIO = "pairwise_audio", "Pairwise audio continuation"
 
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, max_length=200)
@@ -124,6 +125,11 @@ class Experiment(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
+    @property
+    def is_pairwise(self) -> bool:
+        """True for any pairwise-style mode (written or audio prompts)."""
+        return self.mode in (self.Mode.PAIRWISE, self.Mode.PAIRWISE_AUDIO)
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)[:200]
@@ -172,6 +178,61 @@ class Experiment(models.Model):
                     raise ValidationError(
                         {"mode": "Mode cannot be changed after the experiment leaves draft."}
                     )
+                # Leaving draft into TEST/ACTIVE requires that a PAIRWISE_AUDIO
+                # experiment has an audio Prompt row for every distinct
+                # prompt_group referenced by its active stimuli, and that
+                # every active stimulus is audio.
+                if (
+                    old_state == self.State.DRAFT
+                    and self.state in (self.State.TEST, self.State.ACTIVE)
+                    and self.mode == self.Mode.PAIRWISE_AUDIO
+                ):
+                    self._validate_pairwise_audio_activation()
+
+    def _validate_pairwise_audio_activation(self) -> None:
+        active_stimuli = Stimulus.objects.filter(
+            condition__experiment=self, is_active=True
+        )
+        non_audio_exists = active_stimuli.exclude(kind=Stimulus.Kind.AUDIO).exists()
+        if non_audio_exists:
+            raise ValidationError(
+                {
+                    "mode": (
+                        "Pairwise audio continuation experiments can only contain "
+                        "audio stimuli; remove or deactivate non-audio stimuli first."
+                    )
+                }
+            )
+        active_groups = set(
+            active_stimuli.exclude(prompt_group="")
+            .values_list("prompt_group", flat=True)
+            .distinct()
+        )
+        if not active_groups:
+            raise ValidationError(
+                {
+                    "mode": (
+                        "Pairwise audio continuation experiments require at least "
+                        "one active stimulus with a non-empty prompt_group."
+                    )
+                }
+            )
+        existing_groups = set(
+            Prompt.objects.filter(
+                experiment=self, prompt_group__in=active_groups
+            ).values_list("prompt_group", flat=True)
+        )
+        missing = sorted(active_groups - existing_groups)
+        if missing:
+            raise ValidationError(
+                {
+                    "mode": (
+                        "Pairwise audio continuation experiments require an audio "
+                        "Prompt for every prompt_group. Missing prompts for: "
+                        f"{missing}."
+                    )
+                }
+            )
 
 
 # --- Structural-edit guard for child models ---------------------------------
@@ -564,3 +625,84 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
         return
 
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})
+
+
+# --- Prompt ------------------------------------------------------------------
+
+
+def _prompt_upload_path(instance: "Prompt", filename: str) -> str:
+    experiment_id = instance.experiment_id or "unassigned"
+    return f"prompts/{experiment_id}/{filename}"
+
+
+class Prompt(models.Model):
+    """An audio prompt shared by the stimuli of a single ``prompt_group``.
+
+    Used exclusively by ``PAIRWISE_AUDIO`` experiments: participants listen
+    to the prompt (e.g. the first 4 measures of a song) before comparing
+    the two continuations. Looked up by ``(experiment, prompt_group)``.
+    """
+
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name="prompts",
+    )
+    prompt_group = models.CharField(max_length=200, db_index=True)
+    title = models.CharField(max_length=200, blank=True)
+    description = models.TextField(blank=True)
+    audio = models.FileField(
+        upload_to=_prompt_upload_path,
+        validators=[audio_extension_validator(), audio_size_validator],
+    )
+    sha256 = models.CharField(max_length=64, blank=True, editable=False)
+    duration_seconds = models.FloatField(null=True, blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["experiment", "prompt_group"],
+                name="prompt_unique_per_group",
+            ),
+        ]
+        ordering = ("experiment", "prompt_group")
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.title or self.prompt_group
+
+    def clean(self):
+        super().clean()
+        _ensure_draft(self.experiment if self.experiment_id else None)
+
+    def delete(self, *args, **kwargs):
+        _ensure_draft(self.experiment if self.experiment_id else None)
+        return super().delete(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        if not self.sha256 and self.audio:
+            try:
+                self.audio.open("rb")
+                self.audio.seek(0)
+                hasher = hashlib.sha256()
+                for chunk in iter(lambda: self.audio.read(65536), b""):
+                    hasher.update(chunk)
+                self.sha256 = hasher.hexdigest()
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.audio.seek(0)
+                except Exception:
+                    pass
+
+        super().save(*args, **kwargs)
+
+        if self.duration_seconds is None and self.audio:
+            duration = _safe_duration_seconds(
+                self.audio.path if _has_path(self.audio) else None
+            )
+            if duration is not None:
+                type(self).objects.filter(pk=self.pk).update(duration_seconds=duration)
+                self.duration_seconds = duration

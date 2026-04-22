@@ -34,7 +34,7 @@ from experiments.assignment import (
     get_pairwise_strategy,
     get_strategy,
 )
-from experiments.models import Experiment, Question, Stimulus
+from experiments.models import Experiment, Prompt, Question, Stimulus
 
 from .flow import (
     paginate_questions,
@@ -158,7 +158,7 @@ def _progress(
         paginate_questions(_ordered_section_questions(experiment, Question.Section.DEMOGRAPHIC))
     )
     audio_check = _audio_check_active(experiment)
-    if experiment.mode == Experiment.Mode.PAIRWISE:
+    if experiment.is_pairwise:
         return pairwise_progress_percent(
             session,
             pairs_total=session.pair_assignments.count(),
@@ -263,7 +263,7 @@ def instructions(request, slug: str):
         return bounce
 
     if request.method == "POST":
-        is_pairwise = experiment.mode == Experiment.Mode.PAIRWISE
+        is_pairwise = experiment.is_pairwise
         next_step = ParticipantSession.Step.STIMULI
         with transaction.atomic():
             if is_pairwise:
@@ -646,6 +646,7 @@ def pairwise_play(request, slug: str):
     has_demographics = bool(
         _ordered_section_questions(experiment, Question.Section.DEMOGRAPHIC)
     )
+    prompt = _prompt_for_pair(experiment, pair)
 
     if request.method == "POST":
         errors, responses = _collect_pairwise_answers(
@@ -658,6 +659,7 @@ def pairwise_play(request, slug: str):
             ctx = _base_context(experiment, session)
             ctx.update({
                 "pair": pair,
+                "prompt": prompt,
                 "questions": questions,
                 "is_last_pair": is_last_pair,
                 "has_demographics": has_demographics,
@@ -687,6 +689,7 @@ def pairwise_play(request, slug: str):
     ctx = _base_context(experiment, session)
     ctx.update({
         "pair": pair,
+        "prompt": prompt,
         "questions": questions,
         "is_last_pair": is_last_pair,
         "has_demographics": has_demographics,
@@ -695,6 +698,20 @@ def pairwise_play(request, slug: str):
         "show_prompt": any(q.show_prompt for q in questions),
     })
     return render(request, "survey/pairwise_play.html", ctx)
+
+
+def _prompt_for_pair(experiment: Experiment, pair: PairAssignment) -> Prompt | None:
+    """Return the audio ``Prompt`` for ``pair`` in a PAIRWISE_AUDIO experiment.
+
+    Returns None for plain PAIRWISE experiments (where the prompt is text).
+    """
+    if experiment.mode != Experiment.Mode.PAIRWISE_AUDIO:
+        return None
+    if not pair.prompt_group:
+        return None
+    return Prompt.objects.filter(
+        experiment=experiment, prompt_group=pair.prompt_group
+    ).first()
 
 
 def _collect_pairwise_answers(
@@ -785,8 +802,13 @@ def record_listen_pair(request, slug: str, pair_id: int):
     elif side == "b":
         pair.listen_duration_b_ms = max(pair.listen_duration_b_ms, duration_ms)
         pair.save(update_fields=["listen_duration_b_ms"])
+    elif side == "prompt":
+        pair.listen_duration_prompt_ms = max(
+            pair.listen_duration_prompt_ms, duration_ms
+        )
+        pair.save(update_fields=["listen_duration_prompt_ms"])
     else:
-        return HttpResponseBadRequest("side must be 'a' or 'b'")
+        return HttpResponseBadRequest("side must be 'a', 'b', or 'prompt'")
     return JsonResponse({"ok": True})
 
 

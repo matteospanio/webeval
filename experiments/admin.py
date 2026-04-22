@@ -35,7 +35,7 @@ from .data_ops import purge_participant_data
 from .exports import build_experiment_archive
 from .forms import QuestionAdminForm
 from .imports import import_experiment_archive
-from .models import Condition, Experiment, Question, Stimulus
+from .models import Condition, Experiment, Prompt, Question, Stimulus
 from .stats import (
     bradley_terry_analysis,
     experiment_counts,
@@ -87,6 +87,14 @@ class QuestionInline(_ReadOnlyWhenLockedMixin, UnfoldTabularInline):
     show_change_link = True
 
 
+class PromptInline(_ReadOnlyWhenLockedMixin, UnfoldTabularInline):
+    model = Prompt
+    extra = 0
+    fields = ("prompt_group", "title", "audio", "description", "duration_seconds")
+    readonly_fields = ("duration_seconds",)
+    show_change_link = True
+
+
 @admin.action(description="Export reproducibility bundle (JSON)")
 def export_repro_json(modeladmin, request, queryset):
     if queryset.count() != 1:
@@ -123,7 +131,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
     list_filter = ("state", "mode", "assignment_strategy")
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = (ConditionInline, QuestionInline)
+    inlines = (ConditionInline, QuestionInline, PromptInline)
     actions = (export_repro_json, open_printable)
     actions_list = ("import_experiment",)
     readonly_fields = ("live_stats",)
@@ -269,7 +277,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
             "counts": experiment_counts(experiment),
             "mean_listen_ms": mean_listen_duration_ms(experiment),
         }
-        if experiment.mode == Experiment.Mode.PAIRWISE:
+        if experiment.is_pairwise:
             context["pairwise_stats"] = pairwise_experiment_stats(experiment)
             context["bt_stats"] = bradley_terry_analysis(experiment)
             context["bt_chart_svg"] = bradley_terry_svg(experiment)
@@ -444,7 +452,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
             f"{mean_listen / 1000:.1f} s" if mean_listen is not None else "—"
         )
         survey_url = reverse("survey:consent", kwargs={"slug": obj.slug})
-        is_pairwise = obj.mode == Experiment.Mode.PAIRWISE
+        is_pairwise = obj.is_pairwise
 
         if is_pairwise:
             csv_label = "Pairwise CSV"
@@ -601,6 +609,26 @@ class StimulusAdmin(UnfoldModelAdmin):
                 "fields": ("text_body",),
             },
         ),
+    )
+
+
+@admin.register(Prompt)
+class PromptAdmin(UnfoldModelAdmin):
+    list_display = ("title", "experiment", "prompt_group", "duration_seconds")
+    list_filter = ("experiment",)
+    search_fields = ("prompt_group", "title", "description")
+    readonly_fields = ("duration_seconds", "sha256", "created_at", "updated_at")
+    autocomplete_fields = ("experiment",)
+    fields = (
+        "experiment",
+        "prompt_group",
+        "title",
+        "description",
+        "audio",
+        "duration_seconds",
+        "sha256",
+        "created_at",
+        "updated_at",
     )
 
 

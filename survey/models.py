@@ -131,6 +131,7 @@ class PairAssignment(models.Model):
     sort_order = models.PositiveIntegerField()
     listen_duration_a_ms = models.PositiveIntegerField(default=0)
     listen_duration_b_ms = models.PositiveIntegerField(default=0)
+    listen_duration_prompt_ms = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ("session", "sort_order")

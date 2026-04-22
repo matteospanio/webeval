@@ -7,6 +7,24 @@
   <article>
     <p class="trial-counter">Comparison {{ pair_number }} of {{ pairs_total }}</p>
 
+    {% if prompt %}
+      <section class="pairwise-prompt">
+        <div class="sample-label">Reference (listen first)</div>
+        <audio
+          id="stimulus-audio-prompt"
+          controls
+          preload="auto"
+          data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
+          data-listen-side="prompt"
+          data-csrf-token="{{ csrf_token }}"
+        >
+          <source src="{{ prompt.audio.url }}">
+          Your browser does not support the audio element.
+        </audio>
+        {% if prompt.description %}<p>{{ prompt.description }}</p>{% endif %}
+      </section>
+    {% endif %}
+
     <div class="pairwise-grid">
       <div class="pairwise-sample">
         <div class="sample-label">Sample A</div>

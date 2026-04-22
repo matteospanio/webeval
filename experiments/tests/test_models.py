@@ -10,12 +10,14 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from experiments.models import Experiment, Question, Stimulus
+from experiments.models import Experiment, Prompt, Question, Stimulus
 from experiments.tests.factories import (
     ChoiceQuestionFactory,
     ConditionFactory,
     ExperimentFactory,
     ImageStimulusFactory,
+    PairwiseAudioExperimentFactory,
+    PromptFactory,
     RatingQuestionFactory,
     StimulusFactory,
     TextQuestionFactory,
@@ -432,3 +434,91 @@ class TestPaginateQuestions:
         )
         with pytest.raises(ValidationError):
             q.full_clean()
+
+
+# --- Prompt model + PAIRWISE_AUDIO activation validator ---------------------
+
+
+class TestPromptModel:
+    def test_prompt_save_autocomputes_sha256(self):
+        exp = ExperimentFactory()
+        prompt = PromptFactory(experiment=exp, prompt_group="g-1")
+        prompt.refresh_from_db()
+        assert prompt.sha256
+        assert len(prompt.sha256) == 64
+
+    def test_unique_per_experiment_and_prompt_group(self):
+        exp = ExperimentFactory()
+        PromptFactory(experiment=exp, prompt_group="dup")
+        with pytest.raises(Exception):  # IntegrityError / ValidationError
+            PromptFactory(experiment=exp, prompt_group="dup")
+
+    def test_same_prompt_group_allowed_across_experiments(self):
+        e1 = ExperimentFactory()
+        e2 = ExperimentFactory()
+        PromptFactory(experiment=e1, prompt_group="shared")
+        PromptFactory(experiment=e2, prompt_group="shared")  # should not raise
+        assert Prompt.objects.filter(prompt_group="shared").count() == 2
+
+    def test_cannot_add_prompt_to_active_experiment(self):
+        exp = ExperimentFactory()
+        exp.state = Experiment.State.ACTIVE
+        exp.save(update_fields=["state"])
+        p = PromptFactory.build(experiment=exp, prompt_group="late")
+        with pytest.raises(ValidationError):
+            p.full_clean()
+
+    def test_cannot_delete_prompt_from_active_experiment(self):
+        exp = ExperimentFactory()
+        prompt = PromptFactory(experiment=exp, prompt_group="keep")
+        exp.state = Experiment.State.ACTIVE
+        exp.save(update_fields=["state"])
+        with pytest.raises(ValidationError):
+            prompt.delete()
+
+
+class TestPairwiseAudioActivation:
+    def _build_minimal_audio_experiment(self):
+        exp = PairwiseAudioExperimentFactory()
+        cond_a = ConditionFactory(experiment=exp, name="A")
+        cond_b = ConditionFactory(experiment=exp, name="B")
+        StimulusFactory(condition=cond_a, prompt_group="g", title="a1")
+        StimulusFactory(condition=cond_b, prompt_group="g", title="b1")
+        return exp
+
+    def test_activation_requires_prompt_for_every_group(self):
+        exp = self._build_minimal_audio_experiment()
+        exp.state = Experiment.State.ACTIVE
+        with pytest.raises(ValidationError) as excinfo:
+            exp.full_clean()
+        assert "prompt_group" in str(excinfo.value).lower() or \
+               "missing" in str(excinfo.value).lower()
+
+    def test_activation_succeeds_when_prompts_present(self):
+        exp = self._build_minimal_audio_experiment()
+        PromptFactory(experiment=exp, prompt_group="g")
+        exp.state = Experiment.State.ACTIVE
+        exp.full_clean()  # should not raise
+
+    def test_activation_rejects_non_audio_stimuli(self):
+        exp = PairwiseAudioExperimentFactory()
+        cond_a = ConditionFactory(experiment=exp, name="A")
+        cond_b = ConditionFactory(experiment=exp, name="B")
+        StimulusFactory(condition=cond_a, prompt_group="g")
+        TextStimulusFactory(condition=cond_b, prompt_group="g")
+        PromptFactory(experiment=exp, prompt_group="g")
+        exp.state = Experiment.State.ACTIVE
+        with pytest.raises(ValidationError) as excinfo:
+            exp.full_clean()
+        assert "audio" in str(excinfo.value).lower()
+
+    def test_standard_pairwise_does_not_require_prompts(self):
+        from experiments.tests.factories import PairwiseExperimentFactory
+
+        exp = PairwiseExperimentFactory()
+        cond_a = ConditionFactory(experiment=exp, name="A")
+        cond_b = ConditionFactory(experiment=exp, name="B")
+        StimulusFactory(condition=cond_a, prompt_group="g")
+        StimulusFactory(condition=cond_b, prompt_group="g")
+        exp.state = Experiment.State.ACTIVE
+        exp.full_clean()  # no Prompt required in plain PAIRWISE mode
