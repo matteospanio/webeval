@@ -4,8 +4,7 @@
 {% endcomment %}
 {% load markdown_extras %}
 <fieldset>
-  <legend>{{ q.prompt|markdown|safe }}{% if not q.required %} <small>(optional)</small>{% endif %}</legend>
-  {% if q.help_text %}<small>{{ q.help_text|markdown|safe }}</small>{% endif %}
+  <legend>{{ q.prompt|markdown_inline|safe }}{% if not q.required %} <small>(optional)</small>{% endif %}{% if q.help_text %}<span class="help-tooltip"><span class="help-icon" tabindex="0" aria-label="Show help">?</span><span class="help-content" role="tooltip">{{ q.help_text|markdown_inline|safe }}</span></span>{% endif %}</legend>
 
   {% if q.type == "rating" %}
     <div class="rating-row">

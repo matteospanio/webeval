@@ -90,8 +90,7 @@
             {% if q.type == "choice" and q.config.choices|length == 2 %}
               <tr>
                 <td class="comparison-attribute">
-                  {{ q.prompt|markdown|safe }}
-                  {% if q.help_text %}<br><small class="comparison-help">{{ q.help_text }}</small>{% endif %}
+                  {{ q.prompt|markdown_inline|safe }}{% if q.help_text %}<span class="help-tooltip"><span class="help-icon" tabindex="0" aria-label="Show help">?</span><span class="help-content" role="tooltip">{{ q.help_text|markdown_inline|safe }}</span></span>{% endif %}
                 </td>
                 <td class="comparison-radio">
                   <input type="radio" name="q_{{ q.pk }}" value="{{ q.config.choices.0 }}" {% if q.required %}required{% endif %}{% if q.submitted_value == q.config.choices.0|stringformat:"s" %} checked{% endif %}>
@@ -115,4 +114,5 @@
     </form>
   </article>
   <script src="{% static 'survey/js/pairwise-audio-tracker.js' %}" defer></script>
+  <script src="{% static 'survey/js/key-chord-player.js' %}" defer></script>
 {% endblock %}
