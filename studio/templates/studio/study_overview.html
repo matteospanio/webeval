@@ -78,6 +78,7 @@
   {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}
   {% if show_admin_edit %}
     <li><a href="{{ admin_change_url }}">Edit structure (conditions, stimuli, questions) in admin</a></li>
+    {% if experiment.state == "draft" %}<li><a href="{% url 'admin:experiments_experiment_add_from_bank' slug=experiment.slug %}">Add questions from your bank</a></li>{% endif %}
   {% elif can_edit %}
     <li><em>Structural editing of stimuli and questions currently requires Django admin (staff) access — ask a platform admin to grant it. A native studio editor is on the roadmap.</em></li>
   {% endif %}
