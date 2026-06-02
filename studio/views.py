@@ -29,7 +29,11 @@ from accounts.forms import InviteForm
 from accounts.models import Invitation, Membership
 from accounts.permissions import can_edit, can_manage, can_view, role_for
 from accounts.roles import Role
-from experiments.analysis import analyse_question
+from experiments.analysis import (
+    analyse_question,
+    available_segments,
+    segmented_question_analysis,
+)
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.cloning import clone_experiment
 from experiments.components import available_question_components
@@ -154,8 +158,14 @@ def study_overview(request, slug):
         "next_phases": list(experiment.next_phases.all()),
         "is_live": experiment.state == Experiment.State.ACTIVE,
         "readiness_problems": readiness_problems(experiment),
-        "question_results": _question_results(experiment),
+        "segment_options": available_segments(),
     }
+    segment = request.GET.get("segment")
+    if segment in dict(available_segments()):
+        context["segment"] = segment
+        context["segmented_results"] = segmented_question_analysis(experiment, segment)
+    else:
+        context["question_results"] = _question_results(experiment)
     if experiment.is_pairwise:
         context["pairwise_stats"] = pairwise_experiment_stats(experiment)
         context["bt_stats"] = bradley_terry_analysis(experiment)

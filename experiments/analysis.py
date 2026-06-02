@@ -87,7 +87,10 @@ def _distribution_rows(counts: Counter, labels: list[str], total: int) -> list[d
 
 
 def analyse_question(experiment: Experiment, question: Question) -> QuestionResult:
-    values = _answer_values(experiment, question)
+    return _summarise(question, _answer_values(experiment, question))
+
+
+def _summarise(question: Question, values: list[Any]) -> QuestionResult:
     cfg = question.config or {}
     t = question.type
     base = dict(
@@ -208,3 +211,48 @@ def experiment_question_analysis(experiment: Experiment) -> list[QuestionResult]
     """Analyse every question in an experiment, in display order."""
     questions = experiment.questions.all().order_by("section", "sort_order", "id")
     return [analyse_question(experiment, q) for q in questions]
+
+
+# --- segmentation (break results down by a session attribute) ---------------
+
+_SEGMENTS = {
+    "device": ("session__device_type", "Device"),
+    "country": ("session__country_code", "Country"),
+}
+
+
+def available_segments() -> list[tuple[str, str]]:
+    return [(key, label) for key, (_, label) in _SEGMENTS.items()]
+
+
+def _segmented_values(experiment, question, field) -> dict[str, list[Any]]:
+    raws = Response.objects.filter(
+        question=question,
+        session__experiment=experiment,
+        session__submitted_at__isnull=False,
+        session__is_preview=False,
+    ).values_list("answer_value", field)
+    groups: dict[str, list[Any]] = {}
+    for raw, seg in raws:
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            continue
+        groups.setdefault(seg or "(unknown)", []).append(value)
+    return groups
+
+
+def segmented_question_analysis(experiment: Experiment, segment_by: str) -> list[dict]:
+    """Per-question summaries split by a session attribute (device / country)."""
+    field = _SEGMENTS[segment_by][0]
+    out = []
+    for q in experiment.questions.all().order_by("section", "sort_order", "id"):
+        groups = _segmented_values(experiment, q, field)
+        segments = [
+            {"label": label, "result": _summarise(q, values)}
+            for label, values in sorted(groups.items())
+        ]
+        out.append(
+            {"prompt": q.prompt, "type": q.type, "segments": segments}
+        )
+    return out

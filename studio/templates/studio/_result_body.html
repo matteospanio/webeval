@@ -1,0 +1,45 @@
+{% comment %}Renders one QuestionResult body. Expects `a` (a QuestionResult).{% endcomment %}
+{% if a.kind == "distribution" %}
+  {% if a.n %}
+  <table class="dist"><tbody>
+    {% for row in a.rows %}
+    <tr>
+      <th scope="row">{{ row.label }}</th>
+      <td class="dist-bar"><span style="width:{{ row.pct }}%"></span></td>
+      <td class="dist-num">{{ row.count }} ({{ row.pct|floatformat:1 }}%)</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {% if a.stats %}<p><small>Mean {{ a.stats.mean|floatformat:2 }} · SD {{ a.stats.sd|floatformat:2 }}</small></p>{% endif %}
+  {% else %}<p><small>No responses yet.</small></p>{% endif %}
+
+{% elif a.kind == "numeric" %}
+  {% if a.stats %}
+  <ul class="numeric-stats">
+    <li>n = {{ a.stats.n }}</li>
+    <li>Mean {{ a.stats.mean|floatformat:2 }}</li>
+    <li>Median {{ a.stats.median|floatformat:2 }}</li>
+    <li>SD {{ a.stats.sd|floatformat:2 }}</li>
+    <li>Min {{ a.stats.min|floatformat:2 }}</li>
+    <li>Max {{ a.stats.max|floatformat:2 }}</li>
+  </ul>
+  {% else %}<p><small>No responses yet.</small></p>{% endif %}
+
+{% elif a.kind == "matrix" %}
+  <table class="dist"><tbody>
+    {% for row in a.rows %}
+    <tr><th scope="row">{{ row.row }}</th>
+      <td>{% for cell in row.cells %}{{ cell.column }}: {{ cell.count }} ({{ cell.pct|floatformat:0 }}%){% if not forloop.last %} · {% endif %}{% endfor %}</td></tr>
+    {% endfor %}
+  </tbody></table>
+
+{% elif a.kind == "ranking" %}
+  <table class="dist"><thead><tr><th>Item</th><th>Mean rank</th><th>n</th></tr></thead><tbody>
+    {% for row in a.rows %}<tr><th scope="row">{{ row.item }}</th><td>{{ row.mean_rank|floatformat:2 }}</td><td>{{ row.n }}</td></tr>{% endfor %}
+  </tbody></table>
+
+{% elif a.kind == "text" %}
+  <p><small>{{ a.n }} free-text response{{ a.n|pluralize }} (see the answers CSV).</small></p>
+{% else %}
+  <p><small>{{ a.n }} response{{ a.n|pluralize }}.</small></p>
+{% endif %}

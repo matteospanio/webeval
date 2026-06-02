@@ -25,15 +25,15 @@ from survey.models import ParticipantSession, Response
 pytestmark = pytest.mark.django_db
 
 
-def _session(exp, preview=False):
+def _session(exp, preview=False, device="desktop", country="US"):
     return ParticipantSession.objects.create(
         experiment=exp,
         last_step=ParticipantSession.Step.DONE,
         consented_at=timezone.now(),
         submitted_at=timezone.now(),
         is_preview=preview,
-        device_type="desktop",
-        country_code="US",
+        device_type=device,
+        country_code=country,
     )
 
 
@@ -161,6 +161,39 @@ def test_compare_conditions_not_applicable_for_demographic():
     exp = ExperimentFactory()
     q = ChoiceQuestionFactory(experiment=exp)  # default section = demographic
     assert compare_conditions(exp, q)["applicable"] is False
+
+
+def test_segmented_analysis_groups_by_device():
+    from experiments.analysis import segmented_question_analysis
+
+    exp = ExperimentFactory()
+    q = ChoiceQuestionFactory(
+        experiment=exp, config={"choices": ["yes", "no"], "multi": False}
+    )
+    for _ in range(2):
+        _resp(_session(exp, device="desktop"), q, "yes")
+    for _ in range(3):
+        _resp(_session(exp, device="mobile"), q, "no")
+
+    result = segmented_question_analysis(exp, "device")
+    segments = {s["label"]: s["result"] for s in result[0]["segments"]}
+    assert set(segments) == {"desktop", "mobile"}
+    assert segments["desktop"].n == 2 and segments["mobile"].n == 3
+
+
+def test_studio_overview_segment_view_renders():
+    owner = UserFactory()
+    exp = ExperimentFactory(owner=owner)
+    q = ChoiceQuestionFactory(
+        experiment=exp, config={"choices": ["yes", "no"], "multi": False}
+    )
+    _resp(_session(exp, device="desktop"), q, "yes")
+    _resp(_session(exp, device="mobile"), q, "no")
+    client = Client()
+    client.force_login(owner)
+    url = reverse("studio:study_overview", kwargs={"slug": exp.slug})
+    body = client.get(url + "?segment=device").content.decode()
+    assert "desktop" in body and "mobile" in body
 
 
 def test_studio_overview_renders_per_question_results():
