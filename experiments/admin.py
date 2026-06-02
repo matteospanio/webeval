@@ -969,6 +969,18 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                 "fields": ("ranking_items",),
             },
         ),
+        (
+            "Custom (plugin) question config",
+            {
+                "description": (
+                    "Used only when Type is a custom plugin component "
+                    "(see experiments.components). Enter the component's raw "
+                    "JSON config; built-in types ignore this field."
+                ),
+                "fields": ("plugin_config",),
+                "classes": ("collapse",),
+            },
+        ),
     )
 
 
