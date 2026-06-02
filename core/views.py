@@ -11,7 +11,8 @@ from datetime import datetime
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.management import call_command
-from django.http import HttpResponse
+from django.db import connection
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_GET
 
 
@@ -51,3 +52,20 @@ def database_export(request) -> HttpResponse:
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     response["Content-Length"] = str(len(payload))
     return response
+
+
+@require_GET
+def healthz(request):
+    """Unauthenticated liveness/readiness probe for load balancers & monitors.
+
+    Returns 200 with the DB reachable, 503 otherwise. No PII, no auth — safe
+    to hit frequently."""
+    database_ok = True
+    try:
+        connection.ensure_connection()
+    except Exception:  # pragma: no cover - exercised only on a broken DB
+        database_ok = False
+    return JsonResponse(
+        {"status": "ok" if database_ok else "unavailable", "database": database_ok},
+        status=200 if database_ok else 503,
+    )

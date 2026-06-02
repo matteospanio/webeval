@@ -61,6 +61,16 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.FormParser",
         "rest_framework.parsers.JSONParser",
     ],
+    # Rate limiting (uses the cache below; configure REDIS_URL in production so
+    # limits are shared across worker processes).
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": env("API_THROTTLE_ANON", default="30/min"),
+        "user": env("API_THROTTLE_USER", default="240/min"),
+    },
 }
 
 MIDDLEWARE = [
@@ -336,3 +346,71 @@ UNFOLD = {
         ],
     },
 }
+
+# --- Deployment / production ---------------------------------------------
+#
+# Everything below is env-driven and no-ops in development. See .env.example
+# and the "Production deployment" section of the README. Postgres is selected
+# simply by setting DATABASE_URL=postgres://… (handled by env.db_url above).
+
+# Cache — drives DRF rate limiting. Default is per-process in-memory; set
+# REDIS_URL in production so limits are shared across gunicorn workers.
+_redis_url = env("REDIS_URL", default="")
+if _redis_url:
+    CACHES = {"default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": _redis_url,
+    }}
+else:
+    CACHES = {"default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }}
+
+# File/static storage backends (Django's defaults; overridden below per env).
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
+    },
+}
+
+# Static files: WhiteNoise serves them from the app process (no nginx needed)
+# when USE_WHITENOISE is on (recommended in the Docker image).
+if env.bool("USE_WHITENOISE", default=False):
+    MIDDLEWARE.insert(
+        MIDDLEWARE.index("django.middleware.security.SecurityMiddleware") + 1,
+        "whitenoise.middleware.WhiteNoiseMiddleware",
+    )
+    STORAGES["staticfiles"] = {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+
+# Media files: offload to S3-compatible object storage when configured.
+if env.bool("USE_S3", default=False):
+    STORAGES["default"] = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": env("AWS_STORAGE_BUCKET_NAME"),
+            "region_name": env("AWS_S3_REGION_NAME", default=""),
+            "endpoint_url": env("AWS_S3_ENDPOINT_URL", default="") or None,
+            "default_acl": env("AWS_DEFAULT_ACL", default="private"),
+            "querystring_auth": True,
+        },
+    }
+
+# CSRF trusted origins for HTTPS deployments (e.g. https://eval.example.org).
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
+
+# Hardened cookie/transport settings, gated on an explicit flag (NOT `not
+# DEBUG`, so tests and dev — which also run with DEBUG off — are unaffected).
+# Set SECURE_DEPLOY=True behind TLS in production; each item is overridable.
+if env.bool("SECURE_DEPLOY", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=True)
+    SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=True)
+    CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=True)
+    SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True
+    )
+    SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=True)
