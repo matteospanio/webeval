@@ -726,6 +726,7 @@ def _create_session(
         participant_uid=participant_uid,
         external_id=external_id,
         is_preview=experiment.state == Experiment.State.TEST,
+        consent_version=experiment.consent_version,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     _log_event(session, SurveyEvent.Type.STARTED)

@@ -45,6 +45,7 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
         "last_step",
         "submitted_at",
         "is_preview",
+        "consent_version",
         "failed_attention_checks",
         "flag_list",
         "external_id",

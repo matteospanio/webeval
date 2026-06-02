@@ -85,6 +85,15 @@
 </ul>
 {% endif %}
 
+<h2>Compliance &amp; governance</h2>
+<ul>
+  {% if experiment.irb_number %}<li>IRB / ethics #: {{ experiment.irb_number }}</li>{% endif %}
+  {% if experiment.legal_basis %}<li>Legal basis: {{ experiment.get_legal_basis_display }}</li>{% endif %}
+  {% if experiment.data_contact %}<li>Data contact: {{ experiment.data_contact }}</li>{% endif %}
+  <li>Data retention: {% if experiment.retention_days %}{{ experiment.retention_days }} days after submission{% else %}indefinite{% endif %}</li>
+  <li>Current consent version: <code>{{ experiment.consent_version }}</code></li>
+</ul>
+
 <h2>Manage</h2>
 <ul>
   <li>

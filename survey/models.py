@@ -75,6 +75,9 @@ class ParticipantSession(models.Model):
 
     started_at = models.DateTimeField(auto_now_add=True)
     consented_at = models.DateTimeField(null=True, blank=True)
+    # Short hash of the consent text the participant agreed to, so collected
+    # data stays tied to the exact consent wording in force at the time.
+    consent_version = models.CharField(max_length=16, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     abandoned_at = models.DateTimeField(null=True, blank=True)
     screened_out_at = models.DateTimeField(null=True, blank=True)

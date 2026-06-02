@@ -19,6 +19,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import send_mail
 from django.db import transaction
+from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -26,7 +27,7 @@ from django.utils.text import slugify
 
 from accounts import services
 from accounts.forms import InviteForm
-from accounts.models import Invitation, Membership
+from accounts.models import AuditEvent, Invitation, Membership
 from accounts.permissions import can_edit, can_manage, can_view, role_for
 from accounts.roles import Role
 from experiments.analysis import (
@@ -56,7 +57,8 @@ from experiments.stats import (
     pairwise_experiment_stats,
     per_stimulus_mean_ratings,
 )
-from survey.models import Response
+from survey.models import ParticipantSession, Response
+from survey.views import _withdraw_data
 
 from .forms import StudyCreateForm
 
@@ -103,6 +105,78 @@ def studies(request):
         for exp in _visible_experiments(request.user)
     ]
     return render(request, "studio/studies_list.html", {"rows": rows})
+
+
+def _dsr_export(request, identifier, sessions):
+    data = {"identifier": identifier, "sessions": []}
+    for s in sessions:
+        data["sessions"].append({
+            "experiment": s.experiment.slug,
+            "session_id": str(s.id),
+            "started_at": s.started_at.isoformat() if s.started_at else None,
+            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
+            "device_type": s.device_type,
+            "country_code": s.country_code,
+            "external_id": s.external_id,
+            "participant_uid": s.participant_uid,
+            "responses": [
+                {"question_id": r.question_id, "stimulus_id": r.stimulus_id,
+                 "answer": r.get_answer()}
+                for r in s.responses.all()
+            ],
+        })
+    services.record_audit(
+        None, AuditEvent.Action.EXPORT, actor=request.user,
+        target=f"DSR:{identifier}", request=request, sessions=len(sessions),
+    )
+    resp = JsonResponse(data, json_dumps_params={"indent": 2})
+    resp["Content-Disposition"] = f'attachment; filename="dsr-{identifier}.json"'
+    return resp
+
+
+@login_required
+def data_subject_request(request):
+    """Find, export, or erase a participant's data across the user's studies,
+    matched by participant code or external id."""
+    identifier = (
+        request.POST.get("identifier") or request.GET.get("identifier") or ""
+    ).strip()
+    visible = list(_visible_experiments(request.user))
+    visible_ids = [e.id for e in visible]
+    manage_ids = {e.id for e in visible if can_manage(request.user, e)}
+
+    sessions = []
+    if identifier:
+        sessions = list(
+            ParticipantSession.objects.filter(experiment_id__in=visible_ids)
+            .filter(Q(participant_uid=identifier) | Q(external_id=identifier))
+            .select_related("experiment")
+            .order_by("experiment__name", "started_at")
+        )
+
+    if request.method == "POST" and identifier:
+        action = request.POST.get("action")
+        if action == "export":
+            return _dsr_export(request, identifier, sessions)
+        if action == "delete":
+            erased = 0
+            for s in sessions:
+                if s.experiment_id not in manage_ids:
+                    continue  # only erase where the user can manage the study
+                _withdraw_data(s)
+                services.record_audit(
+                    s.experiment, AuditEvent.Action.DELETE, actor=request.user,
+                    target=f"DSR:{identifier}", request=request,
+                )
+                erased += 1
+            messages.success(request, f"Erased data for {erased} session(s).")
+            return redirect(f"{reverse('studio:dsr')}?identifier={identifier}")
+
+    return render(
+        request,
+        "studio/dsr.html",
+        {"identifier": identifier, "sessions": sessions, "manage_ids": manage_ids},
+    )
 
 
 def _headline_metric(experiment) -> str:
@@ -362,6 +436,10 @@ def study_build_save(request, slug):
             if pk not in kept_ids:
                 q.delete()
 
+    services.record_audit(
+        experiment, AuditEvent.Action.EDIT, actor=request.user,
+        target="questions", request=request, count=len(prepared),
+    )
     # ids are returned in posted order so the builder can adopt them on the
     # new cards (a second save then updates instead of re-creating).
     return JsonResponse(
@@ -587,38 +665,65 @@ def _exclude_flagged(request) -> bool:
     return request.GET.get("exclude_flagged") in ("1", "true", "on")
 
 
+def _include_pii(request) -> bool:
+    return request.GET.get("include_pii") in ("1", "true", "on")
+
+
+def _audit_export(request, experiment, target):
+    services.record_audit(
+        experiment, AuditEvent.Action.EXPORT,
+        actor=request.user, target=target, request=request,
+        include_pii=_include_pii(request),
+    )
+
+
 @login_required
 def answers_csv(request, slug):
+    experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, "answers.csv")
     return answers_csv_response(
-        _experiment_or_404(request, slug), exclude_flagged=_exclude_flagged(request)
+        experiment,
+        exclude_flagged=_exclude_flagged(request),
+        include_pii=_include_pii(request),
     )
 
 
 @login_required
 def demographics_csv(request, slug):
+    experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, "demographics.csv")
     return demographics_csv_response(
-        _experiment_or_404(request, slug), exclude_flagged=_exclude_flagged(request)
+        experiment,
+        exclude_flagged=_exclude_flagged(request),
+        include_pii=_include_pii(request),
     )
 
 
 @login_required
 def completion_codes_csv(request, slug):
-    return completion_codes_csv_response(_experiment_or_404(request, slug))
+    experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, "completion-codes.csv")
+    return completion_codes_csv_response(experiment)
 
 
 @login_required
 def events_csv(request, slug):
-    return events_csv_response(_experiment_or_404(request, slug))
+    experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, "events.csv")
+    return events_csv_response(experiment)
 
 
 @login_required
 def pairwise_csv(request, slug):
-    return pairwise_answers_csv_response(_experiment_or_404(request, slug))
+    experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, "pairwise-answers.csv")
+    return pairwise_answers_csv_response(experiment)
 
 
 @login_required
 def export_zip(request, slug):
     experiment = _experiment_or_404(request, slug)
+    _audit_export(request, experiment, f"{experiment.slug}.zip")
     payload = build_experiment_archive(experiment)
     response = HttpResponse(payload, content_type="application/zip")
     response["Content-Disposition"] = (

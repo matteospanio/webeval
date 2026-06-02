@@ -31,6 +31,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Drag-&-drop question builder in the studio: drag question types (built-ins and plugins) from a palette onto a canvas, reorder by dragging, edit inline, and save — no Django admin needed, available to non-staff editors
 - Online results & analysis: per-question summaries for every question type (choice/Likert distributions, rating/numeric stats, matrix breakdowns, ranking mean-ranks) viewed in the studio, ready-to-use across-condition tests (one-way ANOVA / chi-square with p-values, no scipy required), and segmentation by device, country, condition, or cohort
 - Page/question response times, a cross-experiment comparison view, power & sample-size analysis (including from pilot data), and an append-only raw participant-flow event log (viewable in the admin, exportable as CSV)
+- Compliance & governance: study metadata (IRB #, legal basis, data contact, retention window), consent-version tracking tied to each session, an append-only audit trail of edits/exports/destructive actions, automated retention sweeps, PII redaction of free-text in exports, and a data-subject-request workflow (export or erase a participant's data across your studies)
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -156,6 +157,16 @@ The study overview shows a **per-question results** section for every question t
 For per-stimulus questions it also runs a **ready-to-use across-condition test**: a one-way ANOVA for rating/numeric/Likert outcomes (a t-test when there are two conditions) or a chi-square test for choice outcomes, each with a p-value and a significance flag. P-values are computed from hand-rolled special functions, so this works with no extra dependencies (scipy is only needed for the optional `analysis` extra). Results can be **segmented** by device, country, condition, or cohort (ISO submission week), and each question shows the **median time** participants spent on its page (captured server-side).
 
 Beyond a single study, the studio offers a **cross-experiment comparison** table (key metrics for every study you own, side by side), a **power & sample-size** calculator that can estimate the observed effect and required n from your **pilot data**, and a **raw event log** (`started` / `page_submit` / `screened_out` / `completed`) viewable in the admin and exportable as CSV.
+
+### Compliance & governance
+
+Each study carries **compliance metadata** — IRB / ethics number, lawful basis for processing, data-protection contact, and a **retention window** — shown on the studio overview and edited in the admin.
+
+- **Consent versioning:** every session records a hash of the exact consent wording it agreed to, so data stays tied to its consent version even after the text is later edited.
+- **Audit trail:** an append-only log records edits, exports, and destructive actions (who, what, when, from where), viewable in the admin.
+- **Retention:** `uv run ./manage.py purge_expired_data` deletes sessions past each study's retention window (use `--dry-run` first); wire it into cron.
+- **PII handling:** mark a free-text question as containing PII and its answers are redacted from CSV exports unless explicitly included (`?include_pii=1`).
+- **Data-subject requests:** look up a participant by code or external id across your studies and either export their data as JSON or erase it (for the studies you manage).
 
 ## Admin and Exports
 

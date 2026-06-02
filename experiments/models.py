@@ -64,6 +64,14 @@ class Experiment(models.Model):
         PAIRWISE = "pairwise", "Pairwise comparison"
         PAIRWISE_AUDIO = "pairwise_audio", "Pairwise audio continuation"
 
+    class LegalBasis(models.TextChoices):
+        CONSENT = "consent", "Consent"
+        LEGITIMATE_INTEREST = "legitimate_interest", "Legitimate interest"
+        CONTRACT = "contract", "Contract"
+        LEGAL_OBLIGATION = "legal_obligation", "Legal obligation"
+        PUBLIC_TASK = "public_task", "Public task"
+        VITAL_INTERESTS = "vital_interests", "Vital interests"
+
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True, max_length=200)
     description = models.TextField(blank=True)
@@ -81,6 +89,32 @@ class Experiment(models.Model):
     )
     privacy_contact = models.CharField(max_length=200, blank=True)
     privacy_policy_url = models.URLField(blank=True)
+
+    # --- Compliance & governance metadata -----------------------------------
+    irb_number = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="IRB / ethics-approval number, if any.",
+    )
+    legal_basis = models.CharField(
+        max_length=32,
+        choices=LegalBasis.choices,
+        blank=True,
+        help_text="Lawful basis for processing (e.g. GDPR Art. 6).",
+    )
+    data_contact = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Data controller / point of contact for data-protection queries.",
+    )
+    retention_days = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Days to retain participant data after submission; 0 = keep "
+            "indefinitely. The purge_expired_data command deletes data past "
+            "this window."
+        ),
+    )
 
     state = models.CharField(
         max_length=16,
@@ -290,6 +324,12 @@ class Experiment(models.Model):
     def is_pairwise(self) -> bool:
         """True for any pairwise-style mode (written or audio prompts)."""
         return self.mode in (self.Mode.PAIRWISE, self.Mode.PAIRWISE_AUDIO)
+
+    @property
+    def consent_version(self) -> str:
+        """Short hash identifying the current consent wording. Stamped on each
+        session so collected data stays tied to the consent it agreed to."""
+        return hashlib.sha256((self.consent_text or "").encode("utf-8")).hexdigest()[:12]
 
     def save(self, *args, **kwargs):
         if not self.slug:
@@ -826,6 +866,14 @@ class Question(models.Model):
             "answer differs from this value is flagged. Enter the expected "
             'answer as JSON, e.g. "Strongly agree" or 4. Leave blank for a '
             "normal question."
+        ),
+    )
+    contains_pii = models.BooleanField(
+        default=False,
+        help_text=(
+            "Mark this question's free-text answers as personal data. Such "
+            "answers are redacted from CSV/JSON exports unless PII is "
+            "explicitly included."
         ),
     )
 
