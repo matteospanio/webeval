@@ -162,6 +162,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "completion_code_mode",
                     "completion_code",
                     "external_id_param",
+                    "bot_protection",
                 )
             },
         ),

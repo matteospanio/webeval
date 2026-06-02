@@ -181,6 +181,10 @@ class Experiment(models.Model):
             "reconciliation."
         ),
     )
+    bot_protection = models.BooleanField(
+        default=False,
+        help_text="Add a honeypot field to the consent form to deflect simple bots.",
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

@@ -465,6 +465,13 @@ def consent(request, slug: str):
     consent_first, consent_rest = _split_consent_text(experiment.consent_text)
 
     if request.method == "POST":
+        if experiment.bot_protection and request.POST.get("hp_url", "").strip():
+            # Honeypot filled → almost certainly a bot. Silently re-render the
+            # consent page without creating a session.
+            ctx = _base_context(experiment, session)
+            ctx["consent_first"] = consent_first
+            ctx["consent_rest"] = consent_rest
+            return _with_pid(render(request, "survey/consent.html", ctx))
         if not request.POST.get("agree"):
             messages.error(
                 request,

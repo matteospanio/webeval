@@ -29,6 +29,9 @@
 
     <form method="post" novalidate>
       {% csrf_token %}
+      <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+        <label>Leave this field empty <input type="text" name="hp_url" tabindex="-1" autocomplete="off"></label>
+      </div>
       {% if messages %}
         {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
       {% endif %}
