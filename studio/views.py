@@ -54,6 +54,7 @@ from experiments.stats import (
     pairwise_experiment_stats,
     per_stimulus_mean_ratings,
 )
+from survey.models import Response
 
 from .forms import StudyCreateForm
 
@@ -79,28 +80,59 @@ def _unique_slug(name: str) -> str:
     return slug
 
 
-@login_required
-def studies(request):
+def _visible_experiments(user):
     ids = set(
-        Membership.objects.filter(user=request.user).values_list(
-            "experiment_id", flat=True
-        )
+        Membership.objects.filter(user=user).values_list("experiment_id", flat=True)
     )
     ids |= set(
-        Experiment.objects.filter(owner=request.user).values_list(
-            "id", flat=True
-        )
+        Experiment.objects.filter(owner=user).values_list("id", flat=True)
     )
-    experiments = (
+    return (
         Experiment.objects.filter(pk__in=ids)
         .select_related("owner")
         .order_by("-created_at")
     )
+
+
+@login_required
+def studies(request):
     rows = [
         {"experiment": exp, "role": role_for(request.user, exp)}
-        for exp in experiments
+        for exp in _visible_experiments(request.user)
     ]
     return render(request, "studio/studies_list.html", {"rows": rows})
+
+
+def _headline_metric(experiment) -> str:
+    if experiment.is_pairwise:
+        return f"{pairwise_experiment_stats(experiment).total_pairs_shown} pairs"
+    rating_rows = per_stimulus_mean_ratings(experiment)
+    total_n = sum(r["n"] for r in rating_rows)
+    if not total_n:
+        return "—"
+    weighted = sum(r["mean"] * r["n"] for r in rating_rows) / total_n
+    return f"mean {weighted:.1f}"
+
+
+@login_required
+def compare(request):
+    """Key metrics for all the user's studies, side by side."""
+    rows = []
+    for exp in _visible_experiments(request.user):
+        counts = experiment_counts(exp)
+        rows.append(
+            {
+                "experiment": exp,
+                "counts": counts,
+                "responses": Response.objects.filter(
+                    session__experiment=exp,
+                    session__submitted_at__isnull=False,
+                    session__is_preview=False,
+                ).count(),
+                "headline": _headline_metric(exp),
+            }
+        )
+    return render(request, "studio/compare.html", {"rows": rows})
 
 
 @login_required

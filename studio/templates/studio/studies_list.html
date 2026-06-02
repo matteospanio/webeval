@@ -5,7 +5,10 @@
   <h1>My studies</h1>
   <p>Studies you own or collaborate on.</p>
 </hgroup>
-<p><a href="{% url 'studio:study_create' %}" role="button">+ New study</a></p>
+<p>
+  <a href="{% url 'studio:study_create' %}" role="button">+ New study</a>
+  {% if rows %}<a href="{% url 'studio:compare' %}" role="button" class="secondary outline">Compare studies</a>{% endif %}
+</p>
 {% if rows %}
 <table>
   <thead>

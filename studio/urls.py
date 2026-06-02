@@ -9,6 +9,7 @@ app_name = "studio"
 
 urlpatterns = [
     path("", views.studies, name="studies"),
+    path("compare/", views.compare, name="compare"),
     path("new/", views.study_create, name="study_create"),
     path("<slug:slug>/", views.study_overview, name="study_overview"),
     path("<slug:slug>/build/", views.study_build, name="study_build"),
