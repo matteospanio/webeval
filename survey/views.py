@@ -34,6 +34,7 @@ from experiments.assignment import (
     get_pairwise_strategy,
     get_strategy,
 )
+from experiments.branching import is_visible
 from experiments.models import Experiment, Prompt, Question, Stimulus
 
 from .flow import (
@@ -208,6 +209,64 @@ def _read_ranking(request, question: Question) -> tuple[bool, Any, str | None]:
     return True, ordered, None
 
 
+def _answers_for_stimulus(session, stimulus) -> dict[int, Any]:
+    """Map question_id → stored answer for one stimulus in this session."""
+    return {
+        r.question_id: r.get_answer()
+        for r in Response.objects.filter(session=session, stimulus=stimulus)
+    }
+
+
+def _answers_for_demographics(session) -> dict[int, Any]:
+    """Map question_id → stored answer for the demographic section."""
+    return {
+        r.question_id: r.get_answer()
+        for r in Response.objects.filter(
+            session=session, stimulus__isnull=True, pair_assignment__isnull=True
+        )
+    }
+
+
+def _visible_with_submitted(request, page_questions, stored):
+    """Page questions whose ``visible_if`` holds against stored + just-submitted
+    answers, so a hidden question is never required or stored on POST."""
+    eval_answers = dict(stored)
+    for q in page_questions:
+        answered, value, error = _read_one(request, q)
+        if answered and error is None:
+            eval_answers[q.pk] = value
+    return [q for q in page_questions if is_visible(q, eval_answers)]
+
+
+def _next_renderable_stimulus_page(session, assignments, pages) -> str:
+    """Advance the (assignment, page) cursors to the next page with at least one
+    visible question, skipping pages hidden by branching. Returns ``"render"``
+    (cursors point at a renderable page) or ``"demographics"`` (stimulus phase
+    exhausted). Loops internally so the flow redirects at most once instead of
+    once per skipped page."""
+    while session.current_assignment_index < len(assignments):
+        assignment = assignments[session.current_assignment_index]
+        stored = _answers_for_stimulus(session, assignment.stimulus)
+        while session.current_page_index < len(pages):
+            if any(is_visible(q, stored) for q in pages[session.current_page_index]):
+                return "render"
+            session.current_page_index += 1
+        session.current_page_index = 0
+        session.current_assignment_index += 1
+    return "demographics"
+
+
+def _next_renderable_demographic_page(session, pages) -> str:
+    """Advance ``demographic_page_index`` to the next page with a visible
+    question. Returns ``"render"`` or ``"finish"``."""
+    stored = _answers_for_demographics(session)
+    while session.demographic_page_index < len(pages):
+        if any(is_visible(q, stored) for q in pages[session.demographic_page_index]):
+            return "render"
+        session.demographic_page_index += 1
+    return "finish"
+
+
 def _ordered_section_questions(
     experiment: Experiment, section: str
 ) -> list[Question]:
@@ -226,7 +285,11 @@ def _stimulus_questions(experiment: Experiment, session: ParticipantSession) -> 
     cached = getattr(session, "_cached_question_order", None)
     if cached is None:
         questions = _ordered_section_questions(experiment, Question.Section.STIMULUS)
-        if experiment.randomize_stimulus_questions:
+        # Skip-logic needs a deterministic order so a controlling question
+        # always precedes its dependents; disable the shuffle when any
+        # stimulus question carries a visible_if rule.
+        has_branching = any(q.visible_if for q in questions)
+        if experiment.randomize_stimulus_questions and not has_branching:
             ids_to_q = {q.pk: q for q in questions}
             ordered_ids = list(ids_to_q.keys())
             rng = random.Random(str(session.id))
@@ -500,38 +563,55 @@ def play(request, slug: str):
         session.save(update_fields=["last_step"])
         return redirect("survey:demographics", slug=slug)
 
-    if session.current_page_index >= len(pages):
-        session.current_page_index = 0
-        session.current_assignment_index += 1
-        session.save(update_fields=["current_page_index", "current_assignment_index"])
-        return redirect("survey:play", slug=slug)
-
-    page_questions = pages[session.current_page_index]
-    is_last_assignment = session.current_assignment_index == len(assignments) - 1
-    is_last_page = is_last_assignment and session.current_page_index == len(pages) - 1
-
+    # POST submits the page the participant is currently viewing.
     if request.method == "POST":
+        if session.current_page_index >= len(pages):
+            return redirect("survey:play", slug=slug)
         return _save_page_answers(
             request,
             session,
             assignment,
-            page_questions,
+            pages[session.current_page_index],
             pages,
             assignments,
             slug,
         )
+
+    # GET: advance over pages hidden by branching to the next renderable one.
+    if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
+        session.last_step = ParticipantSession.Step.DEMOGRAPHICS
+        session.demographic_page_index = 0
+        session.save(
+            update_fields=[
+                "current_page_index",
+                "current_assignment_index",
+                "last_step",
+                "demographic_page_index",
+            ]
+        )
+        return redirect("survey:demographics", slug=slug)
+    session.save(update_fields=["current_page_index", "current_assignment_index"])
+
+    assignment = assignments[session.current_assignment_index]
+    page_questions = pages[session.current_page_index]
+    stored = _answers_for_stimulus(session, assignment.stimulus)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = (
+        session.current_assignment_index == len(assignments) - 1
+        and session.current_page_index == len(pages) - 1
+    )
 
     ctx = _base_context(experiment, session)
     ctx.update(
         {
             "assignment": assignment,
             "stimulus": assignment.stimulus,
-            "page_questions": page_questions,
+            "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "has_more_after_stimuli": _ordered_section_questions(
                 experiment, Question.Section.DEMOGRAPHIC
             ),
-            "show_prompt": any(q.show_prompt for q in page_questions),
+            "show_prompt": any(q.show_prompt for q in visible_questions),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -546,25 +626,27 @@ def _save_page_answers(
     assignments: list[StimulusAssignment],
     slug: str,
 ):
+    stored = _answers_for_stimulus(session, assignment.stimulus)
+    visible_questions = _visible_with_submitted(request, page_questions, stored)
     errors, responses = _collect_answers(
-        request, session, assignment.stimulus, page_questions
+        request, session, assignment.stimulus, visible_questions
     )
     if errors:
         for err in errors:
             messages.error(request, err)
         experiment = session.experiment
-        _annotate_submitted(request, page_questions)
+        _annotate_submitted(request, visible_questions)
         ctx = _base_context(experiment, session)
         ctx.update(
             {
                 "assignment": assignment,
                 "stimulus": assignment.stimulus,
-                "page_questions": page_questions,
+                "page_questions": visible_questions,
                 "is_last_page": (
                     session.current_assignment_index == len(assignments) - 1
                     and session.current_page_index == len(pages) - 1
                 ),
-                "show_prompt": any(q.show_prompt for q in page_questions),
+                "show_prompt": any(q.show_prompt for q in visible_questions),
             }
         )
         return render(request, "survey/play.html", ctx, status=400)
@@ -572,21 +654,18 @@ def _save_page_answers(
     with transaction.atomic():
         Response.objects.bulk_create(responses)
         session.current_page_index += 1
-        if session.current_page_index >= len(pages):
-            session.current_page_index = 0
-            session.current_assignment_index += 1
-            if session.current_assignment_index >= len(assignments):
-                session.last_step = ParticipantSession.Step.DEMOGRAPHICS
-                session.demographic_page_index = 0
-                session.save(
-                    update_fields=[
-                        "current_page_index",
-                        "current_assignment_index",
-                        "last_step",
-                        "demographic_page_index",
-                    ]
-                )
-                return redirect("survey:demographics", slug=slug)
+        if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
+            session.last_step = ParticipantSession.Step.DEMOGRAPHICS
+            session.demographic_page_index = 0
+            session.save(
+                update_fields=[
+                    "current_page_index",
+                    "current_assignment_index",
+                    "last_step",
+                    "demographic_page_index",
+                ]
+            )
+            return redirect("survey:demographics", slug=slug)
         session.save(
             update_fields=["current_page_index", "current_assignment_index"]
         )
@@ -814,6 +893,9 @@ def _collect_pairwise_answers(
     pair: PairAssignment,
     questions: list[Question],
 ) -> tuple[list[str], list[Response]]:
+    # Pairwise shows all of a pair's questions at once, so branching can only
+    # reference same-page answers; respect visibility against what was submitted.
+    questions = _visible_with_submitted(request, questions, {})
     errors: list[str] = []
     responses: list[Response] = []
     for q in questions:
@@ -911,31 +993,44 @@ def demographics(request, slug: str):
     if not pages:
         return _finish_session(request, session, slug)
 
-    if session.demographic_page_index >= len(pages):
-        return _finish_session(request, session, slug)
-
-    page_questions = pages[session.demographic_page_index]
-    is_last_page = session.demographic_page_index == len(pages) - 1
-
+    # POST submits the page the participant is currently viewing.
     if request.method == "POST":
-        errors, responses = _collect_answers(request, session, None, page_questions)
+        if session.demographic_page_index >= len(pages):
+            return redirect("survey:demographics", slug=slug)
+        page_questions = pages[session.demographic_page_index]
+        is_last_page = session.demographic_page_index == len(pages) - 1
+        stored = _answers_for_demographics(session)
+        visible_questions = _visible_with_submitted(request, page_questions, stored)
+        errors, responses = _collect_answers(
+            request, session, None, visible_questions
+        )
         if errors:
             for err in errors:
                 messages.error(request, err)
-            _annotate_submitted(request, page_questions)
+            _annotate_submitted(request, visible_questions)
             ctx = _base_context(experiment, session)
-            ctx.update({"page_questions": page_questions, "is_last_page": is_last_page})
+            ctx.update(
+                {"page_questions": visible_questions, "is_last_page": is_last_page}
+            )
             return render(request, "survey/demographics.html", ctx, status=400)
         with transaction.atomic():
             Response.objects.bulk_create(responses)
             session.demographic_page_index += 1
-            if session.demographic_page_index >= len(pages):
+            if _next_renderable_demographic_page(session, pages) == "finish":
                 return _finish_session(request, session, slug)
             session.save(update_fields=["demographic_page_index"])
         return redirect("survey:demographics", slug=slug)
 
+    # GET: advance over demographic pages hidden by branching (or finish).
+    if _next_renderable_demographic_page(session, pages) == "finish":
+        return _finish_session(request, session, slug)
+    session.save(update_fields=["demographic_page_index"])
+    page_questions = pages[session.demographic_page_index]
+    stored = _answers_for_demographics(session)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = session.demographic_page_index == len(pages) - 1
     ctx = _base_context(experiment, session)
-    ctx.update({"page_questions": page_questions, "is_last_page": is_last_page})
+    ctx.update({"page_questions": visible_questions, "is_last_page": is_last_page})
     return render(request, "survey/demographics.html", ctx)
 
 

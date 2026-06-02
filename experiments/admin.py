@@ -714,6 +714,18 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
         (
+            "Display logic (skip / branching)",
+            {
+                "description": (
+                    "Optional. Show this question only when earlier answers in "
+                    'the same section match. JSON, e.g. {"question": 12, "op": '
+                    '"eq", "value": "Yes"}. The referenced question must have a '
+                    "lower sort order."
+                ),
+                "fields": ("visible_if",),
+            },
+        ),
+        (
             "Rating slider settings",
             {
                 "description": "Used when Type = Rating slider.",

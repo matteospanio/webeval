@@ -17,6 +17,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Audio, video, image, text, HTML-snippet, and embedded-URL stimuli in one experiment model
 - Rating, multiple-choice, free-text, Likert, numeric, matrix/grid, and ranking questions
 - PsyToolkit-style pagination with author-controlled page breaks
+- Conditional display / skip logic: show a question only when earlier answers match
 - Balanced assignment strategies across conditions
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -29,7 +30,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
 
-Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, conditional branching, or longitudinal scheduling.
+Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, or longitudinal scheduling.
 
 ## Quick Start
 
@@ -111,6 +112,8 @@ Participants compare two stimuli side by side. Pairings are built across conditi
 - Ranking / ordering (assign each item a unique rank; no-JS rank selects)
 
 Questions can be marked as required, split onto separate pages, and optionally show the originating stimulus prompt to participants.
+
+A question may also carry **skip logic** (`visible_if`): show it only when earlier answers in the same section match, e.g. `{"question": 12, "op": "eq", "value": "Yes"}` (or `{"all": [...]}` / `{"any": [...]}`). Cross-page branching is fully server-side; same-page dependents are revealed live by a small progressive-enhancement script.
 
 ## Admin and Exports
 

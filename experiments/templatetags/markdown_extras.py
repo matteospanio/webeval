@@ -1,4 +1,6 @@
 """Template filters for Markdown rendering."""
+import json
+
 from django import template
 from django.utils.safestring import mark_safe
 
@@ -39,3 +41,14 @@ def get_item(value, key):
             return value[key]
         return value.get(str(key), "")
     return ""
+
+
+@register.filter(name="as_json")
+def as_json(value):
+    """Serialise a value to a JSON string.
+
+    Deliberately *not* marked safe: Django auto-escapes the result, so it embeds
+    safely inside an HTML attribute (e.g. ``data-visible-if``). The browser
+    decodes the entities, leaving valid JSON for ``JSON.parse``.
+    """
+    return json.dumps(value)

@@ -28,6 +28,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
+from .branching import OPERATORS, VALUELESS_OPS, iter_clauses
 from .validators import (
     audio_extension_validator,
     audio_size_validator,
@@ -611,6 +612,16 @@ class Question(models.Model):
             "on this question's page."
         ),
     )
+    visible_if = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional skip logic: show this question only when earlier answers "
+            'match. JSON, e.g. {"question": 12, "op": "eq", "value": "Yes"} or '
+            '{"all": [clauses]} / {"any": [clauses]}. The referenced question '
+            "must be earlier (lower sort order) in the same section."
+        ),
+    )
 
     class Meta:
         ordering = ("experiment", "section", "sort_order", "id")
@@ -622,6 +633,7 @@ class Question(models.Model):
         super().clean()
         _ensure_draft(self.experiment if self.experiment_id else None)
         _validate_question_config(self.type, self.config or {})
+        _validate_visible_if(self)
 
     def delete(self, *args, **kwargs):
         _ensure_draft(self.experiment if self.experiment_id else None)
@@ -758,6 +770,73 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
         return
 
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})
+
+
+def _validate_visible_if(question: "Question") -> None:
+    """Validate a question's skip-logic rule (see experiments.branching)."""
+    cond = question.visible_if or {}
+    if not cond:
+        return
+    if not isinstance(cond, dict):
+        raise ValidationError({"visible_if": "visible_if must be a JSON object."})
+    if "all" in cond and "any" in cond:
+        raise ValidationError(
+            {"visible_if": "Use only one of 'all' or 'any', not both."}
+        )
+    clauses = list(iter_clauses(cond))
+    if not clauses:
+        raise ValidationError({"visible_if": "visible_if has no clauses."})
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            raise ValidationError({"visible_if": "Each clause must be a JSON object."})
+        op = clause.get("op")
+        if op not in OPERATORS:
+            raise ValidationError(
+                {"visible_if": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
+            )
+        if op not in VALUELESS_OPS and "value" not in clause:
+            raise ValidationError(
+                {"visible_if": f"Operator {op!r} requires a 'value'."}
+            )
+        ref_id = clause.get("question")
+        if not isinstance(ref_id, int):
+            raise ValidationError(
+                {"visible_if": "Each clause needs an integer 'question' id."}
+            )
+        if not question.experiment_id:
+            continue
+        ref = Question.objects.filter(pk=ref_id).first()
+        if ref is None or ref.experiment_id != question.experiment_id:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        f"Clause references question {ref_id}, which is not in "
+                        "this experiment."
+                    )
+                }
+            )
+        if question.pk and ref.pk == question.pk:
+            raise ValidationError(
+                {"visible_if": "A question cannot depend on itself."}
+            )
+        if ref.section != question.section:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        "A condition may only reference a question in the same "
+                        "section."
+                    )
+                }
+            )
+        if ref.sort_order >= question.sort_order:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        "The controlling question must come earlier (a lower "
+                        "sort order than this question)."
+                    )
+                }
+            )
 
 
 # --- Prompt ------------------------------------------------------------------
