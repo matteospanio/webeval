@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 
 import pytest
+from django.test import Client
+from django.urls import reverse
 from django.utils import timezone
 
+from accounts.tests.factories import UserFactory
 from experiments import stats_tests as st
 from experiments.analysis import analyse_question, experiment_question_analysis
 from experiments.models import Question
@@ -158,3 +161,19 @@ def test_compare_conditions_not_applicable_for_demographic():
     exp = ExperimentFactory()
     q = ChoiceQuestionFactory(experiment=exp)  # default section = demographic
     assert compare_conditions(exp, q)["applicable"] is False
+
+
+def test_studio_overview_renders_per_question_results():
+    owner = UserFactory()
+    exp = ExperimentFactory(owner=owner)
+    q = _two_condition_rating(exp, [90, 91, 89], [10, 11, 9])
+    q.prompt = "Overall quality"
+    q.save(update_fields=["prompt"])
+    client = Client()
+    client.force_login(owner)
+    body = client.get(
+        reverse("studio:study_overview", kwargs={"slug": exp.slug})
+    ).content.decode()
+    assert "Per-question results" in body
+    assert "Overall quality" in body
+    assert "One-way ANOVA" in body

@@ -29,9 +29,11 @@ from accounts.forms import InviteForm
 from accounts.models import Invitation, Membership
 from accounts.permissions import can_edit, can_manage, can_view, role_for
 from accounts.roles import Role
+from experiments.analysis import analyse_question
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.cloning import clone_experiment
 from experiments.components import available_question_components
+from experiments.stats_tests import compare_conditions
 from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
@@ -117,6 +119,19 @@ def study_create(request):
     return render(request, "studio/study_form.html", {"form": form})
 
 
+def _question_results(experiment):
+    """Per-question analysis + (where applicable) a condition comparison."""
+    results = []
+    for q in experiment.questions.all().order_by("section", "sort_order", "id"):
+        comparison = None
+        if q.section == Question.Section.STIMULUS:
+            comp = compare_conditions(experiment, q)
+            if comp.get("applicable"):
+                comparison = comp
+        results.append({"analysis": analyse_question(experiment, q), "comparison": comparison})
+    return results
+
+
 @login_required
 def study_overview(request, slug):
     experiment = _experiment_or_404(request, slug)
@@ -139,6 +154,7 @@ def study_overview(request, slug):
         "next_phases": list(experiment.next_phases.all()),
         "is_live": experiment.state == Experiment.State.ACTIVE,
         "readiness_problems": readiness_problems(experiment),
+        "question_results": _question_results(experiment),
     }
     if experiment.is_pairwise:
         context["pairwise_stats"] = pairwise_experiment_stats(experiment)
