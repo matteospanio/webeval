@@ -1,0 +1,12 @@
+{% extends "studio/base.html" %}
+{% block title %}Account · webeval{% endblock %}
+{% block content %}
+<h1>Your account</h1>
+<p>Signed in as <strong>{{ user.get_username }}</strong>{% if user.email %} ({{ user.email }}){% endif %}.</p>
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Save</button>
+</form>
+{% if user.is_staff %}<p><a href="{% url 'apikeys:list' %}">Manage API keys</a></p>{% endif %}
+{% endblock %}

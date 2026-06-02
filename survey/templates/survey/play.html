@@ -27,6 +27,37 @@
         </figure>
       {% elif stimulus.kind == "text" %}
         <blockquote>{{ stimulus.text_body|linebreaks }}</blockquote>
+      {% elif stimulus.kind == "video" %}
+        <figure>
+          <video
+            id="stimulus-media"
+            controls
+            preload="metadata"
+            playsinline
+            data-listen-endpoint="{% url 'survey:record_listen' slug=experiment.slug assignment_id=assignment.id %}"
+            data-csrf-token="{{ csrf_token }}"
+            style="max-width:100%;"
+          >
+            <source src="{{ stimulus.video.url }}">
+            Your browser does not support the video element.
+          </video>
+          {% if stimulus.description %}<figcaption><small>{{ stimulus.description }}</small></figcaption>{% endif %}
+        </figure>
+      {% elif stimulus.kind == "html" %}
+        {# Researcher-authored HTML — same trust model as the Markdown consent/instructions text. #}
+        <div class="stimulus-html">{{ stimulus.text_body|safe }}</div>
+      {% elif stimulus.kind == "embed" %}
+        <div class="stimulus-embed">
+          <iframe
+            src="{{ stimulus.embed_url }}"
+            title="{{ stimulus.title }}"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
+            style="width:100%;min-height:24rem;border:0;"
+          ></iframe>
+        </div>
       {% endif %}
     </div>
 
@@ -52,4 +83,5 @@
     </form>
   </article>
   <script src="{% static 'survey/js/audio-tracker.js' %}" defer></script>
+  <script src="{% static 'survey/js/branching.js' %}" defer></script>
 {% endblock %}

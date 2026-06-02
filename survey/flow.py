@@ -34,10 +34,12 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
 STEP_URL_NAMES = {
     ParticipantSession.Step.CONSENT: "survey:consent",
+    ParticipantSession.Step.SCREENING: "survey:screening",
     ParticipantSession.Step.INSTRUCTIONS: "survey:instructions",
     ParticipantSession.Step.AUDIO_CHECK: "survey:audio_check",
     ParticipantSession.Step.STIMULI: "survey:play",
     ParticipantSession.Step.DEMOGRAPHICS: "survey:demographics",
+    ParticipantSession.Step.SCREENED_OUT: "survey:screened_out",
     ParticipantSession.Step.DONE: "survey:thanks",
 }
 
@@ -86,19 +88,21 @@ def progress_percent(
     demographic_pages: int,
     assignments_total: int,
     audio_check: bool = False,
+    screening_pages: int = 0,
 ) -> int:
     """Return 0..100 reflecting the participant's position across the full survey.
 
-    Pages counted (in order): consent (1), audio_check (0 or 1),
-    instructions (1), ``assignments_total * stimulus_pages_per_assignment``
-    stimulus pages, ``demographic_pages`` demographic pages, thanks (1).
+    Pages counted (in order): consent (1), screening (``screening_pages``),
+    audio_check (0 or 1), instructions (1), ``assignments_total *
+    stimulus_pages_per_assignment`` stimulus pages, ``demographic_pages``
+    demographic pages, thanks (1).
 
     The *currently rendering* page is counted as "in progress" but not yet
     done: ``progress_percent`` is the fraction of pages already completed
     (i.e. whose POST has been accepted).
     """
     audio_pages = 1 if audio_check else 0
-    pre_stim = 2 + audio_pages
+    pre_stim = 2 + audio_pages + screening_pages
     total_pages = (
         pre_stim
         + assignments_total * stimulus_pages_per_assignment
@@ -111,10 +115,12 @@ def progress_percent(
     step = session.last_step
     if step == ParticipantSession.Step.CONSENT:
         done = 0
+    elif step == ParticipantSession.Step.SCREENING:
+        done = 1 + session.screening_page_index
     elif step == ParticipantSession.Step.AUDIO_CHECK:
-        done = 1
+        done = 1 + screening_pages
     elif step == ParticipantSession.Step.INSTRUCTIONS:
-        done = 1 + audio_pages
+        done = 1 + screening_pages + audio_pages
     elif step == ParticipantSession.Step.STIMULI:
         done = (
             pre_stim
@@ -140,10 +146,11 @@ def pairwise_progress_percent(
     pairs_total: int,
     demographic_pages: int,
     audio_check: bool = False,
+    screening_pages: int = 0,
 ) -> int:
     """Progress for pairwise mode: 1 page per pair, no multi-page per stimulus."""
     audio_pages = 1 if audio_check else 0
-    pre_stim = 2 + audio_pages
+    pre_stim = 2 + audio_pages + screening_pages
     total_pages = pre_stim + pairs_total + demographic_pages + 1
     if total_pages <= 0:
         return 0
@@ -151,10 +158,12 @@ def pairwise_progress_percent(
     step = session.last_step
     if step == ParticipantSession.Step.CONSENT:
         done = 0
+    elif step == ParticipantSession.Step.SCREENING:
+        done = 1 + session.screening_page_index
     elif step == ParticipantSession.Step.AUDIO_CHECK:
-        done = 1
+        done = 1 + screening_pages
     elif step == ParticipantSession.Step.INSTRUCTIONS:
-        done = 1 + audio_pages
+        done = 1 + screening_pages + audio_pages
     elif step == ParticipantSession.Step.STIMULI:
         done = pre_stim + session.current_pair_index
     elif step == ParticipantSession.Step.DEMOGRAPHICS:

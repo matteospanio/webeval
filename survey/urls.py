@@ -7,6 +7,8 @@ app_name = "survey"
 urlpatterns = [
     # No public landing page — each survey is shared via /s/<slug>/ directly.
     path("s/<slug:slug>/", views.consent, name="consent"),
+    path("s/<slug:slug>/screening/", views.screening, name="screening"),
+    path("s/<slug:slug>/screened-out/", views.screened_out, name="screened_out"),
     path("s/<slug:slug>/instructions/", views.instructions, name="instructions"),
     path("s/<slug:slug>/audio-check/", views.audio_check, name="audio_check"),
     path("s/<slug:slug>/play/", views.play, name="play"),
@@ -23,4 +25,5 @@ urlpatterns = [
     ),
     path("s/<slug:slug>/demographics/", views.demographics, name="demographics"),
     path("s/<slug:slug>/thanks/", views.thanks, name="thanks"),
+    path("s/<slug:slug>/resume/<str:token>/", views.resume, name="resume"),
 ]

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin, messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
@@ -23,6 +23,10 @@ from django.utils.html import format_html
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.decorators import action
+
+from accounts.admin_mixins import OwnerScopedAdminMixin
+from accounts.permissions import can_manage, can_view
+from accounts.services import grant_owner_membership
 
 from .assignment import available_pairwise_strategies, available_strategies
 from .charts import bradley_terry_svg, mean_ratings_svg, pairwise_win_rates_svg
@@ -126,18 +130,19 @@ def open_printable(modeladmin, request, queryset):
 
 
 @admin.register(Experiment)
-class ExperimentAdmin(UnfoldModelAdmin):
-    list_display = ("name", "slug", "state", "mode", "assignment_strategy", "created_at", "shortcuts")
+class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "pk"
+    list_display = ("name", "slug", "state", "mode", "owner", "assignment_strategy", "created_at", "shortcuts")
     list_filter = ("state", "mode", "assignment_strategy")
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
     inlines = (ConditionInline, QuestionInline, PromptInline)
     actions = (export_repro_json, open_printable)
     actions_list = ("import_experiment",)
-    readonly_fields = ("live_stats",)
+    readonly_fields = ("live_stats", "owner")
 
     fieldsets = (
-        (None, {"fields": ("name", "slug", "state", "mode", "description")}),
+        (None, {"fields": ("name", "slug", "owner", "state", "mode", "description")}),
         (
             "Participant flow",
             {
@@ -151,6 +156,9 @@ class ExperimentAdmin(UnfoldModelAdmin):
                     "assignment_strategy",
                     "require_audio_check",
                     "randomize_stimulus_questions",
+                    "eligibility_rule",
+                    "min_completion_seconds",
+                    "one_submission_per_participant",
                 )
             },
         ),
@@ -202,6 +210,24 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 label=db_field.verbose_name.capitalize(),
             )
         return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        creating = not change
+        if creating and obj.owner_id is None:
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
+        if creating and obj.owner_id is not None:
+            grant_owner_membership(obj, obj.owner, actor=request.user)
+
+    def _scoped_experiment(self, request, slug, require=can_view):
+        """Fetch an experiment for a per-experiment admin view, enforcing
+        object-level access. These views are otherwise only login-gated by
+        ``admin_view`` — without this check any staff user could read any
+        study's results by guessing the slug."""
+        experiment = get_object_or_404(Experiment, slug=slug)
+        if not require(request.user, experiment):
+            raise PermissionDenied
+        return experiment
 
     def get_urls(self):
         """Mount per-experiment detail, CSV, and chart views under the admin.
@@ -271,7 +297,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
         return custom + urls
 
     def experiment_details_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         context = {
             **self.admin_site.each_context(request),
             "experiment": experiment,
@@ -288,37 +314,37 @@ class ExperimentAdmin(UnfoldModelAdmin):
         return render(request, "admin/experiments/experiment/details.html", context)
 
     def answers_csv_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return answers_csv_response(experiment)
 
     def demographics_csv_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return demographics_csv_response(experiment)
 
     def chart_mean_ratings_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return HttpResponse(
             mean_ratings_svg(experiment), content_type="image/svg+xml"
         )
 
     def pairwise_answers_csv_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return pairwise_answers_csv_response(experiment)
 
     def chart_pairwise_wins_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return HttpResponse(
             pairwise_win_rates_svg(experiment), content_type="image/svg+xml"
         )
 
     def chart_bt_scores_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         return HttpResponse(
             bradley_terry_svg(experiment), content_type="image/svg+xml"
         )
 
     def experiment_export_zip_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
+        experiment = self._scoped_experiment(request, slug)
         payload = build_experiment_archive(experiment)
         response = HttpResponse(payload, content_type="application/zip")
         response["Content-Disposition"] = (
@@ -348,6 +374,11 @@ class ExperimentAdmin(UnfoldModelAdmin):
                 except ValidationError as exc:
                     context["form_error"] = "; ".join(exc.messages)
                 else:
+                    experiment.owner = request.user
+                    experiment.save(update_fields=["owner"])
+                    grant_owner_membership(
+                        experiment, request.user, actor=request.user
+                    )
                     self.message_user(
                         request,
                         f"Imported experiment '{experiment.name}' as draft.",
@@ -376,9 +407,7 @@ class ExperimentAdmin(UnfoldModelAdmin):
         )
 
     def activate_view(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not self.has_change_permission(request, experiment):
-            return HttpResponseRedirect(reverse("admin:index"))
+        experiment = self._scoped_experiment(request, slug, require=can_manage)
 
         change_url = reverse(
             "admin:experiments_experiment_change", args=[experiment.pk]
@@ -561,14 +590,16 @@ class ExperimentAdmin(UnfoldModelAdmin):
 
 
 @admin.register(Condition)
-class ConditionAdmin(UnfoldModelAdmin):
+class ConditionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
     list_display = ("name", "experiment")
     list_filter = ("experiment",)
     search_fields = ("name",)
 
 
 @admin.register(Stimulus)
-class StimulusAdmin(UnfoldModelAdmin):
+class StimulusAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "condition__experiment"
     list_display = ("title", "condition", "kind", "prompt_group", "is_active", "duration_seconds", "sort_order")
     list_filter = ("condition__experiment", "condition", "kind", "is_active")
     search_fields = ("title", "description", "prompt_group")
@@ -593,7 +624,14 @@ class StimulusAdmin(UnfoldModelAdmin):
             "Audio (kind = Audio clip)",
             {
                 "description": "Upload an mp3/wav/ogg file for audio stimuli.",
-                "fields": ("audio", "duration_seconds", "sha256"),
+                "fields": ("audio",),
+            },
+        ),
+        (
+            "Video (kind = Video)",
+            {
+                "description": "Upload an mp4/webm/mov file for video stimuli.",
+                "fields": ("video",),
             },
         ),
         (
@@ -604,17 +642,29 @@ class StimulusAdmin(UnfoldModelAdmin):
             },
         ),
         (
-            "Text (kind = Text only)",
+            "Text / HTML (kind = Text only or HTML snippet)",
             {
-                "description": "Used for text-only stimuli — rendered with line breaks preserved.",
+                "description": "Plain text is rendered with line breaks; for the HTML kind the same field is rendered as raw HTML to participants.",
                 "fields": ("text_body",),
             },
+        ),
+        (
+            "Embedded URL (kind = Embedded URL)",
+            {
+                "description": "External URL shown to participants in an iframe (e.g. a hosted player or widget).",
+                "fields": ("embed_url",),
+            },
+        ),
+        (
+            "Computed metadata",
+            {"fields": ("duration_seconds", "sha256")},
         ),
     )
 
 
 @admin.register(Prompt)
-class PromptAdmin(UnfoldModelAdmin):
+class PromptAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
     list_display = ("title", "experiment", "prompt_group", "duration_seconds")
     list_filter = ("experiment",)
     search_fields = ("prompt_group", "title", "description")
@@ -634,7 +684,8 @@ class PromptAdmin(UnfoldModelAdmin):
 
 
 @admin.register(Question)
-class QuestionAdmin(UnfoldModelAdmin):
+class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
     form = QuestionAdminForm
     list_display = (
         "prompt",
@@ -663,6 +714,30 @@ class QuestionAdmin(UnfoldModelAdmin):
                     "show_prompt",
                     "sort_order",
                 ),
+            },
+        ),
+        (
+            "Display logic (skip / branching)",
+            {
+                "description": (
+                    "Optional. Show this question only when earlier answers in "
+                    'the same section match. JSON, e.g. {"question": 12, "op": '
+                    '"eq", "value": "Yes"}. The referenced question must have a '
+                    "lower sort order."
+                ),
+                "fields": ("visible_if",),
+            },
+        ),
+        (
+            "Attention check",
+            {
+                "description": (
+                    "Optional. If set, this question is an attention check; a "
+                    "participant whose answer differs from the expected value "
+                    'is flagged. Enter the expected answer as JSON, e.g. '
+                    '"Strongly agree" or 4.'
+                ),
+                "fields": ("attention_expected",),
             },
         ),
         (
@@ -697,6 +772,32 @@ class QuestionAdmin(UnfoldModelAdmin):
             {
                 "description": "Used when Type = Likert scale.",
                 "fields": ("likert_steps", "likert_labels"),
+            },
+        ),
+        (
+            "Numeric input settings",
+            {
+                "description": "Used when Type = Numeric input. All fields are optional.",
+                "fields": (
+                    "numeric_min",
+                    "numeric_max",
+                    "numeric_integer",
+                    "numeric_unit",
+                ),
+            },
+        ),
+        (
+            "Matrix (grid) settings",
+            {
+                "description": "Used when Type = Matrix (grid): rows are the sub-questions, columns the shared answer scale.",
+                "fields": ("matrix_rows", "matrix_columns"),
+            },
+        ),
+        (
+            "Ranking / ordering settings",
+            {
+                "description": "Used when Type = Ranking / ordering.",
+                "fields": ("ranking_items",),
             },
         ),
     )

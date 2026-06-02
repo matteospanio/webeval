@@ -40,7 +40,9 @@ def _csv_response(filename: str) -> HttpResponse:
     return response
 
 
-def write_answers_csv(experiment: Experiment, response: HttpResponse) -> HttpResponse:
+def write_answers_csv(
+    experiment: Experiment, response: HttpResponse, exclude_flagged: bool = False
+) -> HttpResponse:
     writer = csv.DictWriter(response, fieldnames=ANSWER_FIELDNAMES)
     writer.writeheader()
 
@@ -53,6 +55,8 @@ def write_answers_csv(experiment: Experiment, response: HttpResponse) -> HttpRes
         .select_related("session", "stimulus", "stimulus__condition", "question")
         .order_by("session__id", "stimulus__sort_order", "question__sort_order")
     )
+    if exclude_flagged:
+        rows = rows.filter(session__flags=[])
 
     # Pre-compute assignment listen durations per (session, stimulus) so we
     # don't issue one query per row.
@@ -88,7 +92,7 @@ def write_answers_csv(experiment: Experiment, response: HttpResponse) -> HttpRes
 
 
 def write_demographics_csv(
-    experiment: Experiment, response: HttpResponse
+    experiment: Experiment, response: HttpResponse, exclude_flagged: bool = False
 ) -> HttpResponse:
     demographic_questions = list(
         experiment.questions.filter(section=Question.Section.DEMOGRAPHIC).order_by(
@@ -110,6 +114,8 @@ def write_demographics_csv(
     sessions = ParticipantSession.objects.filter(
         experiment=experiment, submitted_at__isnull=False
     ).order_by("started_at")
+    if exclude_flagged:
+        sessions = sessions.filter(flags=[])
     for session in sessions:
         row = {
             "session_id": str(session.id),
@@ -210,11 +216,15 @@ def pairwise_answers_csv_response(experiment: Experiment) -> HttpResponse:
     return write_pairwise_answers_csv(experiment, response)
 
 
-def answers_csv_response(experiment: Experiment) -> HttpResponse:
+def answers_csv_response(
+    experiment: Experiment, exclude_flagged: bool = False
+) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-answers.csv")
-    return write_answers_csv(experiment, response)
+    return write_answers_csv(experiment, response, exclude_flagged=exclude_flagged)
 
 
-def demographics_csv_response(experiment: Experiment) -> HttpResponse:
+def demographics_csv_response(
+    experiment: Experiment, exclude_flagged: bool = False
+) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-demographics.csv")
-    return write_demographics_csv(experiment, response)
+    return write_demographics_csv(experiment, response, exclude_flagged=exclude_flagged)

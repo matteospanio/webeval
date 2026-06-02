@@ -1,0 +1,54 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ experiment.name }} · webeval studio{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li>{{ experiment.name }}</li>
+</ul></nav>
+<hgroup>
+  <h1>{{ experiment.name }}</h1>
+  <p><span class="badge">{{ experiment.get_state_display }}</span>
+     · {{ experiment.get_mode_display }} · your role: {{ role }}</p>
+</hgroup>
+
+<div class="grid">
+  <article>
+    <header><strong>Participation</strong></header>
+    <ul>
+      <li>Consent page views: {{ counts.consent_page_views }}</li>
+      <li>Started: {{ counts.total_sessions }}</li>
+      <li>Completed: {{ counts.completed_sessions }}</li>
+      <li>Dropped out: {{ counts.abandoned_sessions }}</li>
+      <li>Completion rate: {% widthratio counts.completion_rate 1 100 %}%</li>
+      {% if mean_listen_ms %}<li>Mean listen: {{ mean_listen_ms|floatformat:0 }} ms</li>{% endif %}
+    </ul>
+  </article>
+  <article>
+    <header><strong>Results</strong></header>
+    <img src="{% url 'studio:chart' slug=experiment.slug %}" alt="Results chart" style="max-width:100%">
+  </article>
+</div>
+
+<h2>Data &amp; exports</h2>
+<ul>
+  <li><a href="{% url 'studio:answers_csv' slug=experiment.slug %}">Answers CSV</a>
+      · <a href="{% url 'studio:answers_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
+  <li><a href="{% url 'studio:demographics_csv' slug=experiment.slug %}">Demographics CSV</a>
+      · <a href="{% url 'studio:demographics_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
+  {% if experiment.is_pairwise %}<li><a href="{% url 'studio:pairwise_csv' slug=experiment.slug %}">Pairwise answers CSV</a></li>{% endif %}
+  <li><a href="{% url 'studio:export_zip' slug=experiment.slug %}">Reproducibility ZIP</a></li>
+</ul>
+
+<h2>Share with participants</h2>
+<p>Direct link: <a href="{{ survey_url }}">{{ survey_url }}</a></p>
+
+<h2>Manage</h2>
+<ul>
+  {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}
+  {% if show_admin_edit %}
+    <li><a href="{{ admin_change_url }}">Edit structure (conditions, stimuli, questions) in admin</a></li>
+  {% elif can_edit %}
+    <li><em>Structural editing of stimuli and questions currently requires Django admin (staff) access — ask a platform admin to grant it. A native studio editor is on the roadmap.</em></li>
+  {% endif %}
+</ul>
+{% endblock %}

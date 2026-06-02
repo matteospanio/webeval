@@ -1,0 +1,98 @@
+{% extends "studio/base.html" %}
+{% block title %}Access · {{ experiment.name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li><a href="{% url 'studio:study_overview' slug=experiment.slug %}">{{ experiment.name }}</a></li>
+  <li>Access</li>
+</ul></nav>
+<h1>Collaborators &amp; access</h1>
+
+<h2>Members</h2>
+<table>
+  <thead><tr><th>User</th><th>Role</th><th></th></tr></thead>
+  <tbody>
+  {% for m in memberships %}
+    <tr>
+      <td>{{ m.user.get_username }}{% if m.user_id == owner_id %} <span class="badge">owner</span>{% endif %}</td>
+      <td>
+        {% if m.user_id == owner_id %}Owner
+        {% else %}
+        <form method="post" class="inline-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="change_role">
+          <input type="hidden" name="membership_id" value="{{ m.pk }}">
+          <select name="role" onchange="this.form.submit()">
+            {% for value, label in role_choices %}
+            <option value="{{ value }}" {% if m.role == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </form>
+        {% endif %}
+      </td>
+      <td>
+        {% if m.user_id != owner_id %}
+        <form method="post" class="inline-form" onsubmit="return confirm('Remove this collaborator?');">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="membership_id" value="{{ m.pk }}">
+          <button type="submit" class="secondary outline">Remove</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Invite a collaborator</h2>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="invite">
+  <div class="grid">
+    {{ invite_form.email }}
+    {{ invite_form.role }}
+    <button type="submit">Send invite</button>
+  </div>
+</form>
+
+{% if pending_invitations %}
+<h2>Pending invitations</h2>
+<table>
+  <thead><tr><th>Email</th><th>Role</th><th>Expires</th><th>Accept link</th><th></th></tr></thead>
+  <tbody>
+  {% for inv in pending_invitations %}
+    <tr>
+      <td>{{ inv.email }}</td>
+      <td>{{ inv.role }}</td>
+      <td>{{ inv.expires_at|date:"Y-m-d" }}</td>
+      <td><input type="text" value="{{ inv.accept_url }}" readonly onclick="this.select()" style="min-width:18rem"></td>
+      <td>
+        <form method="post" class="inline-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="revoke">
+          <input type="hidden" name="invitation_id" value="{{ inv.pk }}">
+          <button type="submit" class="secondary outline">Revoke</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if transfer_candidates %}
+<h2>Transfer ownership</h2>
+<form method="post" onsubmit="return confirm('Transfer ownership? You will become an editor.');">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="transfer">
+  <div class="grid">
+    <select name="new_owner_id" required>
+      <option value="">Choose a collaborator…</option>
+      {% for u in transfer_candidates %}<option value="{{ u.pk }}">{{ u.get_username }}</option>{% endfor %}
+    </select>
+    <button type="submit" class="contrast">Transfer ownership</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

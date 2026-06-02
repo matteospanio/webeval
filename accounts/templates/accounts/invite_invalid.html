@@ -1,0 +1,12 @@
+{% extends "studio/base.html" %}
+{% block title %}Invitation unavailable · webeval{% endblock %}
+{% block content %}
+<article style="max-width:32rem;margin:2rem auto;">
+  <hgroup>
+    <h1>Invitation unavailable</h1>
+    <p>This invitation has already been used or has expired. Ask the study
+       owner to send a new one.</p>
+  </hgroup>
+  <a href="{% url 'studio:studies' %}" role="button">Go to my studies</a>
+</article>
+{% endblock %}

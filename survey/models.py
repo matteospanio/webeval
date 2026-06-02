@@ -29,10 +29,12 @@ from django.db import models
 class ParticipantSession(models.Model):
     class Step(models.TextChoices):
         CONSENT = "consent", "Consent"
+        SCREENING = "screening", "Screening / eligibility"
         INSTRUCTIONS = "instructions", "Instructions"
         AUDIO_CHECK = "audio_check", "Audio playback check"
         STIMULI = "stimuli", "Listening to stimuli"
         DEMOGRAPHICS = "demographics", "Demographic questions"
+        SCREENED_OUT = "screened_out", "Screened out (ineligible)"
         DONE = "done", "Completed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -40,6 +42,15 @@ class ParticipantSession(models.Model):
         "experiments.Experiment",
         on_delete=models.CASCADE,
         related_name="sessions",
+    )
+    # Between-subject treatment: the single condition this participant was
+    # assigned to (null for within-subject designs that show all conditions).
+    assigned_condition = models.ForeignKey(
+        "experiments.Condition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
     )
 
     last_step = models.CharField(
@@ -59,15 +70,35 @@ class ParticipantSession(models.Model):
     current_page_index = models.PositiveSmallIntegerField(default=0)
     current_pair_index = models.PositiveSmallIntegerField(default=0)
     demographic_page_index = models.PositiveSmallIntegerField(default=0)
+    screening_page_index = models.PositiveSmallIntegerField(default=0)
 
     started_at = models.DateTimeField(auto_now_add=True)
     consented_at = models.DateTimeField(null=True, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     abandoned_at = models.DateTimeField(null=True, blank=True)
+    screened_out_at = models.DateTimeField(null=True, blank=True)
+
+    # Quality flags computed at completion: count of failed attention checks
+    # and a list of flag strings (e.g. "failed_attention", "speeder",
+    # "straight_lining").
+    failed_attention_checks = models.PositiveSmallIntegerField(default=0)
+    flags = models.JSONField(default=list, blank=True)
 
     device_type = models.CharField(max_length=16, blank=True)
     browser_family = models.CharField(max_length=64, blank=True)
     country_code = models.CharField(max_length=2, blank=True)
+
+    # Stable per-browser participant identifier (a long-lived cookie). Enables
+    # duplicate-submission detection and links a participant's sessions; blank
+    # when the participant blocks cookies.
+    participant_uid = models.CharField(max_length=64, blank=True, db_index=True)
+
+    # Secret token for the "save & continue later" resume link. Generated when
+    # the session is created; null on legacy rows from before the feature (so
+    # the unique constraint tolerates many NULLs and no backfill is needed).
+    resume_token = models.CharField(
+        max_length=64, unique=True, null=True, blank=True, editable=False
+    )
 
     class Meta:
         ordering = ("-started_at",)
@@ -78,6 +109,10 @@ class ParticipantSession(models.Model):
     @property
     def is_complete(self) -> bool:
         return self.submitted_at is not None
+
+    @property
+    def is_flagged(self) -> bool:
+        return bool(self.flags)
 
 
 class StimulusAssignment(models.Model):

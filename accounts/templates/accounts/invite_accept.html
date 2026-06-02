@@ -1,0 +1,16 @@
+{% extends "studio/base.html" %}
+{% block title %}Accept invitation · webeval{% endblock %}
+{% block content %}
+<article style="max-width:32rem;margin:2rem auto;">
+  <hgroup>
+    <h1>Collaboration invitation</h1>
+    <p>You've been invited as <strong>{{ invitation.role }}</strong> on
+       <strong>{{ invitation.experiment.name }}</strong>.</p>
+  </hgroup>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit">Accept invitation</button>
+    <a href="{% url 'studio:studies' %}" role="button" class="secondary">Not now</a>
+  </form>
+</article>
+{% endblock %}

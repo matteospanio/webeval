@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import random
+import secrets
+import uuid
 from typing import Any
 
 from django.contrib import messages
@@ -26,6 +28,7 @@ from django.http import (
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -34,8 +37,10 @@ from experiments.assignment import (
     get_pairwise_strategy,
     get_strategy,
 )
+from experiments.branching import evaluate_condition, is_visible
 from experiments.models import Experiment, Prompt, Question, Stimulus
 
+from .flagging import compute_flags
 from .flow import (
     paginate_questions,
     pairwise_progress_percent,
@@ -55,6 +60,10 @@ from .models import PairAssignment, ParticipantSession, Response, StimulusAssign
 RUNNABLE_STATES: frozenset[str] = frozenset(
     {Experiment.State.ACTIVE, Experiment.State.TEST}
 )
+
+
+PARTICIPANT_COOKIE = "webeval_pid"
+PARTICIPANT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 
 def _session_key(slug: str) -> str:
@@ -118,6 +127,176 @@ def _serialise_answer(question: Question, raw_value: Any) -> Any:
     return str(raw_value)
 
 
+def _read_one(request, question: Question) -> tuple[bool, Any, str | None]:
+    """Read one question's answer from POST.
+
+    Returns ``(answered, value, error)``: whether any input was given, the
+    serialisable typed value, and a human-readable problem (or None). Shared by
+    the standard and pairwise answer collectors so every question type behaves
+    identically across both flows.
+    """
+    t = question.type
+    if t == Question.Type.MATRIX:
+        return _read_matrix(request, question)
+    if t == Question.Type.RANKING:
+        return _read_ranking(request, question)
+    if t == Question.Type.CHOICE and (question.config or {}).get("multi"):
+        raw_list = request.POST.getlist(f"q_{question.pk}")
+        if not raw_list:
+            return False, None, None
+        return True, list(raw_list), None
+    raw = request.POST.get(f"q_{question.pk}")
+    if raw is None or raw == "":
+        return False, None, None
+    if t == Question.Type.NUMERIC:
+        return _read_numeric(question, raw)
+    try:
+        return True, _serialise_answer(question, raw), None
+    except (TypeError, ValueError):
+        return True, None, "has an invalid value"
+
+
+def _read_numeric(question: Question, raw: str) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    try:
+        value: float | int = float(raw)
+    except (TypeError, ValueError):
+        return True, None, "must be a number"
+    if cfg.get("integer"):
+        if value != int(value):
+            return True, None, "must be a whole number"
+        value = int(value)
+    low = cfg.get("min")
+    high = cfg.get("max")
+    if low is not None and value < low:
+        return True, None, f"must be at least {low}"
+    if high is not None and value > high:
+        return True, None, f"must be at most {high}"
+    return True, value, None
+
+
+def _read_matrix(request, question: Question) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    rows = cfg.get("rows") or []
+    columns = set(cfg.get("columns") or [])
+    answer: dict[str, str] = {}
+    answered_any = False
+    for i, row in enumerate(rows):
+        val = request.POST.get(f"q_{question.pk}_r{i}")
+        if val:
+            answered_any = True
+            if val not in columns:
+                return True, None, "has an invalid value"
+            answer[row] = val
+    if not answered_any:
+        return False, None, None
+    if question.required and len(answer) != len(rows):
+        return True, None, "needs an answer in every row"
+    return True, answer, None
+
+
+def _read_ranking(request, question: Question) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    items = cfg.get("items") or []
+    n = len(items)
+    ranks: dict[int, int] = {}
+    answered_any = False
+    for i in range(n):
+        val = request.POST.get(f"q_{question.pk}_i{i}")
+        if val:
+            answered_any = True
+            try:
+                ranks[i] = int(val)
+            except (TypeError, ValueError):
+                return True, None, "has an invalid rank"
+    if not answered_any:
+        return False, None, None
+    if len(ranks) != n or sorted(ranks.values()) != list(range(1, n + 1)):
+        return True, None, "needs a unique rank for every item"
+    ordered = [items[i] for i, _ in sorted(ranks.items(), key=lambda kv: kv[1])]
+    return True, ordered, None
+
+
+def _answers_for_stimulus(session, stimulus) -> dict[int, Any]:
+    """Map question_id → stored answer for one stimulus in this session."""
+    return {
+        r.question_id: r.get_answer()
+        for r in Response.objects.filter(session=session, stimulus=stimulus)
+    }
+
+
+def _answers_for_section(session, section) -> dict[int, Any]:
+    """Map question_id → stored answer for one session-level section.
+
+    Screening and demographic answers both store Responses with no stimulus and
+    no pair_assignment, so they are disambiguated by the question's section.
+    """
+    return {
+        r.question_id: r.get_answer()
+        for r in Response.objects.filter(
+            session=session,
+            stimulus__isnull=True,
+            pair_assignment__isnull=True,
+            question__section=section,
+        )
+    }
+
+
+def _answers_for_demographics(session) -> dict[int, Any]:
+    return _answers_for_section(session, Question.Section.DEMOGRAPHIC)
+
+
+def _visible_with_submitted(request, page_questions, stored):
+    """Page questions whose ``visible_if`` holds against stored + just-submitted
+    answers, so a hidden question is never required or stored on POST."""
+    eval_answers = dict(stored)
+    for q in page_questions:
+        answered, value, error = _read_one(request, q)
+        if answered and error is None:
+            eval_answers[q.pk] = value
+    return [q for q in page_questions if is_visible(q, eval_answers)]
+
+
+def _next_renderable_stimulus_page(session, assignments, pages) -> str:
+    """Advance the (assignment, page) cursors to the next page with at least one
+    visible question, skipping pages hidden by branching. Returns ``"render"``
+    (cursors point at a renderable page) or ``"demographics"`` (stimulus phase
+    exhausted). Loops internally so the flow redirects at most once instead of
+    once per skipped page."""
+    while session.current_assignment_index < len(assignments):
+        assignment = assignments[session.current_assignment_index]
+        stored = _answers_for_stimulus(session, assignment.stimulus)
+        while session.current_page_index < len(pages):
+            if any(is_visible(q, stored) for q in pages[session.current_page_index]):
+                return "render"
+            session.current_page_index += 1
+        session.current_page_index = 0
+        session.current_assignment_index += 1
+    return "demographics"
+
+
+def _next_renderable_demographic_page(session, pages) -> str:
+    """Advance ``demographic_page_index`` to the next page with a visible
+    question. Returns ``"render"`` or ``"finish"``."""
+    stored = _answers_for_demographics(session)
+    while session.demographic_page_index < len(pages):
+        if any(is_visible(q, stored) for q in pages[session.demographic_page_index]):
+            return "render"
+        session.demographic_page_index += 1
+    return "finish"
+
+
+def _next_renderable_screening_page(session, pages) -> str:
+    """Advance ``screening_page_index`` to the next page with a visible
+    question. Returns ``"render"`` or ``"finish"``."""
+    stored = _answers_for_section(session, Question.Section.SCREENING)
+    while session.screening_page_index < len(pages):
+        if any(is_visible(q, stored) for q in pages[session.screening_page_index]):
+            return "render"
+        session.screening_page_index += 1
+    return "finish"
+
+
 def _ordered_section_questions(
     experiment: Experiment, section: str
 ) -> list[Question]:
@@ -136,7 +315,11 @@ def _stimulus_questions(experiment: Experiment, session: ParticipantSession) -> 
     cached = getattr(session, "_cached_question_order", None)
     if cached is None:
         questions = _ordered_section_questions(experiment, Question.Section.STIMULUS)
-        if experiment.randomize_stimulus_questions:
+        # Skip-logic needs a deterministic order so a controlling question
+        # always precedes its dependents; disable the shuffle when any
+        # stimulus question carries a visible_if rule.
+        has_branching = any(q.visible_if for q in questions)
+        if experiment.randomize_stimulus_questions and not has_branching:
             ids_to_q = {q.pk: q for q in questions}
             ordered_ids = list(ids_to_q.keys())
             rng = random.Random(str(session.id))
@@ -158,11 +341,27 @@ def _audio_check_active(experiment: Experiment) -> bool:
     return bool(experiment.require_audio_check) and _experiment_has_audio(experiment)
 
 
+def _has_screening(experiment: Experiment) -> bool:
+    return experiment.questions.filter(
+        section=Question.Section.SCREENING
+    ).exists()
+
+
+def _is_eligible(experiment: Experiment, answers: dict) -> bool:
+    rule = experiment.eligibility_rule or {}
+    if not rule:
+        return True
+    return evaluate_condition(rule, answers)
+
+
 def _progress(
     experiment: Experiment, session: ParticipantSession
 ) -> int:
     dem_pages = len(
         paginate_questions(_ordered_section_questions(experiment, Question.Section.DEMOGRAPHIC))
+    )
+    screening_pages = len(
+        paginate_questions(_ordered_section_questions(experiment, Question.Section.SCREENING))
     )
     audio_check = _audio_check_active(experiment)
     if experiment.is_pairwise:
@@ -171,6 +370,7 @@ def _progress(
             pairs_total=session.pair_assignments.count(),
             demographic_pages=dem_pages,
             audio_check=audio_check,
+            screening_pages=screening_pages,
         )
     stim_pages = len(
         paginate_questions(_stimulus_questions(experiment, session))
@@ -181,6 +381,7 @@ def _progress(
         demographic_pages=dem_pages,
         assignments_total=session.assignments.count(),
         audio_check=audio_check,
+        screening_pages=screening_pages,
     )
 
 
@@ -198,6 +399,18 @@ def _base_context(experiment: Experiment, session: ParticipantSession | None) ->
     return ctx
 
 
+def _resume_url(request, experiment: Experiment, session: ParticipantSession | None):
+    """Absolute 'save & continue later' link, or None when not resumable."""
+    if session is None or not session.resume_token or session.submitted_at:
+        return None
+    return request.build_absolute_uri(
+        reverse(
+            "survey:resume",
+            kwargs={"slug": experiment.slug, "token": session.resume_token},
+        )
+    )
+
+
 # --- consent ---------------------------------------------------------------
 
 
@@ -206,6 +419,30 @@ def consent(request, slug: str):
     experiment, session = _load_session(request, slug)
     if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
+
+    pid = request.COOKIES.get(PARTICIPANT_COOKIE) or uuid.uuid4().hex
+
+    def _with_pid(response):
+        response.set_cookie(
+            PARTICIPANT_COOKIE,
+            pid,
+            max_age=PARTICIPANT_COOKIE_MAX_AGE,
+            samesite="Lax",
+        )
+        return response
+
+    # Duplicate-submission gate: a study can allow only one completion per
+    # participant (identified by the long-lived cookie).
+    if experiment.one_submission_per_participant and _already_completed(
+        experiment, pid
+    ):
+        return _with_pid(
+            render(
+                request,
+                "survey/already_completed.html",
+                _base_context(experiment, None),
+            )
+        )
 
     consent_first, consent_rest = _split_consent_text(experiment.consent_text)
 
@@ -219,10 +456,17 @@ def consent(request, slug: str):
             ctx["error"] = True
             ctx["consent_first"] = consent_first
             ctx["consent_rest"] = consent_rest
-            return render(request, "survey/consent.html", ctx)
+            return _with_pid(render(request, "survey/consent.html", ctx))
         if session is None:
-            session = _create_session(request, experiment)
+            session = _create_session(request, experiment, participant_uid=pid)
         session.consented_at = timezone.now()
+        if _has_screening(experiment):
+            session.last_step = ParticipantSession.Step.SCREENING
+            session.screening_page_index = 0
+            session.save(
+                update_fields=["consented_at", "last_step", "screening_page_index"]
+            )
+            return _with_pid(redirect("survey:screening", slug=slug))
         needs_audio_check = _audio_check_active(experiment)
         session.last_step = (
             ParticipantSession.Step.AUDIO_CHECK
@@ -231,8 +475,8 @@ def consent(request, slug: str):
         )
         session.save(update_fields=["consented_at", "last_step"])
         if needs_audio_check:
-            return redirect("survey:audio_check", slug=slug)
-        return redirect("survey:instructions", slug=slug)
+            return _with_pid(redirect("survey:audio_check", slug=slug))
+        return _with_pid(redirect("survey:instructions", slug=slug))
 
     Experiment.objects.filter(pk=experiment.pk).update(
         consent_page_views=F("consent_page_views") + 1
@@ -240,19 +484,120 @@ def consent(request, slug: str):
     ctx = _base_context(experiment, session)
     ctx["consent_first"] = consent_first
     ctx["consent_rest"] = consent_rest
-    return render(request, "survey/consent.html", ctx)
+    return _with_pid(render(request, "survey/consent.html", ctx))
 
 
-def _create_session(request, experiment: Experiment) -> ParticipantSession:
+def _already_completed(experiment: Experiment, pid: str) -> bool:
+    if not pid:
+        return False
+    return ParticipantSession.objects.filter(
+        experiment=experiment, participant_uid=pid, submitted_at__isnull=False
+    ).exists()
+
+
+def _create_session(
+    request, experiment: Experiment, participant_uid: str = ""
+) -> ParticipantSession:
     meta = extract_metadata(request)
     session = ParticipantSession.objects.create(
         experiment=experiment,
         device_type=meta.device_type,
         browser_family=meta.browser_family,
         country_code=meta.country_code,
+        resume_token=secrets.token_urlsafe(32),
+        participant_uid=participant_uid,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
+
+
+# --- screening / eligibility ------------------------------------------------
+
+
+@require_http_methods(["GET", "POST"])
+def screening(request, slug: str):
+    experiment, session = _load_session(request, slug)
+    if experiment.state not in RUNNABLE_STATES:
+        return _unavailable(request, experiment)
+    if session is None:
+        return redirect("survey:consent", slug=slug)
+    bounce = _expect_step(session, ParticipantSession.Step.SCREENING)
+    if bounce:
+        return bounce
+
+    pages = paginate_questions(
+        _ordered_section_questions(experiment, Question.Section.SCREENING)
+    )
+    if not pages:
+        return _advance_past_screening(request, session, slug)
+
+    if request.method == "POST":
+        if session.screening_page_index >= len(pages):
+            return redirect("survey:screening", slug=slug)
+        page_questions = pages[session.screening_page_index]
+        is_last_page = session.screening_page_index == len(pages) - 1
+        stored = _answers_for_section(session, Question.Section.SCREENING)
+        visible_questions = _visible_with_submitted(request, page_questions, stored)
+        errors, responses = _collect_answers(
+            request, session, None, visible_questions
+        )
+        if errors:
+            for err in errors:
+                messages.error(request, err)
+            _annotate_submitted(request, visible_questions)
+            ctx = _base_context(experiment, session)
+            ctx.update(
+                {"page_questions": visible_questions, "is_last_page": is_last_page}
+            )
+            return render(request, "survey/screening.html", ctx, status=400)
+        with transaction.atomic():
+            Response.objects.bulk_create(responses)
+            session.screening_page_index += 1
+            if _next_renderable_screening_page(session, pages) == "finish":
+                return _finish_screening(request, session, slug)
+            session.save(update_fields=["screening_page_index"])
+        return redirect("survey:screening", slug=slug)
+
+    # GET: advance over screening pages hidden by branching (or finish).
+    if _next_renderable_screening_page(session, pages) == "finish":
+        return _finish_screening(request, session, slug)
+    session.save(update_fields=["screening_page_index"])
+    page_questions = pages[session.screening_page_index]
+    stored = _answers_for_section(session, Question.Section.SCREENING)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = session.screening_page_index == len(pages) - 1
+    ctx = _base_context(experiment, session)
+    ctx.update(
+        {
+            "page_questions": visible_questions,
+            "is_last_page": is_last_page,
+            "resume_url": _resume_url(request, experiment, session),
+        }
+    )
+    return render(request, "survey/screening.html", ctx)
+
+
+def _finish_screening(request, session: ParticipantSession, slug: str):
+    experiment = session.experiment
+    answers = _answers_for_section(session, Question.Section.SCREENING)
+    if not _is_eligible(experiment, answers):
+        session.last_step = ParticipantSession.Step.SCREENED_OUT
+        session.screened_out_at = timezone.now()
+        session.save(update_fields=["last_step", "screened_out_at"])
+        request.session.pop(_session_key(slug), None)
+        return redirect("survey:screened_out", slug=slug)
+    return _advance_past_screening(request, session, slug)
+
+
+def _advance_past_screening(request, session: ParticipantSession, slug: str):
+    experiment = session.experiment
+    if _audio_check_active(experiment):
+        session.last_step = ParticipantSession.Step.AUDIO_CHECK
+        session.save(update_fields=["last_step"])
+        return redirect("survey:audio_check", slug=slug)
+    session.last_step = ParticipantSession.Step.INSTRUCTIONS
+    session.save(update_fields=["last_step"])
+    return redirect("survey:instructions", slug=slug)
 
 
 # --- instructions ----------------------------------------------------------
@@ -304,17 +649,34 @@ def instructions(request, slug: str):
 def _build_assignments(session: ParticipantSession) -> None:
     if session.assignments.exists():
         return
+    experiment = session.experiment
     try:
-        strategy = get_strategy(session.experiment.assignment_strategy)
+        strategy = get_strategy(experiment.assignment_strategy)
     except UnknownStrategyError:
         strategy = get_strategy("balanced_random")
-    counts = _fetch_counts(session.experiment)
+    counts = _fetch_counts(experiment)
+    # Ordinal of this participant among those already assigned — lets the
+    # counterbalanced / between-subject strategies balance across the sample.
+    participant_index = (
+        ParticipantSession.objects.filter(
+            experiment=experiment, assignments__isnull=False
+        )
+        .distinct()
+        .count()
+    )
     selected: list[Stimulus] = strategy.select(
-        experiment=session.experiment,
-        n=session.experiment.stimuli_per_participant,
+        experiment=experiment,
+        n=experiment.stimuli_per_participant,
         counts=counts,
         rng=random.Random(str(session.id)),
+        participant_index=participant_index,
     )
+    # Between-subject designs assign each participant to one condition; record
+    # it when the selection is single-condition so analysis can group by it.
+    condition_ids = {stim.condition_id for stim in selected}
+    if len(condition_ids) == 1:
+        session.assigned_condition_id = next(iter(condition_ids))
+        session.save(update_fields=["assigned_condition"])
     for order, stim in enumerate(selected):
         StimulusAssignment.objects.create(
             session=session,
@@ -410,38 +772,56 @@ def play(request, slug: str):
         session.save(update_fields=["last_step"])
         return redirect("survey:demographics", slug=slug)
 
-    if session.current_page_index >= len(pages):
-        session.current_page_index = 0
-        session.current_assignment_index += 1
-        session.save(update_fields=["current_page_index", "current_assignment_index"])
-        return redirect("survey:play", slug=slug)
-
-    page_questions = pages[session.current_page_index]
-    is_last_assignment = session.current_assignment_index == len(assignments) - 1
-    is_last_page = is_last_assignment and session.current_page_index == len(pages) - 1
-
+    # POST submits the page the participant is currently viewing.
     if request.method == "POST":
+        if session.current_page_index >= len(pages):
+            return redirect("survey:play", slug=slug)
         return _save_page_answers(
             request,
             session,
             assignment,
-            page_questions,
+            pages[session.current_page_index],
             pages,
             assignments,
             slug,
         )
+
+    # GET: advance over pages hidden by branching to the next renderable one.
+    if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
+        session.last_step = ParticipantSession.Step.DEMOGRAPHICS
+        session.demographic_page_index = 0
+        session.save(
+            update_fields=[
+                "current_page_index",
+                "current_assignment_index",
+                "last_step",
+                "demographic_page_index",
+            ]
+        )
+        return redirect("survey:demographics", slug=slug)
+    session.save(update_fields=["current_page_index", "current_assignment_index"])
+
+    assignment = assignments[session.current_assignment_index]
+    page_questions = pages[session.current_page_index]
+    stored = _answers_for_stimulus(session, assignment.stimulus)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = (
+        session.current_assignment_index == len(assignments) - 1
+        and session.current_page_index == len(pages) - 1
+    )
 
     ctx = _base_context(experiment, session)
     ctx.update(
         {
             "assignment": assignment,
             "stimulus": assignment.stimulus,
-            "page_questions": page_questions,
+            "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "has_more_after_stimuli": _ordered_section_questions(
                 experiment, Question.Section.DEMOGRAPHIC
             ),
-            "show_prompt": any(q.show_prompt for q in page_questions),
+            "show_prompt": any(q.show_prompt for q in visible_questions),
+            "resume_url": _resume_url(request, experiment, session),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -456,25 +836,27 @@ def _save_page_answers(
     assignments: list[StimulusAssignment],
     slug: str,
 ):
+    stored = _answers_for_stimulus(session, assignment.stimulus)
+    visible_questions = _visible_with_submitted(request, page_questions, stored)
     errors, responses = _collect_answers(
-        request, session, assignment.stimulus, page_questions
+        request, session, assignment.stimulus, visible_questions
     )
     if errors:
         for err in errors:
             messages.error(request, err)
         experiment = session.experiment
-        _annotate_submitted(request, page_questions)
+        _annotate_submitted(request, visible_questions)
         ctx = _base_context(experiment, session)
         ctx.update(
             {
                 "assignment": assignment,
                 "stimulus": assignment.stimulus,
-                "page_questions": page_questions,
+                "page_questions": visible_questions,
                 "is_last_page": (
                     session.current_assignment_index == len(assignments) - 1
                     and session.current_page_index == len(pages) - 1
                 ),
-                "show_prompt": any(q.show_prompt for q in page_questions),
+                "show_prompt": any(q.show_prompt for q in visible_questions),
             }
         )
         return render(request, "survey/play.html", ctx, status=400)
@@ -482,21 +864,18 @@ def _save_page_answers(
     with transaction.atomic():
         Response.objects.bulk_create(responses)
         session.current_page_index += 1
-        if session.current_page_index >= len(pages):
-            session.current_page_index = 0
-            session.current_assignment_index += 1
-            if session.current_assignment_index >= len(assignments):
-                session.last_step = ParticipantSession.Step.DEMOGRAPHICS
-                session.demographic_page_index = 0
-                session.save(
-                    update_fields=[
-                        "current_page_index",
-                        "current_assignment_index",
-                        "last_step",
-                        "demographic_page_index",
-                    ]
-                )
-                return redirect("survey:demographics", slug=slug)
+        if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
+            session.last_step = ParticipantSession.Step.DEMOGRAPHICS
+            session.demographic_page_index = 0
+            session.save(
+                update_fields=[
+                    "current_page_index",
+                    "current_assignment_index",
+                    "last_step",
+                    "demographic_page_index",
+                ]
+            )
+            return redirect("survey:demographics", slug=slug)
         session.save(
             update_fields=["current_page_index", "current_assignment_index"]
         )
@@ -506,7 +885,18 @@ def _save_page_answers(
 def _annotate_submitted(request, questions: list[Question]) -> None:
     for q in questions:
         key = f"q_{q.pk}"
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
+        cfg = q.config or {}
+        if q.type == Question.Type.MATRIX:
+            rows = cfg.get("rows") or []
+            q.submitted_matrix = {
+                i: request.POST.get(f"{key}_r{i}", "") for i in range(len(rows))
+            }
+        elif q.type == Question.Type.RANKING:
+            items = cfg.get("items") or []
+            q.submitted_ranks = {
+                i: request.POST.get(f"{key}_i{i}", "") for i in range(len(items))
+            }
+        elif q.type == Question.Type.CHOICE and cfg.get("multi"):
             q.submitted_values = request.POST.getlist(key)
         else:
             q.submitted_value = request.POST.get(key, "")
@@ -521,28 +911,14 @@ def _collect_answers(
     errors: list[str] = []
     responses: list[Response] = []
     for q in questions:
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
-            raw_list = request.POST.getlist(f"q_{q.pk}")
-            if not raw_list:
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw_list)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
-        else:
-            raw = request.POST.get(f"q_{q.pk}")
-            if raw is None or raw == "":
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
+        answered, value, error = _read_one(request, q)
+        if error is not None:
+            errors.append(f"'{q.prompt}' {error}.")
+            continue
+        if not answered:
+            if q.required:
+                errors.append(f"'{q.prompt}' is required.")
+            continue
         responses.append(
             Response(
                 session=session,
@@ -727,31 +1103,20 @@ def _collect_pairwise_answers(
     pair: PairAssignment,
     questions: list[Question],
 ) -> tuple[list[str], list[Response]]:
+    # Pairwise shows all of a pair's questions at once, so branching can only
+    # reference same-page answers; respect visibility against what was submitted.
+    questions = _visible_with_submitted(request, questions, {})
     errors: list[str] = []
     responses: list[Response] = []
     for q in questions:
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
-            raw_list = request.POST.getlist(f"q_{q.pk}")
-            if not raw_list:
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw_list)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
-        else:
-            raw = request.POST.get(f"q_{q.pk}")
-            if raw is None or raw == "":
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
+        answered, value, error = _read_one(request, q)
+        if error is not None:
+            errors.append(f"'{q.prompt}' {error}.")
+            continue
+        if not answered:
+            if q.required:
+                errors.append(f"'{q.prompt}' is required.")
+            continue
         responses.append(
             Response(
                 session=session,
@@ -838,38 +1203,68 @@ def demographics(request, slug: str):
     if not pages:
         return _finish_session(request, session, slug)
 
-    if session.demographic_page_index >= len(pages):
-        return _finish_session(request, session, slug)
-
-    page_questions = pages[session.demographic_page_index]
-    is_last_page = session.demographic_page_index == len(pages) - 1
-
+    # POST submits the page the participant is currently viewing.
     if request.method == "POST":
-        errors, responses = _collect_answers(request, session, None, page_questions)
+        if session.demographic_page_index >= len(pages):
+            return redirect("survey:demographics", slug=slug)
+        page_questions = pages[session.demographic_page_index]
+        is_last_page = session.demographic_page_index == len(pages) - 1
+        stored = _answers_for_demographics(session)
+        visible_questions = _visible_with_submitted(request, page_questions, stored)
+        errors, responses = _collect_answers(
+            request, session, None, visible_questions
+        )
         if errors:
             for err in errors:
                 messages.error(request, err)
-            _annotate_submitted(request, page_questions)
+            _annotate_submitted(request, visible_questions)
             ctx = _base_context(experiment, session)
-            ctx.update({"page_questions": page_questions, "is_last_page": is_last_page})
+            ctx.update(
+                {"page_questions": visible_questions, "is_last_page": is_last_page}
+            )
             return render(request, "survey/demographics.html", ctx, status=400)
         with transaction.atomic():
             Response.objects.bulk_create(responses)
             session.demographic_page_index += 1
-            if session.demographic_page_index >= len(pages):
+            if _next_renderable_demographic_page(session, pages) == "finish":
                 return _finish_session(request, session, slug)
             session.save(update_fields=["demographic_page_index"])
         return redirect("survey:demographics", slug=slug)
 
+    # GET: advance over demographic pages hidden by branching (or finish).
+    if _next_renderable_demographic_page(session, pages) == "finish":
+        return _finish_session(request, session, slug)
+    session.save(update_fields=["demographic_page_index"])
+    page_questions = pages[session.demographic_page_index]
+    stored = _answers_for_demographics(session)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = session.demographic_page_index == len(pages) - 1
     ctx = _base_context(experiment, session)
-    ctx.update({"page_questions": page_questions, "is_last_page": is_last_page})
+    ctx.update(
+        {
+            "page_questions": visible_questions,
+            "is_last_page": is_last_page,
+            "resume_url": _resume_url(request, experiment, session),
+        }
+    )
     return render(request, "survey/demographics.html", ctx)
 
 
 def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
-    session.save(update_fields=["submitted_at", "last_step", "demographic_page_index"])
+    failed, flags = compute_flags(session)
+    session.failed_attention_checks = failed
+    session.flags = flags
+    session.save(
+        update_fields=[
+            "submitted_at",
+            "last_step",
+            "demographic_page_index",
+            "failed_attention_checks",
+            "flags",
+        ]
+    )
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
@@ -877,6 +1272,41 @@ def _finish_session(request, session: ParticipantSession, slug: str):
 # --- thanks ---------------------------------------------------------------
 
 
+@require_http_methods(["GET"])
+def screened_out(request, slug: str):
+    experiment = get_object_or_404(Experiment, slug=slug)
+    ctx = _base_context(experiment, None)
+    ctx["progress_percent"] = None  # no progress bar on the screen-out page
+    return render(request, "survey/screened_out.html", ctx)
+
+
+@require_http_methods(["GET"])
+def resume(request, slug: str, token: str):
+    """Re-enter an in-progress session from a 'save & continue later' link.
+
+    Looks the session up by its secret ``resume_token`` (cookie-independent, so
+    it works on another device), re-establishes the session cookie, and bounces
+    to the step the participant left off on.
+    """
+    experiment = get_object_or_404(Experiment, slug=slug)
+    session = ParticipantSession.objects.filter(
+        experiment=experiment, resume_token=token
+    ).first()
+    if session is None:
+        return render(
+            request,
+            "survey/resume_invalid.html",
+            {"experiment": experiment, "brand": experiment.name},
+            status=404,
+        )
+    if session.submitted_at is not None:
+        request.session.pop(_session_key(slug), None)
+        return redirect("survey:thanks", slug=slug)
+    request.session[_session_key(slug)] = str(session.id)
+    return redirect(required_step_url(session))
+
+
+@require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
     return render(

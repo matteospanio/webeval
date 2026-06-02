@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <h1>This resume link isn't valid</h1>
+    <p>The link may be mistyped, or the session may no longer be available.</p>
+    <p><a href="{% url 'survey:consent' slug=experiment.slug %}">Start the survey again</a>.</p>
+  </article>
+{% endblock %}

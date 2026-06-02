@@ -68,6 +68,33 @@ class TextStimulusFactory(StimulusFactory):
     text_body = factory.Sequence(lambda n: f"Prompt body #{n}: imagine a short melody.")
 
 
+class VideoStimulusFactory(StimulusFactory):
+    """A video stimulus — carries a video file, no audio."""
+
+    kind = Stimulus.Kind.VIDEO
+    audio = None
+    video = factory.django.FileField(
+        filename="clip.mp4",
+        data=b"\x00\x00\x00\x18ftypmp42",  # minimal MP4 ftyp header
+    )
+
+
+class HtmlStimulusFactory(StimulusFactory):
+    """An HTML-snippet stimulus — rendered as raw HTML to participants."""
+
+    kind = Stimulus.Kind.HTML
+    audio = None
+    text_body = "<p>Hello <strong>world</strong></p>"
+
+
+class EmbedStimulusFactory(StimulusFactory):
+    """An embedded-URL stimulus — shown to participants in an iframe."""
+
+    kind = Stimulus.Kind.EMBED
+    audio = None
+    embed_url = "https://example.org/embed/abc"
+
+
 class RatingQuestionFactory(DjangoModelFactory):
     class Meta:
         model = Question
@@ -128,6 +155,63 @@ class LikertQuestionFactory(DjangoModelFactory):
                 "Strongly agree",
             ],
         }
+    )
+
+
+class NumericQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.DEMOGRAPHIC
+    type = Question.Type.NUMERIC
+    prompt = "Your age?"
+    required = True
+    config = factory.LazyFunction(
+        lambda: {"min": 0, "max": 120, "integer": True, "unit": "years"}
+    )
+
+
+class MatrixQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.STIMULUS
+    type = Question.Type.MATRIX
+    prompt = "Rate each aspect of this clip."
+    required = True
+    config = factory.LazyFunction(
+        lambda: {
+            "rows": ["Clarity", "Musicality"],
+            "columns": ["Low", "Medium", "High"],
+        }
+    )
+
+
+class RankingQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.STIMULUS
+    type = Question.Type.RANKING
+    prompt = "Rank these from best to worst."
+    required = True
+    config = factory.LazyFunction(lambda: {"items": ["A", "B", "C"]})
+
+
+class ScreeningQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.SCREENING
+    type = Question.Type.CHOICE
+    prompt = "Are you 18 or older?"
+    required = True
+    config = factory.LazyFunction(
+        lambda: {"choices": ["Yes", "No"], "multi": False}
     )
 
 

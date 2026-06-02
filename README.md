@@ -12,11 +12,17 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 ## Features
 
+- Multi-user platform: per-study ownership with owner/editor/viewer roles, collaboration by invitation, and a researcher dashboard at `/studio/` (separate from the Django admin)
 - Standard single-stimulus studies and pairwise comparison studies
-- Audio, image, and text stimuli in one experiment model
-- Rating, multiple-choice, free-text, and Likert questions
+- Audio, video, image, text, HTML-snippet, and embedded-URL stimuli in one experiment model
+- Rating, multiple-choice, free-text, Likert, numeric, matrix/grid, and ranking questions
 - PsyToolkit-style pagination with author-controlled page breaks
-- Balanced assignment strategies across conditions
+- Conditional display / skip logic: show a question only when earlier answers match
+- Save & continue later: resume an in-progress session from a private link, on any device
+- Pre-task screening / eligibility flows that screen out ineligible participants before the main task
+- Attention checks and automatic quality flags (failed check, speeder, straight-lining, duplicate) with one-click "exclude flagged" exports
+- Stable per-browser participant IDs, with optional one-submission-per-participant enforcement and duplicate-session detection
+- Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
 - Admin-native analytics, SVG charts, and CSV exports
@@ -28,7 +34,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
 
-Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, conditional branching, longitudinal scheduling, or richer stimulus types such as video.
+Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts or longitudinal scheduling.
 
 ## Quick Start
 
@@ -49,7 +55,8 @@ uv run ./manage.py runserver
 
 Then open:
 
-- `http://127.0.0.1:8000/admin/` for the staff interface
+- `http://127.0.0.1:8000/studio/` for the researcher dashboard (sign in at `/accounts/login/`, or register at `/accounts/register/`)
+- `http://127.0.0.1:8000/admin/` for the staff/superuser interface
 - `http://127.0.0.1:8000/s/<slug>/` for a participant-facing study
 
 The default setup uses SQLite. Environment variables are documented in `.env.example`.
@@ -71,11 +78,12 @@ Conditions, stimuli, and questions can only be structurally edited while an expe
 For standard studies, participants move through:
 
 1. Consent
-2. Optional audio check
-3. Instructions
-4. One or more stimulus pages
-5. One or more demographic pages
-6. Thanks
+2. Optional screening / eligibility (ineligible participants are screened out here)
+3. Optional audio check
+4. Instructions
+5. One or more stimulus pages
+6. One or more demographic pages
+7. Thanks
 
 Questions are grouped into pages with a PsyToolkit-style `page_break_before` flag. Each page posts only the answers visible on that page.
 
@@ -92,8 +100,11 @@ Participants compare two stimuli side by side. Pairings are built across conditi
 ### Stimulus types
 
 - `audio`: uploaded audio file with validation, SHA-256 checksum, and duration extraction
+- `video`: uploaded video file with validation, SHA-256 checksum, duration extraction, and watch-time tracking
 - `image`: uploaded image file with validation and SHA-256 checksum
 - `text`: inline text body with no uploaded media
+- `html`: researcher-authored HTML snippet rendered inline
+- `embed`: external URL shown in a sandboxed iframe (e.g. a hosted player or widget)
 
 ### Question types
 
@@ -101,8 +112,13 @@ Participants compare two stimuli side by side. Pairings are built across conditi
 - Multiple choice
 - Free text
 - Likert scale
+- Numeric input (optional min/max, integer-only, unit label)
+- Matrix / grid (several rows sharing one answer scale)
+- Ranking / ordering (assign each item a unique rank; no-JS rank selects)
 
 Questions can be marked as required, split onto separate pages, and optionally show the originating stimulus prompt to participants.
+
+A question may also carry **skip logic** (`visible_if`): show it only when earlier answers in the same section match, e.g. `{"question": 12, "op": "eq", "value": "Yes"}` (or `{"all": [...]}` / `{"any": [...]}`). Cross-page branching is fully server-side; same-page dependents are revealed live by a small progressive-enhancement script.
 
 ## Admin and Exports
 
@@ -118,8 +134,35 @@ The admin UI is built on Django admin with django-unfold and contains the full s
 - printable and machine-readable reproducibility exports
 - ZIP archive export and import for study portability
 
+## Accounts, roles & collaboration
+
+webeval is multi-user. Each study has an **owner**, and access is scoped by role:
+
+- **Owner** — full control: edit, results/exports, manage collaborators, transfer ownership, lifecycle.
+- **Editor** — edit the study (structure, stimulus/prompt uploads) and view results.
+- **Viewer** — view results and exports only.
+
+Researchers work from the **studio dashboard** at `/studio/` (outside the Django
+admin): they see only studies they own or collaborate on, create new studies,
+view live stats/exports, and manage access. Owners invite collaborators by email
+from a study's **Access** page; the invitee follows a single-use, expiring link
+(`/accounts/invite/<token>/`) and signs in or registers to accept. Every
+access-control change is recorded in an append-only audit log.
+
+The same ownership rules are enforced everywhere: the Django admin changelists
+and per-study views are scoped to a non-superuser's own/shared studies, and the
+REST API checks that a key's user has edit/view access to the target study.
+Superusers retain full visibility. Studies created before this model existed
+(no owner) remain accessible to staff users until an owner is assigned, so
+upgrading is non-breaking.
+
+Platform admins manage users, groups and the access/audit changelists from the
+Django admin under **Users & access**.
+
 ## Project Layout
 
+- `accounts/`: identity + access — profiles, per-study memberships/roles, invitations, the permission helper, the access audit log, and auth/invite views
+- `studio/`: the researcher-facing dashboard (study list, creation, results, and access management) outside the Django admin
 - `experiments/`: experiment models, admin, assignment strategies, exports, analytics, and charts
 - `survey/`: participant sessions, response capture, flow control, metadata capture, and participant-facing views
 - `core/`: Django settings, URL wiring, and project-level integration
@@ -151,6 +194,7 @@ Common settings:
 - `GEOIP_PATH` for optional country lookup via MaxMind GeoLite2
 - `STIMULUS_MAX_UPLOAD_BYTES`, `STIMULUS_ALLOWED_EXTENSIONS`, `STIMULUS_ALLOWED_MIME_TYPES`
 - `STIMULUS_MAX_IMAGE_UPLOAD_BYTES`, `STIMULUS_ALLOWED_IMAGE_EXTENSIONS`
+- `STIMULUS_MAX_VIDEO_UPLOAD_BYTES`, `STIMULUS_ALLOWED_VIDEO_EXTENSIONS`
 
 If `GEOIP_PATH` is unset or the database is missing, participant country lookup is skipped without breaking the app.
 

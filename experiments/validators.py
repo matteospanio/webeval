@@ -38,3 +38,21 @@ def image_size_validator(file_obj) -> None:
         raise ValidationError(
             f"Image file is {size} bytes; maximum allowed is {cap} bytes."
         )
+
+
+def video_extension_validator():
+    return FileExtensionValidator(
+        allowed_extensions=list(settings.STIMULUS_ALLOWED_VIDEO_EXTENSIONS)
+    )
+
+
+def video_size_validator(file_obj) -> None:
+    """Reject video uploads larger than STIMULUS_MAX_VIDEO_UPLOAD_BYTES."""
+    size = getattr(file_obj, "size", None)
+    if size is None:
+        return
+    cap = settings.STIMULUS_MAX_VIDEO_UPLOAD_BYTES
+    if size > cap:
+        raise ValidationError(
+            f"Video file is {size} bytes; maximum allowed is {cap} bytes."
+        )

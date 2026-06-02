@@ -40,8 +40,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apikeys",
+    "accounts",
     "experiments",
     "survey",
+    "studio",
 ]
 
 REST_FRAMEWORK = {
@@ -119,6 +121,30 @@ MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# --- Authentication / accounts ------------------------------------------
+#
+# Researchers sign in to the studio dashboard (not the Django admin), so the
+# auth machinery points at the accounts app rather than admin login.
+LOGIN_URL = reverse_lazy("accounts:login")
+LOGIN_REDIRECT_URL = reverse_lazy("studio:studies")
+LOGOUT_REDIRECT_URL = reverse_lazy("accounts:login")
+
+# Allow self-service researcher registration. Set False to make the platform
+# invitation-only (admins create users; collaborators join via invite links).
+ACCOUNTS_ALLOW_REGISTRATION = env.bool("ACCOUNTS_ALLOW_REGISTRATION", default=True)
+
+# Email — defaults to the console backend so invitation links are printed to
+# the runserver log in development. Configure SMTP via EMAIL_* in production.
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.console.EmailBackend",
+)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webeval <no-reply@localhost>")
+
+# Absolute base URL for links built outside a request (reserved for future
+# notification hooks; invite links in-app are built from the request host).
+SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
+
 # --- webeval-specific ----------------------------------------------------
 
 # Path to an offline MaxMind GeoLite2-Country.mmdb file. If unset or missing,
@@ -146,6 +172,12 @@ STIMULUS_MAX_IMAGE_UPLOAD_BYTES = env.int(
 )
 STIMULUS_ALLOWED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp", "gif")
 
+# Video stimulus upload limits (used when Stimulus.kind == "video").
+STIMULUS_MAX_VIDEO_UPLOAD_BYTES = env.int(
+    "STIMULUS_MAX_VIDEO_UPLOAD_BYTES", default=50 * 1024 * 1024
+)
+STIMULUS_ALLOWED_VIDEO_EXTENSIONS = ("mp4", "webm", "ogv", "mov", "m4v")
+
 # --- django-unfold theme ------------------------------------------------
 #
 # Unfold re-skins the Django admin. ModelAdmins must inherit from
@@ -170,6 +202,11 @@ UNFOLD = {
                         "title": "Summary",
                         "icon": "dashboard",
                         "link": reverse_lazy("admin:index"),
+                    },
+                    {
+                        "title": "Studio dashboard",
+                        "icon": "rocket_launch",
+                        "link": reverse_lazy("studio:studies"),
                     },
                 ],
             },
@@ -230,6 +267,43 @@ UNFOLD = {
                         "icon": "fact_check",
                         "link": reverse_lazy(
                             "admin:survey_response_changelist"
+                        ),
+                    },
+                ],
+            },
+            {
+                "title": "Users & access",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "person",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Groups",
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                    {
+                        "title": "Memberships",
+                        "icon": "badge",
+                        "link": reverse_lazy(
+                            "admin:accounts_membership_changelist"
+                        ),
+                    },
+                    {
+                        "title": "Invitations",
+                        "icon": "mail",
+                        "link": reverse_lazy(
+                            "admin:accounts_invitation_changelist"
+                        ),
+                    },
+                    {
+                        "title": "Access log",
+                        "icon": "history",
+                        "link": reverse_lazy(
+                            "admin:accounts_accessevent_changelist"
                         ),
                     },
                 ],

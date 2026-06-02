@@ -3,7 +3,7 @@
   `q` in the local context.
 {% endcomment %}
 {% load markdown_extras %}
-<fieldset>
+<fieldset{% if q.visible_if %} data-visible-if="{{ q.visible_if|as_json }}" data-qid="{{ q.pk }}"{% endif %}>
   <legend>{{ q.prompt|markdown_inline|safe }}{% if not q.required %} <small>(optional)</small>{% endif %}{% if q.help_text %}<span class="help-tooltip"><span class="help-icon" tabindex="0" aria-label="Show help">?</span><span class="help-content" role="tooltip">{{ q.help_text|markdown_inline|safe }}</span></span>{% endif %}</legend>
 
   {% if q.type == "rating" %}
@@ -65,5 +65,72 @@
       value="{{ q.submitted_value|default:'' }}"
       {% if q.required %}required{% endif %}
     >
+
+  {% elif q.type == "numeric" %}
+    <div class="numeric-row">
+      <input
+        type="number"
+        name="q_{{ q.pk }}"
+        id="q_{{ q.pk }}"
+        min="{{ q.config.min }}"
+        max="{{ q.config.max }}"
+        step="{% if q.config.integer %}1{% else %}any{% endif %}"
+        inputmode="{% if q.config.integer %}numeric{% else %}decimal{% endif %}"
+        value="{{ q.submitted_value|default:'' }}"
+        {% if q.required %}required{% endif %}
+      >
+      {% if q.config.unit %}<span class="numeric-unit">{{ q.config.unit }}</span>{% endif %}
+    </div>
+
+  {% elif q.type == "matrix" %}
+    <table class="matrix-grid">
+      <thead>
+        <tr>
+          <th></th>
+          {% for col in q.config.columns %}<th scope="col">{{ col }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in q.config.rows %}
+        {% with row_index=forloop.counter0 %}
+        <tr>
+          <th scope="row">{{ row }}</th>
+          {% for col in q.config.columns %}
+          <td>
+            <input
+              type="radio"
+              name="q_{{ q.pk }}_r{{ row_index }}"
+              value="{{ col }}"
+              aria-label="{{ row }} — {{ col }}"
+              {% if q.required %}required{% endif %}
+              {% if q.submitted_matrix|get_item:row_index == col %}checked{% endif %}
+            >
+          </td>
+          {% endfor %}
+        </tr>
+        {% endwith %}
+        {% endfor %}
+      </tbody>
+    </table>
+
+  {% elif q.type == "ranking" %}
+    <ol class="ranking-list">
+      {% for item in q.config.items %}
+      {% with item_index=forloop.counter0 %}
+      <li class="ranking-item">
+        <label>
+          <span class="ranking-label">{{ item }}</span>
+          <select name="q_{{ q.pk }}_i{{ item_index }}" {% if q.required %}required{% endif %}>
+            <option value="">—</option>
+            {% for opt in q.config.items %}
+            <option value="{{ forloop.counter }}"{% if q.submitted_ranks|get_item:item_index == forloop.counter|stringformat:"s" %} selected{% endif %}>{{ forloop.counter }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </li>
+      {% endwith %}
+      {% endfor %}
+    </ol>
+    <small class="ranking-hint">Assign each item a unique rank (1 = first).</small>
   {% endif %}
 </fieldset>

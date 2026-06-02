@@ -23,15 +23,19 @@ import hashlib
 import os
 from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
 
+from .branching import OPERATORS, VALUELESS_OPS, iter_clauses
 from .validators import (
     audio_extension_validator,
     audio_size_validator,
     image_extension_validator,
     image_size_validator,
+    video_extension_validator,
+    video_size_validator,
 )
 
 
@@ -125,6 +129,45 @@ class Experiment(models.Model):
             "participants the same order defined by Question.sort_order."
         ),
     )
+    eligibility_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional screening rule evaluated against screening-section "
+            'answers (same JSON shape as Question.visible_if), e.g. {"all": '
+            '[{"question": 7, "op": "gte", "value": 18}]}. Empty = everyone '
+            "eligible. Participants who fail are screened out before the task."
+        ),
+    )
+    min_completion_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, participants who finish faster than this (seconds from "
+            "consent to submit) are flagged as speeders."
+        ),
+    )
+    one_submission_per_participant = models.BooleanField(
+        default=False,
+        help_text=(
+            "If enabled, a participant (identified by a long-lived browser "
+            "cookie) who has already completed this study is shown an "
+            "'already completed' page instead of being able to start again."
+        ),
+    )
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="owned_experiments",
+        help_text=(
+            "The researcher who owns this study. The owner and their "
+            "collaborators are the only non-superusers who can see, edit, or "
+            "export it. Managed from the studio dashboard."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -147,6 +190,7 @@ class Experiment(models.Model):
 
     def clean(self):
         super().clean()
+        _validate_eligibility_rule(self)
         if self.pk:
             old = (
                 Experiment.objects.filter(pk=self.pk)
@@ -327,6 +371,9 @@ class Stimulus(models.Model):
         AUDIO = "audio", "Audio clip"
         IMAGE = "image", "Image"
         TEXT = "text", "Text only"
+        VIDEO = "video", "Video"
+        HTML = "html", "HTML snippet"
+        EMBED = "embed", "Embedded URL (iframe)"
 
     condition = models.ForeignKey(
         Condition,
@@ -357,10 +404,25 @@ class Stimulus(models.Model):
         blank=True,
         validators=[image_extension_validator(), image_size_validator],
     )
-    # Present only when kind == TEXT (rendered with |linebreaks).
+    # Present only when kind == VIDEO.
+    video = models.FileField(
+        upload_to=_stimulus_upload_path,
+        null=True,
+        blank=True,
+        validators=[video_extension_validator(), video_size_validator],
+    )
+    # Present only when kind == TEXT (line breaks) or HTML (rendered as-is).
     text_body = models.TextField(
         blank=True,
-        help_text="Used when kind = Text only. Rendered with line breaks preserved.",
+        help_text=(
+            "Used when kind = Text only (rendered with line breaks) or "
+            "HTML snippet (rendered as raw HTML to participants)."
+        ),
+    )
+    # Present only when kind == EMBED.
+    embed_url = models.URLField(
+        blank=True,
+        help_text="External URL shown in an iframe when kind = Embedded URL.",
     )
 
     duration_seconds = models.FloatField(null=True, blank=True)
@@ -395,24 +457,45 @@ class Stimulus(models.Model):
         self._validate_kind_fields()
 
     def _validate_kind_fields(self) -> None:
+        """Enforce that each kind populates its own field and no foreign media.
+
+        A single matrix keeps the six kinds consistent: every kind owns exactly
+        one field, must populate it, and must not carry any of the others.
+        """
+        K = self.Kind
+        present = {
+            "audio": bool(self.audio),
+            "image": bool(self.image),
+            "video": bool(self.video),
+            "text_body": bool((self.text_body or "").strip()),
+            "embed_url": bool((self.embed_url or "").strip()),
+        }
+        required_field = {
+            K.AUDIO: "audio",
+            K.IMAGE: "image",
+            K.VIDEO: "video",
+            K.TEXT: "text_body",
+            K.HTML: "text_body",
+            K.EMBED: "embed_url",
+        }[self.kind]
+        labels = {
+            "audio": "an audio file",
+            "image": "an image",
+            "video": "a video file",
+            "text_body": "text content",
+            "embed_url": "an embed URL",
+        }
+        kind_label = self.get_kind_display()
         errors: dict[str, str] = {}
-        if self.kind == self.Kind.AUDIO:
-            if not self.audio:
-                errors["audio"] = "Audio stimuli require an uploaded audio file."
-            if self.image:
-                errors["image"] = "Audio stimuli must not carry an image."
-        elif self.kind == self.Kind.IMAGE:
-            if not self.image:
-                errors["image"] = "Image stimuli require an uploaded image file."
-            if self.audio:
-                errors["audio"] = "Image stimuli must not carry an audio file."
-        elif self.kind == self.Kind.TEXT:
-            if not (self.text_body or "").strip():
-                errors["text_body"] = "Text stimuli require non-empty text."
-            if self.audio:
-                errors["audio"] = "Text stimuli must not carry an audio file."
-            if self.image:
-                errors["image"] = "Text stimuli must not carry an image."
+        if not present[required_field]:
+            errors[required_field] = (
+                f"{kind_label} stimuli require {labels[required_field]}."
+            )
+        for field, is_present in present.items():
+            if field != required_field and is_present:
+                errors[field] = (
+                    f"{kind_label} stimuli must not carry {labels[field]}."
+                )
         if errors:
             raise ValidationError(errors)
 
@@ -445,15 +528,16 @@ class Stimulus(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Duration only makes sense for audio; mutagen reads metadata from
-        # the stored file path.
+        # Duration makes sense for time-based media (audio + video); mutagen
+        # reads metadata from the stored file path.
+        media = self._media_field()
         if (
-            self.kind == self.Kind.AUDIO
+            self.kind in (self.Kind.AUDIO, self.Kind.VIDEO)
             and self.duration_seconds is None
-            and self.audio
+            and media is not None
         ):
             duration = _safe_duration_seconds(
-                self.audio.path if _has_path(self.audio) else None
+                media.path if _has_path(media) else None
             )
             if duration is not None:
                 type(self).objects.filter(pk=self.pk).update(duration_seconds=duration)
@@ -465,6 +549,8 @@ class Stimulus(models.Model):
             return self.audio
         if self.kind == self.Kind.IMAGE and self.image:
             return self.image
+        if self.kind == self.Kind.VIDEO and self.video:
+            return self.video
         return None
 
 
@@ -499,12 +585,16 @@ class Question(models.Model):
     class Section(models.TextChoices):
         STIMULUS = "stimulus", "Asked per stimulus"
         DEMOGRAPHIC = "demographic", "Post-survey demographics"
+        SCREENING = "screening", "Screening / eligibility (before the task)"
 
     class Type(models.TextChoices):
         RATING = "rating", "Rating slider"
         CHOICE = "choice", "Multiple choice"
         TEXT = "text", "Free text"
         LIKERT = "likert", "Likert scale"
+        NUMERIC = "numeric", "Numeric input"
+        MATRIX = "matrix", "Matrix (grid)"
+        RANKING = "ranking", "Ranking / ordering"
 
     experiment = models.ForeignKey(
         Experiment,
@@ -526,7 +616,10 @@ class Question(models.Model):
             "rating: {min, max, step, min_label?, max_label?}. "
             "choice: {choices: [...], multi: bool}. "
             "text: {max_length}. "
-            "likert: {steps: int, labels: [str, ...]}."
+            "likert: {steps: int, labels: [str, ...]}. "
+            "numeric: {min?, max?, integer?, unit?}. "
+            "matrix: {rows: [...], columns: [...]}. "
+            "ranking: {items: [...]}."
         ),
     )
 
@@ -547,6 +640,26 @@ class Question(models.Model):
             "on this question's page."
         ),
     )
+    visible_if = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional skip logic: show this question only when earlier answers "
+            'match. JSON, e.g. {"question": 12, "op": "eq", "value": "Yes"} or '
+            '{"all": [clauses]} / {"any": [clauses]}. The referenced question '
+            "must be earlier (lower sort order) in the same section."
+        ),
+    )
+    attention_expected = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, this question is an attention check: a participant whose "
+            "answer differs from this value is flagged. Enter the expected "
+            'answer as JSON, e.g. "Strongly agree" or 4. Leave blank for a '
+            "normal question."
+        ),
+    )
 
     class Meta:
         ordering = ("experiment", "section", "sort_order", "id")
@@ -554,10 +667,15 @@ class Question(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"[{self.get_section_display()}] {self.prompt[:60]}"
 
+    @property
+    def is_attention_check(self) -> bool:
+        return self.attention_expected is not None
+
     def clean(self):
         super().clean()
         _ensure_draft(self.experiment if self.experiment_id else None)
         _validate_question_config(self.type, self.config or {})
+        _validate_visible_if(self)
 
     def delete(self, *args, **kwargs):
         _ensure_draft(self.experiment if self.experiment_id else None)
@@ -634,7 +752,181 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
             )
         return
 
+    if question_type == Question.Type.NUMERIC:
+        for key in ("min", "max"):
+            if key in config:
+                val = config[key]
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    raise ValidationError(
+                        {"config": f"numeric {key!r} must be a number."}
+                    )
+        low = config.get("min")
+        high = config.get("max")
+        if low is not None and high is not None and low >= high:
+            raise ValidationError(
+                {"config": "numeric 'min' must be less than 'max'."}
+            )
+        if "integer" in config and not isinstance(config["integer"], bool):
+            raise ValidationError(
+                {"config": "numeric 'integer' must be true or false."}
+            )
+        if "unit" in config and not isinstance(config["unit"], str):
+            raise ValidationError({"config": "numeric 'unit' must be a string."})
+        return
+
+    if question_type == Question.Type.MATRIX:
+        rows = config.get("rows")
+        columns = config.get("columns")
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or not all(isinstance(r, str) and r for r in rows)
+        ):
+            raise ValidationError(
+                {"config": "matrix questions require a non-empty 'rows' list of strings."}
+            )
+        if len(set(rows)) != len(rows):
+            raise ValidationError({"config": "matrix 'rows' must be distinct."})
+        if (
+            not isinstance(columns, list)
+            or not columns
+            or not all(isinstance(c, str) and c for c in columns)
+        ):
+            raise ValidationError(
+                {"config": "matrix questions require a non-empty 'columns' list of strings."}
+            )
+        return
+
+    if question_type == Question.Type.RANKING:
+        items = config.get("items")
+        if (
+            not isinstance(items, list)
+            or len(items) < 2
+            or not all(isinstance(i, str) and i for i in items)
+        ):
+            raise ValidationError(
+                {"config": "ranking questions require an 'items' list of at least two strings."}
+            )
+        if len(set(items)) != len(items):
+            raise ValidationError({"config": "ranking 'items' must be distinct."})
+        return
+
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})
+
+
+def _validate_visible_if(question: "Question") -> None:
+    """Validate a question's skip-logic rule (see experiments.branching)."""
+    cond = question.visible_if or {}
+    if not cond:
+        return
+    if not isinstance(cond, dict):
+        raise ValidationError({"visible_if": "visible_if must be a JSON object."})
+    if "all" in cond and "any" in cond:
+        raise ValidationError(
+            {"visible_if": "Use only one of 'all' or 'any', not both."}
+        )
+    clauses = list(iter_clauses(cond))
+    if not clauses:
+        raise ValidationError({"visible_if": "visible_if has no clauses."})
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            raise ValidationError({"visible_if": "Each clause must be a JSON object."})
+        op = clause.get("op")
+        if op not in OPERATORS:
+            raise ValidationError(
+                {"visible_if": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
+            )
+        if op not in VALUELESS_OPS and "value" not in clause:
+            raise ValidationError(
+                {"visible_if": f"Operator {op!r} requires a 'value'."}
+            )
+        ref_id = clause.get("question")
+        if not isinstance(ref_id, int):
+            raise ValidationError(
+                {"visible_if": "Each clause needs an integer 'question' id."}
+            )
+        if not question.experiment_id:
+            continue
+        ref = Question.objects.filter(pk=ref_id).first()
+        if ref is None or ref.experiment_id != question.experiment_id:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        f"Clause references question {ref_id}, which is not in "
+                        "this experiment."
+                    )
+                }
+            )
+        if question.pk and ref.pk == question.pk:
+            raise ValidationError(
+                {"visible_if": "A question cannot depend on itself."}
+            )
+        if ref.section != question.section:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        "A condition may only reference a question in the same "
+                        "section."
+                    )
+                }
+            )
+        if ref.sort_order >= question.sort_order:
+            raise ValidationError(
+                {
+                    "visible_if": (
+                        "The controlling question must come earlier (a lower "
+                        "sort order than this question)."
+                    )
+                }
+            )
+
+
+def _validate_eligibility_rule(experiment: "Experiment") -> None:
+    """Validate Experiment.eligibility_rule (the screening pass/fail rule)."""
+    rule = experiment.eligibility_rule or {}
+    if not rule:
+        return
+    if not isinstance(rule, dict):
+        raise ValidationError(
+            {"eligibility_rule": "eligibility_rule must be a JSON object."}
+        )
+    if "all" in rule and "any" in rule:
+        raise ValidationError(
+            {"eligibility_rule": "Use only one of 'all' or 'any', not both."}
+        )
+    clauses = list(iter_clauses(rule))
+    if not clauses:
+        raise ValidationError({"eligibility_rule": "eligibility_rule has no clauses."})
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            raise ValidationError(
+                {"eligibility_rule": "Each clause must be a JSON object."}
+            )
+        op = clause.get("op")
+        if op not in OPERATORS:
+            raise ValidationError(
+                {"eligibility_rule": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
+            )
+        if op not in VALUELESS_OPS and "value" not in clause:
+            raise ValidationError(
+                {"eligibility_rule": f"Operator {op!r} requires a 'value'."}
+            )
+        ref_id = clause.get("question")
+        if not isinstance(ref_id, int):
+            raise ValidationError(
+                {"eligibility_rule": "Each clause needs an integer 'question' id."}
+            )
+        if experiment.pk:
+            ref = Question.objects.filter(pk=ref_id, experiment=experiment).first()
+            if ref is not None and ref.section != Question.Section.SCREENING:
+                raise ValidationError(
+                    {
+                        "eligibility_rule": (
+                            "Eligibility clauses must reference screening-section "
+                            "questions."
+                        )
+                    }
+                )
 
 
 # --- Prompt ------------------------------------------------------------------
