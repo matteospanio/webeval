@@ -5,7 +5,10 @@
 (function () {
   "use strict";
 
-  const audio = document.getElementById("stimulus-audio");
+  // Track the first media element (audio or video) that opts in via a
+  // data-listen-endpoint attribute. The HTMLMediaElement API is identical for
+  // <audio> and <video>, so the same accumulation logic works for both.
+  const audio = document.querySelector("[data-listen-endpoint]");
   if (!audio) {
     return;
   }

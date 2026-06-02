@@ -73,6 +73,8 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
                 filename = os.path.basename(s.audio.name)
             elif s.kind == s.Kind.IMAGE and s.image:
                 filename = os.path.basename(s.image.name)
+            elif s.kind == s.Kind.VIDEO and s.video:
+                filename = os.path.basename(s.video.name)
             else:
                 filename = None
             stimuli.append(
@@ -89,7 +91,10 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
                     "duration_seconds": s.duration_seconds,
                     "is_active": s.is_active,
                     "sort_order": s.sort_order,
-                    "text_body": s.text_body if s.kind == s.Kind.TEXT else "",
+                    "text_body": s.text_body
+                    if s.kind in (s.Kind.TEXT, s.Kind.HTML)
+                    else "",
+                    "embed_url": s.embed_url if s.kind == s.Kind.EMBED else "",
                 }
             )
 
@@ -124,6 +129,8 @@ def _stimulus_media_source(stim):
         return stim.audio, os.path.basename(stim.audio.name)
     if stim.kind == stim.Kind.IMAGE and stim.image:
         return stim.image, os.path.basename(stim.image.name)
+    if stim.kind == stim.Kind.VIDEO and stim.video:
+        return stim.video, os.path.basename(stim.video.name)
     return None, None
 
 

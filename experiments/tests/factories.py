@@ -68,6 +68,33 @@ class TextStimulusFactory(StimulusFactory):
     text_body = factory.Sequence(lambda n: f"Prompt body #{n}: imagine a short melody.")
 
 
+class VideoStimulusFactory(StimulusFactory):
+    """A video stimulus — carries a video file, no audio."""
+
+    kind = Stimulus.Kind.VIDEO
+    audio = None
+    video = factory.django.FileField(
+        filename="clip.mp4",
+        data=b"\x00\x00\x00\x18ftypmp42",  # minimal MP4 ftyp header
+    )
+
+
+class HtmlStimulusFactory(StimulusFactory):
+    """An HTML-snippet stimulus — rendered as raw HTML to participants."""
+
+    kind = Stimulus.Kind.HTML
+    audio = None
+    text_body = "<p>Hello <strong>world</strong></p>"
+
+
+class EmbedStimulusFactory(StimulusFactory):
+    """An embedded-URL stimulus — shown to participants in an iframe."""
+
+    kind = Stimulus.Kind.EMBED
+    audio = None
+    embed_url = "https://example.org/embed/abc"
+
+
 class RatingQuestionFactory(DjangoModelFactory):
     class Meta:
         model = Question

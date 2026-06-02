@@ -14,7 +14,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 - Multi-user platform: per-study ownership with owner/editor/viewer roles, collaboration by invitation, and a researcher dashboard at `/studio/` (separate from the Django admin)
 - Standard single-stimulus studies and pairwise comparison studies
-- Audio, image, and text stimuli in one experiment model
+- Audio, video, image, text, HTML-snippet, and embedded-URL stimuli in one experiment model
 - Rating, multiple-choice, free-text, Likert, numeric, matrix/grid, and ranking questions
 - PsyToolkit-style pagination with author-controlled page breaks
 - Balanced assignment strategies across conditions
@@ -29,7 +29,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
 
-Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, conditional branching, longitudinal scheduling, or richer stimulus types such as video.
+Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, conditional branching, or longitudinal scheduling.
 
 ## Quick Start
 
@@ -94,8 +94,11 @@ Participants compare two stimuli side by side. Pairings are built across conditi
 ### Stimulus types
 
 - `audio`: uploaded audio file with validation, SHA-256 checksum, and duration extraction
+- `video`: uploaded video file with validation, SHA-256 checksum, duration extraction, and watch-time tracking
 - `image`: uploaded image file with validation and SHA-256 checksum
 - `text`: inline text body with no uploaded media
+- `html`: researcher-authored HTML snippet rendered inline
+- `embed`: external URL shown in a sandboxed iframe (e.g. a hosted player or widget)
 
 ### Question types
 
@@ -183,6 +186,7 @@ Common settings:
 - `GEOIP_PATH` for optional country lookup via MaxMind GeoLite2
 - `STIMULUS_MAX_UPLOAD_BYTES`, `STIMULUS_ALLOWED_EXTENSIONS`, `STIMULUS_ALLOWED_MIME_TYPES`
 - `STIMULUS_MAX_IMAGE_UPLOAD_BYTES`, `STIMULUS_ALLOWED_IMAGE_EXTENSIONS`
+- `STIMULUS_MAX_VIDEO_UPLOAD_BYTES`, `STIMULUS_ALLOWED_VIDEO_EXTENSIONS`
 
 If `GEOIP_PATH` is unset or the database is missing, participant country lookup is skipped without breaking the app.
 

@@ -9,6 +9,7 @@ in :mod:`experiments.models`.
 """
 from __future__ import annotations
 
+import io
 import json
 import os
 import zipfile
@@ -48,6 +49,8 @@ def import_experiment_archive(
     is malformed, the schema version is unsupported, or the target slug is
     already taken.
     """
+    if isinstance(file_or_bytes, (bytes, bytearray)):
+        file_or_bytes = io.BytesIO(file_or_bytes)
     try:
         zf = zipfile.ZipFile(file_or_bytes)
     except zipfile.BadZipFile as exc:
@@ -142,10 +145,12 @@ def _create_stimuli(
         )
         archive_path = entry.get("archive_path")
         filename = entry.get("filename")
-        if kind == Stimulus.Kind.TEXT:
+        if kind in (Stimulus.Kind.TEXT, Stimulus.Kind.HTML):
             stim.text_body = entry.get("text_body") or entry.get("description") or ""
-            if not stim.text_body.strip():
+            if kind == Stimulus.Kind.TEXT and not stim.text_body.strip():
                 stim.text_body = entry.get("title", "")
+        elif kind == Stimulus.Kind.EMBED:
+            stim.embed_url = entry.get("embed_url") or ""
         elif archive_path:
             if archive_path not in archive_names:
                 raise ValidationError(
@@ -159,6 +164,8 @@ def _create_stimuli(
                 stim.audio = content
             elif kind == Stimulus.Kind.IMAGE:
                 stim.image = content
+            elif kind == Stimulus.Kind.VIDEO:
+                stim.video = content
         stim.save()
 
 

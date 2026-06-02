@@ -33,6 +33,8 @@ from .validators import (
     audio_size_validator,
     image_extension_validator,
     image_size_validator,
+    video_extension_validator,
+    video_size_validator,
 )
 
 
@@ -341,6 +343,9 @@ class Stimulus(models.Model):
         AUDIO = "audio", "Audio clip"
         IMAGE = "image", "Image"
         TEXT = "text", "Text only"
+        VIDEO = "video", "Video"
+        HTML = "html", "HTML snippet"
+        EMBED = "embed", "Embedded URL (iframe)"
 
     condition = models.ForeignKey(
         Condition,
@@ -371,10 +376,25 @@ class Stimulus(models.Model):
         blank=True,
         validators=[image_extension_validator(), image_size_validator],
     )
-    # Present only when kind == TEXT (rendered with |linebreaks).
+    # Present only when kind == VIDEO.
+    video = models.FileField(
+        upload_to=_stimulus_upload_path,
+        null=True,
+        blank=True,
+        validators=[video_extension_validator(), video_size_validator],
+    )
+    # Present only when kind == TEXT (line breaks) or HTML (rendered as-is).
     text_body = models.TextField(
         blank=True,
-        help_text="Used when kind = Text only. Rendered with line breaks preserved.",
+        help_text=(
+            "Used when kind = Text only (rendered with line breaks) or "
+            "HTML snippet (rendered as raw HTML to participants)."
+        ),
+    )
+    # Present only when kind == EMBED.
+    embed_url = models.URLField(
+        blank=True,
+        help_text="External URL shown in an iframe when kind = Embedded URL.",
     )
 
     duration_seconds = models.FloatField(null=True, blank=True)
@@ -409,24 +429,45 @@ class Stimulus(models.Model):
         self._validate_kind_fields()
 
     def _validate_kind_fields(self) -> None:
+        """Enforce that each kind populates its own field and no foreign media.
+
+        A single matrix keeps the six kinds consistent: every kind owns exactly
+        one field, must populate it, and must not carry any of the others.
+        """
+        K = self.Kind
+        present = {
+            "audio": bool(self.audio),
+            "image": bool(self.image),
+            "video": bool(self.video),
+            "text_body": bool((self.text_body or "").strip()),
+            "embed_url": bool((self.embed_url or "").strip()),
+        }
+        required_field = {
+            K.AUDIO: "audio",
+            K.IMAGE: "image",
+            K.VIDEO: "video",
+            K.TEXT: "text_body",
+            K.HTML: "text_body",
+            K.EMBED: "embed_url",
+        }[self.kind]
+        labels = {
+            "audio": "an audio file",
+            "image": "an image",
+            "video": "a video file",
+            "text_body": "text content",
+            "embed_url": "an embed URL",
+        }
+        kind_label = self.get_kind_display()
         errors: dict[str, str] = {}
-        if self.kind == self.Kind.AUDIO:
-            if not self.audio:
-                errors["audio"] = "Audio stimuli require an uploaded audio file."
-            if self.image:
-                errors["image"] = "Audio stimuli must not carry an image."
-        elif self.kind == self.Kind.IMAGE:
-            if not self.image:
-                errors["image"] = "Image stimuli require an uploaded image file."
-            if self.audio:
-                errors["audio"] = "Image stimuli must not carry an audio file."
-        elif self.kind == self.Kind.TEXT:
-            if not (self.text_body or "").strip():
-                errors["text_body"] = "Text stimuli require non-empty text."
-            if self.audio:
-                errors["audio"] = "Text stimuli must not carry an audio file."
-            if self.image:
-                errors["image"] = "Text stimuli must not carry an image."
+        if not present[required_field]:
+            errors[required_field] = (
+                f"{kind_label} stimuli require {labels[required_field]}."
+            )
+        for field, is_present in present.items():
+            if field != required_field and is_present:
+                errors[field] = (
+                    f"{kind_label} stimuli must not carry {labels[field]}."
+                )
         if errors:
             raise ValidationError(errors)
 
@@ -459,15 +500,16 @@ class Stimulus(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Duration only makes sense for audio; mutagen reads metadata from
-        # the stored file path.
+        # Duration makes sense for time-based media (audio + video); mutagen
+        # reads metadata from the stored file path.
+        media = self._media_field()
         if (
-            self.kind == self.Kind.AUDIO
+            self.kind in (self.Kind.AUDIO, self.Kind.VIDEO)
             and self.duration_seconds is None
-            and self.audio
+            and media is not None
         ):
             duration = _safe_duration_seconds(
-                self.audio.path if _has_path(self.audio) else None
+                media.path if _has_path(media) else None
             )
             if duration is not None:
                 type(self).objects.filter(pk=self.pk).update(duration_seconds=duration)
@@ -479,6 +521,8 @@ class Stimulus(models.Model):
             return self.audio
         if self.kind == self.Kind.IMAGE and self.image:
             return self.image
+        if self.kind == self.Kind.VIDEO and self.video:
+            return self.video
         return None
 
 

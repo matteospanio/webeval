@@ -172,6 +172,12 @@ STIMULUS_MAX_IMAGE_UPLOAD_BYTES = env.int(
 )
 STIMULUS_ALLOWED_IMAGE_EXTENSIONS = ("png", "jpg", "jpeg", "webp", "gif")
 
+# Video stimulus upload limits (used when Stimulus.kind == "video").
+STIMULUS_MAX_VIDEO_UPLOAD_BYTES = env.int(
+    "STIMULUS_MAX_VIDEO_UPLOAD_BYTES", default=50 * 1024 * 1024
+)
+STIMULUS_ALLOWED_VIDEO_EXTENSIONS = ("mp4", "webm", "ogv", "mov", "m4v")
+
 # --- django-unfold theme ------------------------------------------------
 #
 # Unfold re-skins the Django admin. ModelAdmins must inherit from

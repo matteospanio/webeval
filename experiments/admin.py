@@ -621,7 +621,14 @@ class StimulusAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             "Audio (kind = Audio clip)",
             {
                 "description": "Upload an mp3/wav/ogg file for audio stimuli.",
-                "fields": ("audio", "duration_seconds", "sha256"),
+                "fields": ("audio",),
+            },
+        ),
+        (
+            "Video (kind = Video)",
+            {
+                "description": "Upload an mp4/webm/mov file for video stimuli.",
+                "fields": ("video",),
             },
         ),
         (
@@ -632,11 +639,22 @@ class StimulusAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
         (
-            "Text (kind = Text only)",
+            "Text / HTML (kind = Text only or HTML snippet)",
             {
-                "description": "Used for text-only stimuli — rendered with line breaks preserved.",
+                "description": "Plain text is rendered with line breaks; for the HTML kind the same field is rendered as raw HTML to participants.",
                 "fields": ("text_body",),
             },
+        ),
+        (
+            "Embedded URL (kind = Embedded URL)",
+            {
+                "description": "External URL shown to participants in an iframe (e.g. a hosted player or widget).",
+                "fields": ("embed_url",),
+            },
+        ),
+        (
+            "Computed metadata",
+            {"fields": ("duration_seconds", "sha256")},
         ),
     )
 
