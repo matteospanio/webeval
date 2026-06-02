@@ -169,6 +169,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     actions = (export_repro_json, open_printable, generate_participant_invites)
     actions_list = ("import_experiment",)
     readonly_fields = ("live_stats", "owner")
+    autocomplete_fields = ("follows",)
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "owner", "state", "mode", "description")}),
@@ -197,6 +198,17 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "collect_participant_code",
                     "participant_code_label",
                 )
+            },
+        ),
+        (
+            "Longitudinal (multi-phase)",
+            {
+                "description": (
+                    "Link studies into phases a participant completes over time. "
+                    "Set 'follows' to the previous phase; both phases must collect "
+                    "a participant code."
+                ),
+                "fields": ("follows", "phase_gap_hours"),
             },
         ),
         (

@@ -216,6 +216,25 @@ class Experiment(models.Model):
         default="Participant code",
         help_text="Label for the participant-code field on the consent page.",
     )
+    follows = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="next_phases",
+        help_text=(
+            "For longitudinal studies: the phase a participant must complete "
+            "before this one. Leave blank for a single-phase study or the first "
+            "phase. Both phases must collect a participant code."
+        ),
+    )
+    phase_gap_hours = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Minimum hours after completing the previous phase before this "
+            "phase opens (for spaced return visits)."
+        ),
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -252,6 +271,7 @@ class Experiment(models.Model):
     def clean(self):
         super().clean()
         _validate_eligibility_rule(self)
+        _validate_phase_chain(self)
         if self.pk:
             old = (
                 Experiment.objects.filter(pk=self.pk)
@@ -971,6 +991,39 @@ def _validate_visible_if(question: "Question") -> None:
                     )
                 }
             )
+
+
+def _validate_phase_chain(experiment: "Experiment") -> None:
+    """Validate a longitudinal phase link (``follows``)."""
+    if experiment.follows_id is None:
+        return
+    if experiment.pk and experiment.follows_id == experiment.pk:
+        raise ValidationError({"follows": "A phase can't follow itself."})
+    # Both ends must collect a participant code so returning participants match.
+    if not experiment.collect_participant_code:
+        raise ValidationError(
+            {
+                "collect_participant_code": (
+                    "Follow-up phases must collect a participant code so "
+                    "returning participants can be matched."
+                )
+            }
+        )
+    predecessor = experiment.follows
+    if predecessor is not None and not predecessor.collect_participant_code:
+        raise ValidationError(
+            {"follows": "The previous phase must also collect a participant code."}
+        )
+    # Walk the chain to reject cycles.
+    seen = {experiment.pk} if experiment.pk else set()
+    node = predecessor
+    depth = 0
+    while node is not None and depth < 50:
+        if node.pk in seen:
+            raise ValidationError({"follows": "Phases must not form a cycle."})
+        seen.add(node.pk)
+        node = node.follows
+        depth += 1
 
 
 def _validate_eligibility_rule(experiment: "Experiment") -> None:

@@ -130,6 +130,8 @@ def study_overview(request, slug):
         "survey_url": reverse("survey:consent", kwargs={"slug": experiment.slug}),
         "counts": experiment_counts(experiment),
         "mean_listen_ms": mean_listen_duration_ms(experiment),
+        "follows": experiment.follows,
+        "next_phases": list(experiment.next_phases.all()),
     }
     if experiment.is_pairwise:
         context["pairwise_stats"] = pairwise_experiment_stats(experiment)

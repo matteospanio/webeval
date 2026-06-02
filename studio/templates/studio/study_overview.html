@@ -43,6 +43,14 @@
 <h2>Share with participants</h2>
 <p>Direct link: <a href="{{ survey_url }}">{{ survey_url }}</a></p>
 
+{% if follows or next_phases %}
+<h2>Phases (longitudinal study)</h2>
+<ul>
+  {% if follows %}<li>Follows: <a href="{% url 'studio:study_overview' slug=follows.slug %}">{{ follows.name }}</a></li>{% endif %}
+  {% for np in next_phases %}<li>Next phase: <a href="{% url 'studio:study_overview' slug=np.slug %}">{{ np.name }}</a>{% if np.phase_gap_hours %} (opens {{ np.phase_gap_hours }}h after the previous phase){% endif %}</li>{% endfor %}
+</ul>
+{% endif %}
+
 <h2>Manage</h2>
 <ul>
   {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}

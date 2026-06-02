@@ -25,6 +25,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Completion codes (fixed or unique) for crowdsourcing platforms, external-id capture (e.g. `PROLIFIC_PID`), and compensation tracking with a reconciliation CSV
 - Participant-visible withdrawal & data deletion via a private link (erases answers, leaves an anonymized tombstone, drops out of results)
 - Bot protection (consent honeypot), private studies (shared access code or single-use invite links), and optional participant codes for a stable cross-device identity
+- Longitudinal / multi-phase studies: chain studies into ordered phases a participant returns to over time, with an optional minimum gap between phases and a return link + reusable participant code shown on completion
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -99,6 +100,16 @@ Participants evaluate one stimulus at a time. Each session receives either all e
 #### Pairwise mode
 
 Participants compare two stimuli side by side. Pairings are built across conditions using shared `prompt_group` values, and results can be summarized with win-rate charts and Bradley-Terry analysis.
+
+### Longitudinal / multi-phase studies
+
+A study can be linked to an earlier one with the **Follows** field, turning the two into ordered phases of a longitudinal study. Both phases must collect a participant code — that code is the identity key that ties a participant's visits together across devices and over time.
+
+- A participant can only start a follow-up phase once they have completed the previous phase under the same participant code; otherwise they see an "earlier phase required" page.
+- An optional **phase gap** (in hours) holds a later phase shut until enough time has passed since the previous phase was completed, for spaced return visits.
+- After finishing a phase, the thanks page advertises the next phase: its name, when it opens, a direct return link, and the participant code to reuse.
+
+Phases form a chain (each study follows at most one predecessor); self-references and cycles are rejected at validation time. The chain is configured from the admin's "Longitudinal (multi-phase)" fieldset and shown read-only on the studio overview.
 
 ### Stimulus types
 

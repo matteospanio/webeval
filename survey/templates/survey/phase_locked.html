@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article style="max-width:32rem;margin:2rem auto;">
+    {% if reason == "predecessor" %}
+    <h1>Earlier phase required</h1>
+    <p>This is a later phase of a multi-part study. Please complete
+       <strong>{{ predecessor.name }}</strong> first. If you already did, make sure
+       you enter the <em>same</em> participant code you used before.</p>
+    {% elif reason == "too_early" %}
+    <h1>This phase isn't open yet</h1>
+    <p>Thanks for coming back! This phase of <strong>{{ experiment.name }}</strong>
+       opens around <strong>{{ opens_at|date:"D j M Y, H:i" }}</strong>. Please return
+       after then with the same participant code.</p>
+    {% else %}
+    <h1>This phase isn't available</h1>
+    {% endif %}
+  </article>
+{% endblock %}
