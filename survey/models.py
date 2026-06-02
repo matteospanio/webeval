@@ -29,10 +29,12 @@ from django.db import models
 class ParticipantSession(models.Model):
     class Step(models.TextChoices):
         CONSENT = "consent", "Consent"
+        SCREENING = "screening", "Screening / eligibility"
         INSTRUCTIONS = "instructions", "Instructions"
         AUDIO_CHECK = "audio_check", "Audio playback check"
         STIMULI = "stimuli", "Listening to stimuli"
         DEMOGRAPHICS = "demographics", "Demographic questions"
+        SCREENED_OUT = "screened_out", "Screened out (ineligible)"
         DONE = "done", "Completed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -59,11 +61,13 @@ class ParticipantSession(models.Model):
     current_page_index = models.PositiveSmallIntegerField(default=0)
     current_pair_index = models.PositiveSmallIntegerField(default=0)
     demographic_page_index = models.PositiveSmallIntegerField(default=0)
+    screening_page_index = models.PositiveSmallIntegerField(default=0)
 
     started_at = models.DateTimeField(auto_now_add=True)
     consented_at = models.DateTimeField(null=True, blank=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
     abandoned_at = models.DateTimeField(null=True, blank=True)
+    screened_out_at = models.DateTimeField(null=True, blank=True)
 
     device_type = models.CharField(max_length=16, blank=True)
     browser_family = models.CharField(max_length=64, blank=True)

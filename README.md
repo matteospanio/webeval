@@ -19,6 +19,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - PsyToolkit-style pagination with author-controlled page breaks
 - Conditional display / skip logic: show a question only when earlier answers match
 - Save & continue later: resume an in-progress session from a private link, on any device
+- Pre-task screening / eligibility flows that screen out ineligible participants before the main task
 - Balanced assignment strategies across conditions
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -75,11 +76,12 @@ Conditions, stimuli, and questions can only be structurally edited while an expe
 For standard studies, participants move through:
 
 1. Consent
-2. Optional audio check
-3. Instructions
-4. One or more stimulus pages
-5. One or more demographic pages
-6. Thanks
+2. Optional screening / eligibility (ineligible participants are screened out here)
+3. Optional audio check
+4. Instructions
+5. One or more stimulus pages
+6. One or more demographic pages
+7. Thanks
 
 Questions are grouped into pages with a PsyToolkit-style `page_break_before` flag. Each page posts only the answers visible on that page.
 

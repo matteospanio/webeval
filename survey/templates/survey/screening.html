@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <header>
+      <h1>Before we begin</h1>
+      <p><small>A few quick questions to check this study is a good fit.</small></p>
+    </header>
+
+    {% if messages %}
+      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for q in page_questions %}
+        {% include "survey/_question.html" %}
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit">{% if is_last_page %}Continue{% else %}Next{% endif %}</button>
+      </div>
+    </form>
+  </article>
+  <script src="{% static 'survey/js/branching.js' %}" defer></script>
+{% endblock %}

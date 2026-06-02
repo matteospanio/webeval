@@ -156,6 +156,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "assignment_strategy",
                     "require_audio_check",
                     "randomize_stimulus_questions",
+                    "eligibility_rule",
                 )
             },
         ),

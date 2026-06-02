@@ -129,6 +129,16 @@ class Experiment(models.Model):
             "participants the same order defined by Question.sort_order."
         ),
     )
+    eligibility_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional screening rule evaluated against screening-section "
+            'answers (same JSON shape as Question.visible_if), e.g. {"all": '
+            '[{"question": 7, "op": "gte", "value": 18}]}. Empty = everyone '
+            "eligible. Participants who fail are screened out before the task."
+        ),
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -164,6 +174,7 @@ class Experiment(models.Model):
 
     def clean(self):
         super().clean()
+        _validate_eligibility_rule(self)
         if self.pk:
             old = (
                 Experiment.objects.filter(pk=self.pk)
@@ -558,6 +569,7 @@ class Question(models.Model):
     class Section(models.TextChoices):
         STIMULUS = "stimulus", "Asked per stimulus"
         DEMOGRAPHIC = "demographic", "Post-survey demographics"
+        SCREENING = "screening", "Screening / eligibility (before the task)"
 
     class Type(models.TextChoices):
         RATING = "rating", "Rating slider"
@@ -837,6 +849,54 @@ def _validate_visible_if(question: "Question") -> None:
                     )
                 }
             )
+
+
+def _validate_eligibility_rule(experiment: "Experiment") -> None:
+    """Validate Experiment.eligibility_rule (the screening pass/fail rule)."""
+    rule = experiment.eligibility_rule or {}
+    if not rule:
+        return
+    if not isinstance(rule, dict):
+        raise ValidationError(
+            {"eligibility_rule": "eligibility_rule must be a JSON object."}
+        )
+    if "all" in rule and "any" in rule:
+        raise ValidationError(
+            {"eligibility_rule": "Use only one of 'all' or 'any', not both."}
+        )
+    clauses = list(iter_clauses(rule))
+    if not clauses:
+        raise ValidationError({"eligibility_rule": "eligibility_rule has no clauses."})
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            raise ValidationError(
+                {"eligibility_rule": "Each clause must be a JSON object."}
+            )
+        op = clause.get("op")
+        if op not in OPERATORS:
+            raise ValidationError(
+                {"eligibility_rule": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
+            )
+        if op not in VALUELESS_OPS and "value" not in clause:
+            raise ValidationError(
+                {"eligibility_rule": f"Operator {op!r} requires a 'value'."}
+            )
+        ref_id = clause.get("question")
+        if not isinstance(ref_id, int):
+            raise ValidationError(
+                {"eligibility_rule": "Each clause needs an integer 'question' id."}
+            )
+        if experiment.pk:
+            ref = Question.objects.filter(pk=ref_id, experiment=experiment).first()
+            if ref is not None and ref.section != Question.Section.SCREENING:
+                raise ValidationError(
+                    {
+                        "eligibility_rule": (
+                            "Eligibility clauses must reference screening-section "
+                            "questions."
+                        )
+                    }
+                )
 
 
 # --- Prompt ------------------------------------------------------------------

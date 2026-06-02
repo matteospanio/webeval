@@ -201,6 +201,20 @@ class RankingQuestionFactory(DjangoModelFactory):
     config = factory.LazyFunction(lambda: {"items": ["A", "B", "C"]})
 
 
+class ScreeningQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.SCREENING
+    type = Question.Type.CHOICE
+    prompt = "Are you 18 or older?"
+    required = True
+    config = factory.LazyFunction(
+        lambda: {"choices": ["Yes", "No"], "multi": False}
+    )
+
+
 class PairwiseExperimentFactory(ExperimentFactory):
     """A pairwise-mode experiment with sensible defaults."""
 

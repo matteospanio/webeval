@@ -36,7 +36,7 @@ from experiments.assignment import (
     get_pairwise_strategy,
     get_strategy,
 )
-from experiments.branching import is_visible
+from experiments.branching import evaluate_condition, is_visible
 from experiments.models import Experiment, Prompt, Question, Stimulus
 
 from .flow import (
@@ -219,14 +219,25 @@ def _answers_for_stimulus(session, stimulus) -> dict[int, Any]:
     }
 
 
-def _answers_for_demographics(session) -> dict[int, Any]:
-    """Map question_id → stored answer for the demographic section."""
+def _answers_for_section(session, section) -> dict[int, Any]:
+    """Map question_id → stored answer for one session-level section.
+
+    Screening and demographic answers both store Responses with no stimulus and
+    no pair_assignment, so they are disambiguated by the question's section.
+    """
     return {
         r.question_id: r.get_answer()
         for r in Response.objects.filter(
-            session=session, stimulus__isnull=True, pair_assignment__isnull=True
+            session=session,
+            stimulus__isnull=True,
+            pair_assignment__isnull=True,
+            question__section=section,
         )
     }
+
+
+def _answers_for_demographics(session) -> dict[int, Any]:
+    return _answers_for_section(session, Question.Section.DEMOGRAPHIC)
 
 
 def _visible_with_submitted(request, page_questions, stored):
@@ -266,6 +277,17 @@ def _next_renderable_demographic_page(session, pages) -> str:
         if any(is_visible(q, stored) for q in pages[session.demographic_page_index]):
             return "render"
         session.demographic_page_index += 1
+    return "finish"
+
+
+def _next_renderable_screening_page(session, pages) -> str:
+    """Advance ``screening_page_index`` to the next page with a visible
+    question. Returns ``"render"`` or ``"finish"``."""
+    stored = _answers_for_section(session, Question.Section.SCREENING)
+    while session.screening_page_index < len(pages):
+        if any(is_visible(q, stored) for q in pages[session.screening_page_index]):
+            return "render"
+        session.screening_page_index += 1
     return "finish"
 
 
@@ -313,11 +335,27 @@ def _audio_check_active(experiment: Experiment) -> bool:
     return bool(experiment.require_audio_check) and _experiment_has_audio(experiment)
 
 
+def _has_screening(experiment: Experiment) -> bool:
+    return experiment.questions.filter(
+        section=Question.Section.SCREENING
+    ).exists()
+
+
+def _is_eligible(experiment: Experiment, answers: dict) -> bool:
+    rule = experiment.eligibility_rule or {}
+    if not rule:
+        return True
+    return evaluate_condition(rule, answers)
+
+
 def _progress(
     experiment: Experiment, session: ParticipantSession
 ) -> int:
     dem_pages = len(
         paginate_questions(_ordered_section_questions(experiment, Question.Section.DEMOGRAPHIC))
+    )
+    screening_pages = len(
+        paginate_questions(_ordered_section_questions(experiment, Question.Section.SCREENING))
     )
     audio_check = _audio_check_active(experiment)
     if experiment.is_pairwise:
@@ -326,6 +364,7 @@ def _progress(
             pairs_total=session.pair_assignments.count(),
             demographic_pages=dem_pages,
             audio_check=audio_check,
+            screening_pages=screening_pages,
         )
     stim_pages = len(
         paginate_questions(_stimulus_questions(experiment, session))
@@ -336,6 +375,7 @@ def _progress(
         demographic_pages=dem_pages,
         assignments_total=session.assignments.count(),
         audio_check=audio_check,
+        screening_pages=screening_pages,
     )
 
 
@@ -390,6 +430,13 @@ def consent(request, slug: str):
         if session is None:
             session = _create_session(request, experiment)
         session.consented_at = timezone.now()
+        if _has_screening(experiment):
+            session.last_step = ParticipantSession.Step.SCREENING
+            session.screening_page_index = 0
+            session.save(
+                update_fields=["consented_at", "last_step", "screening_page_index"]
+            )
+            return redirect("survey:screening", slug=slug)
         needs_audio_check = _audio_check_active(experiment)
         session.last_step = (
             ParticipantSession.Step.AUDIO_CHECK
@@ -421,6 +468,95 @@ def _create_session(request, experiment: Experiment) -> ParticipantSession:
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
+
+
+# --- screening / eligibility ------------------------------------------------
+
+
+@require_http_methods(["GET", "POST"])
+def screening(request, slug: str):
+    experiment, session = _load_session(request, slug)
+    if experiment.state not in RUNNABLE_STATES:
+        return _unavailable(request, experiment)
+    if session is None:
+        return redirect("survey:consent", slug=slug)
+    bounce = _expect_step(session, ParticipantSession.Step.SCREENING)
+    if bounce:
+        return bounce
+
+    pages = paginate_questions(
+        _ordered_section_questions(experiment, Question.Section.SCREENING)
+    )
+    if not pages:
+        return _advance_past_screening(request, session, slug)
+
+    if request.method == "POST":
+        if session.screening_page_index >= len(pages):
+            return redirect("survey:screening", slug=slug)
+        page_questions = pages[session.screening_page_index]
+        is_last_page = session.screening_page_index == len(pages) - 1
+        stored = _answers_for_section(session, Question.Section.SCREENING)
+        visible_questions = _visible_with_submitted(request, page_questions, stored)
+        errors, responses = _collect_answers(
+            request, session, None, visible_questions
+        )
+        if errors:
+            for err in errors:
+                messages.error(request, err)
+            _annotate_submitted(request, visible_questions)
+            ctx = _base_context(experiment, session)
+            ctx.update(
+                {"page_questions": visible_questions, "is_last_page": is_last_page}
+            )
+            return render(request, "survey/screening.html", ctx, status=400)
+        with transaction.atomic():
+            Response.objects.bulk_create(responses)
+            session.screening_page_index += 1
+            if _next_renderable_screening_page(session, pages) == "finish":
+                return _finish_screening(request, session, slug)
+            session.save(update_fields=["screening_page_index"])
+        return redirect("survey:screening", slug=slug)
+
+    # GET: advance over screening pages hidden by branching (or finish).
+    if _next_renderable_screening_page(session, pages) == "finish":
+        return _finish_screening(request, session, slug)
+    session.save(update_fields=["screening_page_index"])
+    page_questions = pages[session.screening_page_index]
+    stored = _answers_for_section(session, Question.Section.SCREENING)
+    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    is_last_page = session.screening_page_index == len(pages) - 1
+    ctx = _base_context(experiment, session)
+    ctx.update(
+        {
+            "page_questions": visible_questions,
+            "is_last_page": is_last_page,
+            "resume_url": _resume_url(request, experiment, session),
+        }
+    )
+    return render(request, "survey/screening.html", ctx)
+
+
+def _finish_screening(request, session: ParticipantSession, slug: str):
+    experiment = session.experiment
+    answers = _answers_for_section(session, Question.Section.SCREENING)
+    if not _is_eligible(experiment, answers):
+        session.last_step = ParticipantSession.Step.SCREENED_OUT
+        session.screened_out_at = timezone.now()
+        session.save(update_fields=["last_step", "screened_out_at"])
+        request.session.pop(_session_key(slug), None)
+        return redirect("survey:screened_out", slug=slug)
+    return _advance_past_screening(request, session, slug)
+
+
+def _advance_past_screening(request, session: ParticipantSession, slug: str):
+    experiment = session.experiment
+    if _audio_check_active(experiment):
+        session.last_step = ParticipantSession.Step.AUDIO_CHECK
+        session.save(update_fields=["last_step"])
+        return redirect("survey:audio_check", slug=slug)
+    session.last_step = ParticipantSession.Step.INSTRUCTIONS
+    session.save(update_fields=["last_step"])
+    return redirect("survey:instructions", slug=slug)
 
 
 # --- instructions ----------------------------------------------------------
@@ -1065,6 +1201,14 @@ def _finish_session(request, session: ParticipantSession, slug: str):
 
 
 # --- thanks ---------------------------------------------------------------
+
+
+@require_http_methods(["GET"])
+def screened_out(request, slug: str):
+    experiment = get_object_or_404(Experiment, slug=slug)
+    ctx = _base_context(experiment, None)
+    ctx["progress_percent"] = None  # no progress bar on the screen-out page
+    return render(request, "survey/screened_out.html", ctx)
 
 
 @require_http_methods(["GET"])
