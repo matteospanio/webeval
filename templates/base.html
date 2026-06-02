@@ -33,6 +33,16 @@
   </header>
   <main id="main" class="survey-main">
     {% block content %}{% endblock %}
+    {% if resume_url %}
+    <details class="resume-box">
+      <summary>Save &amp; continue later</summary>
+      <p><small>Bookmark or copy this private link to return to your place in this
+        survey — on this device or another. Anyone with the link can continue your
+        session, so keep it to yourself.</small></p>
+      <input type="text" value="{{ resume_url }}" readonly
+             aria-label="Resume link" onclick="this.select()" style="width:100%">
+    </details>
+    {% endif %}
   </main>
   <footer class="survey-footer">
     {% block footer %}

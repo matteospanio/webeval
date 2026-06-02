@@ -18,6 +18,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Rating, multiple-choice, free-text, Likert, numeric, matrix/grid, and ranking questions
 - PsyToolkit-style pagination with author-controlled page breaks
 - Conditional display / skip logic: show a question only when earlier answers match
+- Save & continue later: resume an in-progress session from a private link, on any device
 - Balanced assignment strategies across conditions
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -30,7 +31,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
 
-Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts, save-and-resume flows, or longitudinal scheduling.
+Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts or longitudinal scheduling.
 
 ## Quick Start
 

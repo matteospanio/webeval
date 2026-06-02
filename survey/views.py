@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import random
+import secrets
 from typing import Any
 
 from django.contrib import messages
@@ -26,6 +27,7 @@ from django.http import (
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -351,6 +353,18 @@ def _base_context(experiment: Experiment, session: ParticipantSession | None) ->
     return ctx
 
 
+def _resume_url(request, experiment: Experiment, session: ParticipantSession | None):
+    """Absolute 'save & continue later' link, or None when not resumable."""
+    if session is None or not session.resume_token or session.submitted_at:
+        return None
+    return request.build_absolute_uri(
+        reverse(
+            "survey:resume",
+            kwargs={"slug": experiment.slug, "token": session.resume_token},
+        )
+    )
+
+
 # --- consent ---------------------------------------------------------------
 
 
@@ -403,6 +417,7 @@ def _create_session(request, experiment: Experiment) -> ParticipantSession:
         device_type=meta.device_type,
         browser_family=meta.browser_family,
         country_code=meta.country_code,
+        resume_token=secrets.token_urlsafe(32),
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
@@ -612,6 +627,7 @@ def play(request, slug: str):
                 experiment, Question.Section.DEMOGRAPHIC
             ),
             "show_prompt": any(q.show_prompt for q in visible_questions),
+            "resume_url": _resume_url(request, experiment, session),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -1030,7 +1046,13 @@ def demographics(request, slug: str):
     visible_questions = [q for q in page_questions if is_visible(q, stored)]
     is_last_page = session.demographic_page_index == len(pages) - 1
     ctx = _base_context(experiment, session)
-    ctx.update({"page_questions": visible_questions, "is_last_page": is_last_page})
+    ctx.update(
+        {
+            "page_questions": visible_questions,
+            "is_last_page": is_last_page,
+            "resume_url": _resume_url(request, experiment, session),
+        }
+    )
     return render(request, "survey/demographics.html", ctx)
 
 
@@ -1045,6 +1067,33 @@ def _finish_session(request, session: ParticipantSession, slug: str):
 # --- thanks ---------------------------------------------------------------
 
 
+@require_http_methods(["GET"])
+def resume(request, slug: str, token: str):
+    """Re-enter an in-progress session from a 'save & continue later' link.
+
+    Looks the session up by its secret ``resume_token`` (cookie-independent, so
+    it works on another device), re-establishes the session cookie, and bounces
+    to the step the participant left off on.
+    """
+    experiment = get_object_or_404(Experiment, slug=slug)
+    session = ParticipantSession.objects.filter(
+        experiment=experiment, resume_token=token
+    ).first()
+    if session is None:
+        return render(
+            request,
+            "survey/resume_invalid.html",
+            {"experiment": experiment, "brand": experiment.name},
+            status=404,
+        )
+    if session.submitted_at is not None:
+        request.session.pop(_session_key(slug), None)
+        return redirect("survey:thanks", slug=slug)
+    request.session[_session_key(slug)] = str(session.id)
+    return redirect(required_step_url(session))
+
+
+@require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
     return render(

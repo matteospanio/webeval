@@ -69,6 +69,13 @@ class ParticipantSession(models.Model):
     browser_family = models.CharField(max_length=64, blank=True)
     country_code = models.CharField(max_length=2, blank=True)
 
+    # Secret token for the "save & continue later" resume link. Generated when
+    # the session is created; null on legacy rows from before the feature (so
+    # the unique constraint tolerates many NULLs and no backfill is needed).
+    resume_token = models.CharField(
+        max_length=64, unique=True, null=True, blank=True, editable=False
+    )
+
     class Meta:
         ordering = ("-started_at",)
 
