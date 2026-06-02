@@ -16,6 +16,7 @@ from __future__ import annotations
 from django import forms
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Max, Q
 from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
@@ -25,7 +26,7 @@ from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.decorators import action
 
 from accounts.admin_mixins import OwnerScopedAdminMixin
-from accounts.permissions import can_manage, can_view
+from accounts.permissions import can_edit, can_manage, can_view
 from accounts.services import grant_owner_membership
 
 from .assignment import available_pairwise_strategies, available_strategies
@@ -45,6 +46,7 @@ from .models import (
     ParticipantInvite,
     Prompt,
     Question,
+    QuestionTemplate,
     Stimulus,
 )
 from .stats import (
@@ -374,6 +376,11 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                 self.admin_site.admin_view(self.activate_view),
                 name="experiments_experiment_activate",
             ),
+            path(
+                "<slug:slug>/add-from-bank/",
+                self.admin_site.admin_view(self.add_from_bank_view),
+                name="experiments_experiment_add_from_bank",
+            ),
         ]
         # Custom routes must come before the generic ``<path:object_id>/``
         # entry Django registers for change/delete views, otherwise the
@@ -572,6 +579,51 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
         return render(
             request,
             "admin/experiments/experiment/activate.html",
+            context,
+        )
+
+    def add_from_bank_view(self, request, slug: str):
+        experiment = self._scoped_experiment(request, slug, require=can_edit)
+        change_url = reverse(
+            "admin:experiments_experiment_change", args=[experiment.pk]
+        )
+        if experiment.state != Experiment.State.DRAFT:
+            self.message_user(
+                request,
+                "Questions can only be added from the bank while the study is a "
+                "draft.",
+                level=messages.WARNING,
+            )
+            return HttpResponseRedirect(change_url)
+
+        templates = QuestionTemplate.objects.filter(
+            Q(owner=request.user) | Q(owner__isnull=True)
+        ).order_by("name")
+
+        if request.method == "POST":
+            chosen = list(templates.filter(pk__in=request.POST.getlist("template")))
+            start = (
+                experiment.questions.aggregate(m=Max("sort_order"))["m"] or 0
+            ) + 1
+            for offset, tpl in enumerate(chosen):
+                tpl.build_question(experiment, sort_order=start + offset).save()
+            self.message_user(
+                request,
+                f"Added {len(chosen)} question(s) from your bank.",
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(change_url)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "experiment": experiment,
+            "templates": templates,
+            "change_url": change_url,
+            "title": f"Add questions from bank — {experiment.name}",
+        }
+        return render(
+            request,
+            "admin/experiments/experiment/add_from_bank.html",
             context,
         )
 
@@ -786,9 +838,23 @@ class PromptAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     )
 
 
+@admin.action(description="Save selected questions to my question bank")
+def save_questions_to_bank(modeladmin, request, queryset):
+    created = [
+        QuestionTemplate.from_question(q, owner=request.user) for q in queryset
+    ]
+    QuestionTemplate.objects.bulk_create(created)
+    modeladmin.message_user(
+        request,
+        f"Saved {len(created)} question(s) to your bank.",
+        level=messages.SUCCESS,
+    )
+
+
 @admin.register(Question)
 class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     experiment_lookup = "experiment"
+    actions = (save_questions_to_bank,)
     form = QuestionAdminForm
     list_display = (
         "prompt",
@@ -904,3 +970,26 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
     )
+
+
+@admin.register(QuestionTemplate)
+class QuestionTemplateAdmin(UnfoldModelAdmin):
+    """The reusable question bank. Each user sees their own templates plus any
+    shared (owner-less) ones; superusers see everything."""
+
+    list_display = ("name", "owner", "section", "type", "required", "created_at")
+    list_filter = ("section", "type")
+    search_fields = ("name", "prompt")
+    readonly_fields = ("created_at", "updated_at")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        if request.user.is_superuser:
+            return qs
+        return qs.filter(Q(owner=request.user) | Q(owner__isnull=True))
+
+    def save_model(self, request, obj, form, change):
+        # New templates default to being owned by their creator.
+        if not change and obj.owner_id is None:
+            obj.owner = request.user
+        super().save_model(request, obj, form, change)
