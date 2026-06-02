@@ -15,7 +15,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Multi-user platform: per-study ownership with owner/editor/viewer roles, collaboration by invitation, and a researcher dashboard at `/studio/` (separate from the Django admin)
 - Standard single-stimulus studies and pairwise comparison studies
 - Audio, image, and text stimuli in one experiment model
-- Rating, multiple-choice, free-text, and Likert questions
+- Rating, multiple-choice, free-text, Likert, numeric, matrix/grid, and ranking questions
 - PsyToolkit-style pagination with author-controlled page breaks
 - Balanced assignment strategies across conditions
 - Optional audio playback check before the study begins
@@ -103,6 +103,9 @@ Participants compare two stimuli side by side. Pairings are built across conditi
 - Multiple choice
 - Free text
 - Likert scale
+- Numeric input (optional min/max, integer-only, unit label)
+- Matrix / grid (several rows sharing one answer scale)
+- Ranking / ordering (assign each item a unique rank; no-JS rank selects)
 
 Questions can be marked as required, split onto separate pages, and optionally show the originating stimulus prompt to participants.
 

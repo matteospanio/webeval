@@ -78,6 +78,40 @@ class QuestionAdminForm(forms.ModelForm):
         help_text="One label per line, matching the number of steps.",
     )
 
+    # Numeric-specific helpers.
+    numeric_min = forms.FloatField(
+        required=False, help_text="Optional minimum allowed value."
+    )
+    numeric_max = forms.FloatField(
+        required=False, help_text="Optional maximum allowed value."
+    )
+    numeric_integer = forms.BooleanField(
+        required=False, help_text="Require a whole number (no decimals)."
+    )
+    numeric_unit = forms.CharField(
+        required=False,
+        help_text="Optional unit shown next to the input (e.g. 'years').",
+    )
+
+    # Matrix-specific helpers.
+    matrix_rows = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+        help_text="One row label per line (the sub-questions / items being rated).",
+    )
+    matrix_columns = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+        help_text="One column label per line (the shared answer scale).",
+    )
+
+    # Ranking-specific helpers.
+    ranking_items = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 5}),
+        help_text="One item per line. Participants assign each a unique rank.",
+    )
+
     class Meta:
         model = Question
         exclude = ("config",)
@@ -113,6 +147,26 @@ class QuestionAdminForm(forms.ModelForm):
             if isinstance(labels, list):
                 self.fields["likert_labels"].initial = "\n".join(
                     str(lb) for lb in labels
+                )
+        elif t == Question.Type.NUMERIC:
+            self.fields["numeric_min"].initial = cfg.get("min")
+            self.fields["numeric_max"].initial = cfg.get("max")
+            self.fields["numeric_integer"].initial = bool(cfg.get("integer", False))
+            self.fields["numeric_unit"].initial = cfg.get("unit", "")
+        elif t == Question.Type.MATRIX:
+            rows = cfg.get("rows") or []
+            cols = cfg.get("columns") or []
+            if isinstance(rows, list):
+                self.fields["matrix_rows"].initial = "\n".join(str(r) for r in rows)
+            if isinstance(cols, list):
+                self.fields["matrix_columns"].initial = "\n".join(
+                    str(c) for c in cols
+                )
+        elif t == Question.Type.RANKING:
+            items = cfg.get("items") or []
+            if isinstance(items, list):
+                self.fields["ranking_items"].initial = "\n".join(
+                    str(i) for i in items
                 )
 
     def clean(self):
@@ -170,6 +224,58 @@ class QuestionAdminForm(forms.ModelForm):
                 )
             elif steps:
                 config = {"steps": steps, "labels": labels}
+        elif question_type == Question.Type.NUMERIC:
+            low = cleaned.get("numeric_min")
+            high = cleaned.get("numeric_max")
+            if low is not None:
+                config["min"] = low
+            if high is not None:
+                config["max"] = high
+            if cleaned.get("numeric_integer"):
+                config["integer"] = True
+            unit = (cleaned.get("numeric_unit") or "").strip()
+            if unit:
+                config["unit"] = unit
+            if low is not None and high is not None and low >= high:
+                self.add_error(
+                    "numeric_max", "Maximum must be greater than minimum."
+                )
+                config = {}
+        elif question_type == Question.Type.MATRIX:
+            rows = [
+                line.strip()
+                for line in (cleaned.get("matrix_rows") or "").splitlines()
+                if line.strip()
+            ]
+            cols = [
+                line.strip()
+                for line in (cleaned.get("matrix_columns") or "").splitlines()
+                if line.strip()
+            ]
+            if not rows:
+                self.add_error("matrix_rows", "Enter at least one row (one per line).")
+            elif len(set(rows)) != len(rows):
+                self.add_error("matrix_rows", "Row labels must be distinct.")
+            if not cols:
+                self.add_error(
+                    "matrix_columns", "Enter at least one column (one per line)."
+                )
+            if rows and cols and len(set(rows)) == len(rows):
+                config = {"rows": rows, "columns": cols}
+        elif question_type == Question.Type.RANKING:
+            items = [
+                line.strip()
+                for line in (cleaned.get("ranking_items") or "").splitlines()
+                if line.strip()
+            ]
+            if len(items) < 2:
+                self.add_error(
+                    "ranking_items", "Enter at least two items (one per line)."
+                )
+            elif len(set(items)) != len(items):
+                self.add_error("ranking_items", "Items must be distinct.")
+            else:
+                config = {"items": items}
 
         # Whatever we built, push it onto the instance so the model-level
         # validator in Question.clean() sees the right shape. On errors we

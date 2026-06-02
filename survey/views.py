@@ -118,6 +118,96 @@ def _serialise_answer(question: Question, raw_value: Any) -> Any:
     return str(raw_value)
 
 
+def _read_one(request, question: Question) -> tuple[bool, Any, str | None]:
+    """Read one question's answer from POST.
+
+    Returns ``(answered, value, error)``: whether any input was given, the
+    serialisable typed value, and a human-readable problem (or None). Shared by
+    the standard and pairwise answer collectors so every question type behaves
+    identically across both flows.
+    """
+    t = question.type
+    if t == Question.Type.MATRIX:
+        return _read_matrix(request, question)
+    if t == Question.Type.RANKING:
+        return _read_ranking(request, question)
+    if t == Question.Type.CHOICE and (question.config or {}).get("multi"):
+        raw_list = request.POST.getlist(f"q_{question.pk}")
+        if not raw_list:
+            return False, None, None
+        return True, list(raw_list), None
+    raw = request.POST.get(f"q_{question.pk}")
+    if raw is None or raw == "":
+        return False, None, None
+    if t == Question.Type.NUMERIC:
+        return _read_numeric(question, raw)
+    try:
+        return True, _serialise_answer(question, raw), None
+    except (TypeError, ValueError):
+        return True, None, "has an invalid value"
+
+
+def _read_numeric(question: Question, raw: str) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    try:
+        value: float | int = float(raw)
+    except (TypeError, ValueError):
+        return True, None, "must be a number"
+    if cfg.get("integer"):
+        if value != int(value):
+            return True, None, "must be a whole number"
+        value = int(value)
+    low = cfg.get("min")
+    high = cfg.get("max")
+    if low is not None and value < low:
+        return True, None, f"must be at least {low}"
+    if high is not None and value > high:
+        return True, None, f"must be at most {high}"
+    return True, value, None
+
+
+def _read_matrix(request, question: Question) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    rows = cfg.get("rows") or []
+    columns = set(cfg.get("columns") or [])
+    answer: dict[str, str] = {}
+    answered_any = False
+    for i, row in enumerate(rows):
+        val = request.POST.get(f"q_{question.pk}_r{i}")
+        if val:
+            answered_any = True
+            if val not in columns:
+                return True, None, "has an invalid value"
+            answer[row] = val
+    if not answered_any:
+        return False, None, None
+    if question.required and len(answer) != len(rows):
+        return True, None, "needs an answer in every row"
+    return True, answer, None
+
+
+def _read_ranking(request, question: Question) -> tuple[bool, Any, str | None]:
+    cfg = question.config or {}
+    items = cfg.get("items") or []
+    n = len(items)
+    ranks: dict[int, int] = {}
+    answered_any = False
+    for i in range(n):
+        val = request.POST.get(f"q_{question.pk}_i{i}")
+        if val:
+            answered_any = True
+            try:
+                ranks[i] = int(val)
+            except (TypeError, ValueError):
+                return True, None, "has an invalid rank"
+    if not answered_any:
+        return False, None, None
+    if len(ranks) != n or sorted(ranks.values()) != list(range(1, n + 1)):
+        return True, None, "needs a unique rank for every item"
+    ordered = [items[i] for i, _ in sorted(ranks.items(), key=lambda kv: kv[1])]
+    return True, ordered, None
+
+
 def _ordered_section_questions(
     experiment: Experiment, section: str
 ) -> list[Question]:
@@ -506,7 +596,18 @@ def _save_page_answers(
 def _annotate_submitted(request, questions: list[Question]) -> None:
     for q in questions:
         key = f"q_{q.pk}"
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
+        cfg = q.config or {}
+        if q.type == Question.Type.MATRIX:
+            rows = cfg.get("rows") or []
+            q.submitted_matrix = {
+                i: request.POST.get(f"{key}_r{i}", "") for i in range(len(rows))
+            }
+        elif q.type == Question.Type.RANKING:
+            items = cfg.get("items") or []
+            q.submitted_ranks = {
+                i: request.POST.get(f"{key}_i{i}", "") for i in range(len(items))
+            }
+        elif q.type == Question.Type.CHOICE and cfg.get("multi"):
             q.submitted_values = request.POST.getlist(key)
         else:
             q.submitted_value = request.POST.get(key, "")
@@ -521,28 +622,14 @@ def _collect_answers(
     errors: list[str] = []
     responses: list[Response] = []
     for q in questions:
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
-            raw_list = request.POST.getlist(f"q_{q.pk}")
-            if not raw_list:
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw_list)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
-        else:
-            raw = request.POST.get(f"q_{q.pk}")
-            if raw is None or raw == "":
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
+        answered, value, error = _read_one(request, q)
+        if error is not None:
+            errors.append(f"'{q.prompt}' {error}.")
+            continue
+        if not answered:
+            if q.required:
+                errors.append(f"'{q.prompt}' is required.")
+            continue
         responses.append(
             Response(
                 session=session,
@@ -730,28 +817,14 @@ def _collect_pairwise_answers(
     errors: list[str] = []
     responses: list[Response] = []
     for q in questions:
-        if q.type == Question.Type.CHOICE and q.config.get("multi"):
-            raw_list = request.POST.getlist(f"q_{q.pk}")
-            if not raw_list:
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw_list)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
-        else:
-            raw = request.POST.get(f"q_{q.pk}")
-            if raw is None or raw == "":
-                if q.required:
-                    errors.append(f"'{q.prompt}' is required.")
-                continue
-            try:
-                value = _serialise_answer(q, raw)
-            except (TypeError, ValueError):
-                errors.append(f"'{q.prompt}' has an invalid value.")
-                continue
+        answered, value, error = _read_one(request, q)
+        if error is not None:
+            errors.append(f"'{q.prompt}' {error}.")
+            continue
+        if not answered:
+            if q.required:
+                errors.append(f"'{q.prompt}' is required.")
+            continue
         responses.append(
             Response(
                 session=session,

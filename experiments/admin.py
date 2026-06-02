@@ -729,4 +729,30 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                 "fields": ("likert_steps", "likert_labels"),
             },
         ),
+        (
+            "Numeric input settings",
+            {
+                "description": "Used when Type = Numeric input. All fields are optional.",
+                "fields": (
+                    "numeric_min",
+                    "numeric_max",
+                    "numeric_integer",
+                    "numeric_unit",
+                ),
+            },
+        ),
+        (
+            "Matrix (grid) settings",
+            {
+                "description": "Used when Type = Matrix (grid): rows are the sub-questions, columns the shared answer scale.",
+                "fields": ("matrix_rows", "matrix_columns"),
+            },
+        ),
+        (
+            "Ranking / ordering settings",
+            {
+                "description": "Used when Type = Ranking / ordering.",
+                "fields": ("ranking_items",),
+            },
+        ),
     )

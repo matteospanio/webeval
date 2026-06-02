@@ -131,6 +131,49 @@ class LikertQuestionFactory(DjangoModelFactory):
     )
 
 
+class NumericQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.DEMOGRAPHIC
+    type = Question.Type.NUMERIC
+    prompt = "Your age?"
+    required = True
+    config = factory.LazyFunction(
+        lambda: {"min": 0, "max": 120, "integer": True, "unit": "years"}
+    )
+
+
+class MatrixQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.STIMULUS
+    type = Question.Type.MATRIX
+    prompt = "Rate each aspect of this clip."
+    required = True
+    config = factory.LazyFunction(
+        lambda: {
+            "rows": ["Clarity", "Musicality"],
+            "columns": ["Low", "Medium", "High"],
+        }
+    )
+
+
+class RankingQuestionFactory(DjangoModelFactory):
+    class Meta:
+        model = Question
+
+    experiment = factory.SubFactory(ExperimentFactory)
+    section = Question.Section.STIMULUS
+    type = Question.Type.RANKING
+    prompt = "Rank these from best to worst."
+    required = True
+    config = factory.LazyFunction(lambda: {"items": ["A", "B", "C"]})
+
+
 class PairwiseExperimentFactory(ExperimentFactory):
     """A pairwise-mode experiment with sensible defaults."""
 

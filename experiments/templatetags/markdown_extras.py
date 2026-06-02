@@ -25,3 +25,17 @@ def markdown_inline_filter(value):
     if html.startswith("<p>") and html.endswith("</p>") and html.count("<p>") == 1:
         html = html[3:-4]
     return mark_safe(html)
+
+
+@register.filter(name="get_item")
+def get_item(value, key):
+    """Look up ``value[key]`` in a dict, tolerant of missing keys/None.
+
+    Used to repopulate matrix/ranking widgets after a validation error, where
+    the per-row/per-item submitted values are stored in a dict keyed by index.
+    """
+    if isinstance(value, dict):
+        if key in value:
+            return value[key]
+        return value.get(str(key), "")
+    return ""

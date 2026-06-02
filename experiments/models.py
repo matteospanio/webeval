@@ -519,6 +519,9 @@ class Question(models.Model):
         CHOICE = "choice", "Multiple choice"
         TEXT = "text", "Free text"
         LIKERT = "likert", "Likert scale"
+        NUMERIC = "numeric", "Numeric input"
+        MATRIX = "matrix", "Matrix (grid)"
+        RANKING = "ranking", "Ranking / ordering"
 
     experiment = models.ForeignKey(
         Experiment,
@@ -540,7 +543,10 @@ class Question(models.Model):
             "rating: {min, max, step, min_label?, max_label?}. "
             "choice: {choices: [...], multi: bool}. "
             "text: {max_length}. "
-            "likert: {steps: int, labels: [str, ...]}."
+            "likert: {steps: int, labels: [str, ...]}. "
+            "numeric: {min?, max?, integer?, unit?}. "
+            "matrix: {rows: [...], columns: [...]}. "
+            "ranking: {items: [...]}."
         ),
     )
 
@@ -646,6 +652,65 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
             raise ValidationError(
                 {"config": "every likert label must be a non-empty string."}
             )
+        return
+
+    if question_type == Question.Type.NUMERIC:
+        for key in ("min", "max"):
+            if key in config:
+                val = config[key]
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    raise ValidationError(
+                        {"config": f"numeric {key!r} must be a number."}
+                    )
+        low = config.get("min")
+        high = config.get("max")
+        if low is not None and high is not None and low >= high:
+            raise ValidationError(
+                {"config": "numeric 'min' must be less than 'max'."}
+            )
+        if "integer" in config and not isinstance(config["integer"], bool):
+            raise ValidationError(
+                {"config": "numeric 'integer' must be true or false."}
+            )
+        if "unit" in config and not isinstance(config["unit"], str):
+            raise ValidationError({"config": "numeric 'unit' must be a string."})
+        return
+
+    if question_type == Question.Type.MATRIX:
+        rows = config.get("rows")
+        columns = config.get("columns")
+        if (
+            not isinstance(rows, list)
+            or not rows
+            or not all(isinstance(r, str) and r for r in rows)
+        ):
+            raise ValidationError(
+                {"config": "matrix questions require a non-empty 'rows' list of strings."}
+            )
+        if len(set(rows)) != len(rows):
+            raise ValidationError({"config": "matrix 'rows' must be distinct."})
+        if (
+            not isinstance(columns, list)
+            or not columns
+            or not all(isinstance(c, str) and c for c in columns)
+        ):
+            raise ValidationError(
+                {"config": "matrix questions require a non-empty 'columns' list of strings."}
+            )
+        return
+
+    if question_type == Question.Type.RANKING:
+        items = config.get("items")
+        if (
+            not isinstance(items, list)
+            or len(items) < 2
+            or not all(isinstance(i, str) and i for i in items)
+        ):
+            raise ValidationError(
+                {"config": "ranking questions require an 'items' list of at least two strings."}
+            )
+        if len(set(items)) != len(items):
+            raise ValidationError({"config": "ranking 'items' must be distinct."})
         return
 
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})
