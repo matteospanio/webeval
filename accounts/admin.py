@@ -16,7 +16,7 @@ from django.contrib.auth.models import Group, User
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 from unfold.admin import StackedInline as UnfoldStackedInline
 
-from .models import AccessEvent, Invitation, Membership, Profile
+from .models import AccessEvent, AuditEvent, Invitation, Membership, Profile
 
 admin.site.unregister(User)
 admin.site.unregister(Group)
@@ -101,6 +101,21 @@ class AccessEventAdmin(UnfoldModelAdmin):
         "target_user__username",
     )
     readonly_fields = tuple(f.name for f in AccessEvent._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AuditEvent)
+class AuditEventAdmin(UnfoldModelAdmin):
+    list_display = ("created_at", "action", "target", "experiment", "actor", "ip_address")
+    list_filter = ("action",)
+    search_fields = ("experiment__name", "experiment__slug", "actor__username", "target")
+    readonly_fields = tuple(f.name for f in AuditEvent._meta.fields)
+    date_hierarchy = "created_at"
 
     def has_add_permission(self, request):
         return False

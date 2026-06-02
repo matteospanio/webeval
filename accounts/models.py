@@ -228,3 +228,49 @@ class AccessEvent(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         when = self.created_at.isoformat() if self.created_at else "?"
         return f"{self.event_type} @ {when}"
+
+
+class AuditEvent(models.Model):
+    """Append-only audit trail of edits, exports, and destructive actions.
+
+    Complements :class:`AccessEvent` (which logs access-control changes): this
+    records *what was done to a study's content and data* — who edited it,
+    exported it, or deleted/purged participant data — for compliance review.
+    """
+
+    class Action(models.TextChoices):
+        EDIT = "edit", "Edited"
+        EXPORT = "export", "Exported"
+        ACTIVATE = "activate", "Activated"
+        PURGE = "purge", "Purged data"
+        DELETE = "delete", "Deleted data"
+
+    experiment = models.ForeignKey(
+        "experiments.Experiment",
+        on_delete=models.CASCADE,
+        related_name="audit_events",
+        null=True,
+        blank=True,
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    action = models.CharField(max_length=24, choices=Action.choices, db_index=True)
+    target = models.CharField(
+        max_length=200, blank=True, help_text="What was acted on, e.g. 'answers.csv'."
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=500, blank=True)
+    detail = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        when = self.created_at.isoformat() if self.created_at else "?"
+        return f"{self.action} {self.target} @ {when}"

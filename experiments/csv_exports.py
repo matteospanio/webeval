@@ -40,8 +40,20 @@ def _csv_response(filename: str) -> HttpResponse:
     return response
 
 
+PII_PLACEHOLDER = "[redacted]"
+
+
+def _answer_cell(question, answer_value: str, include_pii: bool) -> str:
+    if question.contains_pii and not include_pii:
+        return PII_PLACEHOLDER
+    return answer_value
+
+
 def write_answers_csv(
-    experiment: Experiment, response: HttpResponse, exclude_flagged: bool = False
+    experiment: Experiment,
+    response: HttpResponse,
+    exclude_flagged: bool = False,
+    include_pii: bool = False,
 ) -> HttpResponse:
     writer = csv.DictWriter(response, fieldnames=ANSWER_FIELDNAMES)
     writer.writeheader()
@@ -83,7 +95,7 @@ def write_answers_csv(
                 "condition": r.stimulus.condition.name if r.stimulus_id else "",
                 "question_id": r.question_id,
                 "question_type": r.question.type,
-                "answer_value": r.answer_value,
+                "answer_value": _answer_cell(r.question, r.answer_value, include_pii),
                 "listen_duration_ms": assignment_map.get(
                     (str(r.session_id), r.stimulus_id), 0
                 ),
@@ -93,13 +105,17 @@ def write_answers_csv(
 
 
 def write_demographics_csv(
-    experiment: Experiment, response: HttpResponse, exclude_flagged: bool = False
+    experiment: Experiment,
+    response: HttpResponse,
+    exclude_flagged: bool = False,
+    include_pii: bool = False,
 ) -> HttpResponse:
     demographic_questions = list(
         experiment.questions.filter(section=Question.Section.DEMOGRAPHIC).order_by(
             "sort_order", "id"
         )
     )
+    pii_qids = {q.pk for q in demographic_questions if q.contains_pii}
     fieldnames = [
         "session_id",
         "submitted_at",
@@ -135,7 +151,10 @@ def write_demographics_csv(
             )
         }
         for q in demographic_questions:
-            row[f"q_{q.pk}"] = answers.get(q.pk, "")
+            value = answers.get(q.pk, "")
+            if value and q.pk in pii_qids and not include_pii:
+                value = PII_PLACEHOLDER
+            row[f"q_{q.pk}"] = value
         writer.writerow(row)
     return response
 
@@ -219,17 +238,21 @@ def pairwise_answers_csv_response(experiment: Experiment) -> HttpResponse:
 
 
 def answers_csv_response(
-    experiment: Experiment, exclude_flagged: bool = False
+    experiment: Experiment, exclude_flagged: bool = False, include_pii: bool = False
 ) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-answers.csv")
-    return write_answers_csv(experiment, response, exclude_flagged=exclude_flagged)
+    return write_answers_csv(
+        experiment, response, exclude_flagged=exclude_flagged, include_pii=include_pii
+    )
 
 
 def demographics_csv_response(
-    experiment: Experiment, exclude_flagged: bool = False
+    experiment: Experiment, exclude_flagged: bool = False, include_pii: bool = False
 ) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-demographics.csv")
-    return write_demographics_csv(experiment, response, exclude_flagged=exclude_flagged)
+    return write_demographics_csv(
+        experiment, response, exclude_flagged=exclude_flagged, include_pii=include_pii
+    )
 
 
 COMPLETION_CODE_FIELDNAMES = [

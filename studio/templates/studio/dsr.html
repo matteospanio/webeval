@@ -1,0 +1,56 @@
+{% extends "studio/base.html" %}
+{% block title %}Data-subject request · webeval studio{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li>Data-subject request</li>
+</ul></nav>
+
+<hgroup>
+  <h1>Data-subject request</h1>
+  <p>Find a participant's data across your studies by their participant code or external id, then export or erase it.</p>
+</hgroup>
+
+<form method="get">
+  <label>Participant code or external id
+    <input type="text" name="identifier" value="{{ identifier }}" placeholder="e.g. PROLIFIC_PID or a participant code" required>
+  </label>
+  <button type="submit">Search</button>
+</form>
+
+{% if identifier %}
+<h2>Matches for &ldquo;{{ identifier }}&rdquo;</h2>
+{% if sessions %}
+<figure><table>
+  <thead><tr><th>Study</th><th>Session</th><th>Started</th><th>Submitted</th><th>You manage</th></tr></thead>
+  <tbody>
+    {% for s in sessions %}
+    <tr>
+      <th scope="row">{{ s.experiment.name }}</th>
+      <td><small>{{ s.id }}</small></td>
+      <td>{{ s.started_at|date:"Y-m-d H:i" }}</td>
+      <td>{% if s.submitted_at %}{{ s.submitted_at|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+      <td>{% if s.experiment_id in manage_ids %}yes{% else %}no{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></figure>
+
+<div class="grid">
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="identifier" value="{{ identifier }}">
+    <button type="submit" name="action" value="export" class="secondary">Export all data (JSON)</button>
+  </form>
+  <form method="post" onsubmit="return confirm('Permanently erase this participant’s data from the studies you manage? This cannot be undone.');">
+    {% csrf_token %}
+    <input type="hidden" name="identifier" value="{{ identifier }}">
+    <button type="submit" name="action" value="delete" class="contrast">Erase data (studies you manage)</button>
+  </form>
+</div>
+<p><small>Erasure removes responses, assignments, and events and anonymises the session, leaving only a deletion tombstone. It applies only to studies you manage.</small></p>
+{% else %}
+<p>No sessions found for that identifier in your studies.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

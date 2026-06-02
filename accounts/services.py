@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from apikeys import _request_meta
 
-from .models import AccessEvent, Invitation, Membership
+from .models import AccessEvent, AuditEvent, Invitation, Membership
 from .roles import Role
 
 
@@ -21,6 +21,23 @@ def _log(experiment, event_type, *, actor=None, target_user=None, request=None, 
         actor=actor,
         target_user=target_user,
         event_type=event_type,
+        ip_address=meta.ip_address if meta else None,
+        user_agent=meta.user_agent if meta else "",
+        detail=detail,
+    )
+
+
+def record_audit(experiment, action, *, actor=None, target="", request=None, **detail):
+    """Append an :class:`AuditEvent` (edit / export / destructive action).
+
+    Best-effort context (ip / user-agent) from the request. ``experiment`` may
+    be None for cross-study actions (e.g. a data-subject request)."""
+    meta = _request_meta.extract(request) if request is not None else None
+    AuditEvent.objects.create(
+        experiment=experiment,
+        actor=actor if (actor is not None and actor.is_authenticated) else None,
+        action=action,
+        target=target,
         ip_address=meta.ip_address if meta else None,
         user_agent=meta.user_agent if meta else "",
         detail=detail,

@@ -26,8 +26,9 @@ from unfold.admin import TabularInline as UnfoldTabularInline
 from unfold.decorators import action
 
 from accounts.admin_mixins import OwnerScopedAdminMixin
+from accounts.models import AuditEvent
 from accounts.permissions import can_edit, can_manage, can_view
-from accounts.services import grant_owner_membership
+from accounts.services import grant_owner_membership, record_audit
 
 from .assignment import available_pairwise_strategies, available_strategies
 from .charts import bradley_terry_svg, mean_ratings_svg, pairwise_win_rates_svg
@@ -249,6 +250,21 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
         (
+            "Compliance & governance",
+            {
+                "description": (
+                    "Ethics / data-protection metadata. 'Retention days' drives "
+                    "the purge_expired_data command (0 = keep indefinitely)."
+                ),
+                "fields": (
+                    "irb_number",
+                    "legal_basis",
+                    "data_contact",
+                    "retention_days",
+                ),
+            },
+        ),
+        (
             "Statistics",
             {
                 "description": (
@@ -304,6 +320,10 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
         super().save_model(request, obj, form, change)
         if creating and obj.owner_id is not None:
             grant_owner_membership(obj, obj.owner, actor=request.user)
+        record_audit(
+            obj, AuditEvent.Action.EDIT, actor=request.user,
+            target=obj.slug, request=request, created=creating,
+        )
 
     def _scoped_experiment(self, request, slug, require=can_view):
         """Fetch an experiment for a per-experiment admin view, enforcing
@@ -533,6 +553,11 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             purged_counts = None
             if purge:
                 purged_counts = purge_participant_data(experiment)
+                record_audit(
+                    experiment, AuditEvent.Action.PURGE, actor=request.user,
+                    target="test-phase data", request=request,
+                    sessions=purged_counts.sessions,
+                )
             else:
                 # Keep test-phase data: promote those preview sessions into the
                 # real dataset so they count in stats and exports.
@@ -547,6 +572,10 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             # the confirmation page, so the transition is intentional.
             experiment._activate_confirmed = True
             experiment.save(update_fields=["state"])
+            record_audit(
+                experiment, AuditEvent.Action.ACTIVATE, actor=request.user,
+                target=experiment.slug, request=request,
+            )
             if purged_counts is not None:
                 self.message_user(
                     request,
@@ -898,15 +927,16 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
         (
-            "Attention check",
+            "Attention check & PII",
             {
                 "description": (
                     "Optional. If set, this question is an attention check; a "
                     "participant whose answer differs from the expected value "
                     'is flagged. Enter the expected answer as JSON, e.g. '
-                    '"Strongly agree" or 4.'
+                    '"Strongly agree" or 4. Tick "contains PII" to redact this '
+                    "question's free-text answers from exports by default."
                 ),
-                "fields": ("attention_expected",),
+                "fields": ("attention_expected", "contains_pii"),
             },
         ),
         (

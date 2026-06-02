@@ -7,7 +7,8 @@
 </hgroup>
 <p>
   <a href="{% url 'studio:study_create' %}" role="button">+ New study</a>
-  {% if rows %}<a href="{% url 'studio:compare' %}" role="button" class="secondary outline">Compare studies</a>{% endif %}
+  {% if rows %}<a href="{% url 'studio:compare' %}" role="button" class="secondary outline">Compare studies</a>
+  <a href="{% url 'studio:dsr' %}" role="button" class="secondary outline">Data-subject request</a>{% endif %}
 </p>
 {% if rows %}
 <table>

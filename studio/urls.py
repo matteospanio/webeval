@@ -10,6 +10,7 @@ app_name = "studio"
 urlpatterns = [
     path("", views.studies, name="studies"),
     path("compare/", views.compare, name="compare"),
+    path("dsr/", views.data_subject_request, name="dsr"),
     path("new/", views.study_create, name="study_create"),
     path("<slug:slug>/", views.study_overview, name="study_overview"),
     path("<slug:slug>/power/", views.power_analysis, name="power_analysis"),
