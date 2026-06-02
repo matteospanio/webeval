@@ -54,6 +54,10 @@ class QuestionComponent:
     def validate_config(self, config: dict) -> None:
         """Raise ``ValidationError`` if the authored ``config`` is malformed."""
 
+    def default_config(self) -> dict:
+        """A starter config used when the component is dropped into the builder."""
+        return {}
+
     def render(self, question, *, post=None) -> str:
         """Return the inner widget HTML (placed inside the shared fieldset).
 
@@ -128,6 +132,9 @@ class ConstantSumComponent(QuestionComponent):
 
     type = "constant_sum"
     label = "Constant sum (allocate points)"
+
+    def default_config(self) -> dict:
+        return {"items": ["Option A", "Option B"], "total": 100}
 
     def validate_config(self, config: dict) -> None:
         items = config.get("items")

@@ -1,0 +1,57 @@
+{% extends "studio/base.html" %}
+{% load static %}
+{% block title %}Build · {{ experiment.name }}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'studio/css/builder.css' %}">{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li><a href="{% url 'studio:study_overview' slug=experiment.slug %}">{{ experiment.name }}</a></li>
+  <li>Build</li>
+</ul></nav>
+
+<hgroup>
+  <h1>Build questions</h1>
+  <p>Drag a question type from the palette onto the canvas, drag cards to reorder, then save.</p>
+</hgroup>
+
+{% if not is_draft %}
+<article class="builder-locked">
+  Editing the question set is only available while a study is a <strong>draft</strong>.
+  This study is <strong>{{ experiment.get_state_display|lower }}</strong> — viewing read-only.
+</article>
+{% endif %}
+
+{{ questions|json_script:"builder-questions" }}
+{{ palette|json_script:"builder-palette" }}
+
+<div class="builder" data-save-url="{{ save_url }}"
+     data-can-edit="{% if is_draft %}1{% else %}0{% endif %}"
+     data-csrf="{{ csrf_token }}"
+     data-overview-url="{% url 'studio:study_overview' slug=experiment.slug %}">
+  <aside class="builder-palette">
+    <h3>Add a question</h3>
+    <ul id="palette-list">
+      {% for item in palette %}
+      <li class="palette-item" draggable="true" data-type="{{ item.type }}" tabindex="0"
+          title="Drag onto the canvas, or click to add">
+        {{ item.label }}{% if item.plugin %} <span class="badge">plugin</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    <p><small>Tip: click a type to append it; drag to drop it at a spot.</small></p>
+  </aside>
+
+  <section class="builder-canvas">
+    <div id="canvas" class="canvas-dropzone" aria-label="Question canvas"></div>
+    <p id="canvas-empty" class="canvas-empty">No questions yet — add some from the palette.</p>
+    <div class="builder-actions">
+      <button type="button" id="save-btn">Save questions</button>
+      <a href="{% url 'studio:study_overview' slug=experiment.slug %}" class="secondary" role="button">Back to overview</a>
+      <span id="save-status" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}<script src="{% static 'studio/js/builder.js' %}" defer></script>{% endblock %}
