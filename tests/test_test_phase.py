@@ -33,6 +33,9 @@ pytestmark = pytest.mark.django_db
 class TestStateTransitions:
     def test_draft_to_test_allowed(self):
         exp = ExperimentFactory()
+        cond = ConditionFactory(experiment=exp)
+        StimulusFactory(condition=cond)
+        RatingQuestionFactory(experiment=exp)
         exp.state = Experiment.State.TEST
         exp.full_clean()
         exp.save()
@@ -59,6 +62,9 @@ class TestStateTransitions:
 
     def test_test_to_active_succeeds_with_confirmation_flag(self):
         exp = ExperimentFactory()
+        cond = ConditionFactory(experiment=exp)
+        StimulusFactory(condition=cond)
+        RatingQuestionFactory(experiment=exp)
         exp.state = Experiment.State.TEST
         exp.save(update_fields=["state"])
         exp.state = Experiment.State.ACTIVE

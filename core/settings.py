@@ -243,6 +243,13 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": "Question bank",
+                        "icon": "library_books",
+                        "link": reverse_lazy(
+                            "admin:experiments_questiontemplate_changelist"
+                        ),
+                    },
+                    {
                         "title": "Prompts",
                         "icon": "graphic_eq",
                         "link": reverse_lazy(

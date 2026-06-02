@@ -6,7 +6,19 @@
   <title>{% block title %}{{ brand|default:"Survey" }}{% endblock %}</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
   <link rel="stylesheet" href="{% static 'site.css' %}?v=2">
-
+  {% if experiment.brand_primary_color %}
+  <style>
+    :root {
+      --pico-primary: {{ experiment.brand_primary_color }};
+      --pico-primary-background: {{ experiment.brand_primary_color }};
+      --pico-primary-hover-background: {{ experiment.brand_primary_color }};
+      --pico-primary-underline: {{ experiment.brand_primary_color }};
+      --pico-primary-border: {{ experiment.brand_primary_color }};
+    }
+    .progress-bar-fill { background: {{ experiment.brand_primary_color }}; }
+  </style>
+  {% endif %}
+  {% if experiment.brand_custom_css %}<style>{{ experiment.brand_custom_css|safe }}</style>{% endif %}
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
@@ -17,7 +29,9 @@
   {% endif %}
   <header class="survey-header">
     <div class="survey-header-inner">
-      <strong class="survey-brand">{{ brand|default:"Survey" }}</strong>
+      <strong class="survey-brand">
+        {% if experiment.brand_logo %}<img src="{{ experiment.brand_logo.url }}" alt="{{ brand|default:'Survey' }}" class="survey-logo" style="max-height:2.25rem;vertical-align:middle">{% else %}{{ brand|default:"Survey" }}{% endif %}
+      </strong>
       {% block tagline %}{% endblock %}
     </div>
     {% block progress %}

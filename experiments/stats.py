@@ -64,12 +64,12 @@ def global_summary() -> GlobalSummary:
         for row in Experiment.objects.values("state").annotate(n=Count("pk"))
     }
     total_experiments = sum(by_state.values())
-    total_sessions = ParticipantSession.objects.count()
+    total_sessions = ParticipantSession.objects.filter(is_preview=False).count()
     completed_sessions = ParticipantSession.objects.filter(
-        submitted_at__isnull=False
+        submitted_at__isnull=False, is_preview=False
     ).count()
     total_responses = Response.objects.filter(
-        session__submitted_at__isnull=False
+        session__submitted_at__isnull=False, session__is_preview=False
     ).count()
     return GlobalSummary(
         total_experiments=total_experiments,
@@ -84,8 +84,14 @@ def global_summary() -> GlobalSummary:
 
 
 def experiment_counts(experiment: Experiment) -> ExperimentCounts:
-    """Return consent views, total, completed, abandoned session counts."""
-    sessions = ParticipantSession.objects.filter(experiment=experiment)
+    """Return consent views, total, completed, abandoned session counts.
+
+    Preview (TEST-phase) sessions are excluded so rehearsals don't inflate
+    the real participation figures.
+    """
+    sessions = ParticipantSession.objects.filter(
+        experiment=experiment, is_preview=False
+    )
     total = sessions.count()
     completed = sessions.filter(submitted_at__isnull=False).count()
     return ExperimentCounts(
@@ -100,7 +106,7 @@ def mean_listen_duration_ms(experiment: Experiment) -> float | None:
     """Mean ``listen_duration_ms`` across completed sessions, or None if empty."""
     qs = (
         ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False
+            experiment=experiment, submitted_at__isnull=False, is_preview=False
         )
         .values("assignments__listen_duration_ms")
     )
@@ -126,6 +132,7 @@ def pairwise_experiment_stats(experiment: Experiment) -> PairwiseCounts:
     pairs = PairAssignment.objects.filter(
         session__experiment=experiment,
         session__submitted_at__isnull=False,
+        session__is_preview=False,
     ).select_related(
         "stimulus_a__condition", "stimulus_b__condition"
     )
@@ -313,6 +320,7 @@ def bradley_terry_analysis(experiment: Experiment) -> BradleyTerryStats:
         PairAssignment.objects.filter(
             session__experiment=experiment,
             session__submitted_at__isnull=False,
+            session__is_preview=False,
         )
         .select_related("stimulus_a__condition", "stimulus_b__condition")
         .prefetch_related("responses__question")
@@ -409,6 +417,7 @@ def per_stimulus_mean_ratings(experiment: Experiment) -> list[dict[str, Any]]:
         responses = Response.objects.filter(
             session__experiment=experiment,
             session__submitted_at__isnull=False,
+            session__is_preview=False,
             stimulus=stim,
             question__in=rating_questions,
         ).values_list("answer_value", flat=True)

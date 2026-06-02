@@ -26,6 +26,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.text import slugify
 
@@ -236,6 +237,33 @@ class Experiment(models.Model):
         ),
     )
 
+    # --- Per-study branding (applied to participant pages) ------------------
+    brand_primary_color = models.CharField(
+        max_length=7,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r"^#[0-9a-fA-F]{6}$",
+                "Enter a 6-digit hex color like #2a6f97.",
+            )
+        ],
+        help_text="Accent color for participant pages, e.g. #2a6f97.",
+    )
+    brand_logo = models.ImageField(
+        upload_to="branding/",
+        blank=True,
+        null=True,
+        help_text="Optional logo shown in the participant survey header.",
+    )
+    brand_custom_css = models.TextField(
+        blank=True,
+        help_text=(
+            "Optional raw CSS appended to participant pages (trusted, like the "
+            "consent / instructions HTML). Advanced — leave blank for the "
+            "default look."
+        ),
+    )
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -323,6 +351,34 @@ class Experiment(models.Model):
                     and self.mode == self.Mode.PAIRWISE_AUDIO
                 ):
                     self._validate_pairwise_audio_activation()
+                # Readiness: block going live (or into preview) on a study that
+                # isn't complete enough to collect usable data.
+                becoming_active = (
+                    self.state == self.State.ACTIVE
+                    and old_state != self.State.ACTIVE
+                )
+                entering_test = (
+                    self.state == self.State.TEST and old_state == self.State.DRAFT
+                )
+                if becoming_active or entering_test:
+                    from experiments.readiness import is_walkable, readiness_problems
+
+                    if becoming_active:
+                        problems = readiness_problems(self)
+                        if problems:
+                            raise ValidationError(
+                                {"state": "Cannot activate yet — " + " ".join(problems)}
+                            )
+                    elif not is_walkable(self):
+                        raise ValidationError(
+                            {
+                                "state": (
+                                    "Add at least one condition, one active "
+                                    "stimulus, and one per-stimulus question "
+                                    "before previewing."
+                                )
+                            }
+                        )
 
     def _validate_pairwise_audio_activation(self) -> None:
         active_stimuli = Stimulus.objects.filter(
@@ -1153,3 +1209,83 @@ class Prompt(models.Model):
             if duration is not None:
                 type(self).objects.filter(pk=self.pk).update(duration_seconds=duration)
                 self.duration_seconds = duration
+
+
+class QuestionTemplate(models.Model):
+    """A reusable, experiment-independent blueprint for a :class:`Question`.
+
+    Researchers save questions they reuse often (a standard NPS item, a
+    demographic block, an attention check) to a personal "question bank" and
+    insert them into any draft study they own. ``owner=NULL`` marks a
+    platform-wide template visible to everyone. Skip logic (``visible_if``) is
+    deliberately not stored — it references sibling questions by id, which has
+    no meaning outside the originating experiment.
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="question_templates",
+        help_text="Owner of this template; blank for a shared/global template.",
+    )
+    name = models.CharField(max_length=200)
+    section = models.CharField(
+        max_length=16,
+        choices=Question.Section.choices,
+        default=Question.Section.STIMULUS,
+    )
+    type = models.CharField(max_length=16, choices=Question.Type.choices)
+    prompt = models.TextField(help_text="Supports Markdown.")
+    help_text = models.TextField(blank=True)
+    required = models.BooleanField(default=True)
+    config = models.JSONField(default=dict, blank=True)
+    page_break_before = models.BooleanField(default=False)
+    show_prompt = models.BooleanField(default=False)
+    attention_expected = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("owner_id", "name")
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.name
+
+    def clean(self):
+        super().clean()
+        _validate_question_config(self.type, self.config or {})
+
+    @classmethod
+    def from_question(cls, question: "Question", *, owner, name: str = "") -> "QuestionTemplate":
+        """Build (unsaved) a template capturing an existing question."""
+        return cls(
+            owner=owner,
+            name=name or (question.prompt[:80] or "Untitled question"),
+            section=question.section,
+            type=question.type,
+            prompt=question.prompt,
+            help_text=question.help_text,
+            required=question.required,
+            config=question.config or {},
+            page_break_before=question.page_break_before,
+            show_prompt=question.show_prompt,
+            attention_expected=question.attention_expected,
+        )
+
+    def build_question(self, experiment: "Experiment", *, sort_order: int = 0) -> "Question":
+        """Build (unsaved) a Question on ``experiment`` from this template."""
+        return Question(
+            experiment=experiment,
+            section=self.section,
+            type=self.type,
+            prompt=self.prompt,
+            help_text=self.help_text,
+            required=self.required,
+            config=self.config or {},
+            page_break_before=self.page_break_before,
+            show_prompt=self.show_prompt,
+            attention_expected=self.attention_expected,
+            sort_order=sort_order,
+        )

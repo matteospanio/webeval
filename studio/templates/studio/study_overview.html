@@ -11,6 +11,21 @@
      · {{ experiment.get_mode_display }} · your role: {{ role }}</p>
 </hgroup>
 
+{% if not is_live %}
+<article class="readiness">
+  <header><strong>Readiness</strong></header>
+  {% if readiness_problems %}
+    <p>Finish these before this study can go live:</p>
+    <ul>
+      {% for problem in readiness_problems %}<li>⚠️ {{ problem }}</li>{% endfor %}
+    </ul>
+    <p><small>Activation happens in the Django admin once these are resolved.</small></p>
+  {% else %}
+    <p>✓ This study has everything it needs to go live. Activation happens in the Django admin.</p>
+  {% endif %}
+</article>
+{% endif %}
+
 <div class="grid">
   <article>
     <header><strong>Participation</strong></header>
@@ -53,9 +68,17 @@
 
 <h2>Manage</h2>
 <ul>
+  <li>
+    <form method="post" action="{% url 'studio:study_clone' slug=experiment.slug %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="secondary outline" style="display:inline;width:auto;padding:.25rem .75rem">Duplicate this study</button>
+    </form>
+    <small>Creates an editable draft copy you own (stimuli, questions, branding and all).</small>
+  </li>
   {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}
   {% if show_admin_edit %}
     <li><a href="{{ admin_change_url }}">Edit structure (conditions, stimuli, questions) in admin</a></li>
+    {% if experiment.state == "draft" %}<li><a href="{% url 'admin:experiments_experiment_add_from_bank' slug=experiment.slug %}">Add questions from your bank</a></li>{% endif %}
   {% elif can_edit %}
     <li><em>Structural editing of stimuli and questions currently requires Django admin (staff) access — ask a platform admin to grant it. A native studio editor is on the roadmap.</em></li>
   {% endif %}

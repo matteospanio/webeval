@@ -80,6 +80,11 @@ class ParticipantSession(models.Model):
     screened_out_at = models.DateTimeField(null=True, blank=True)
     withdrawn_at = models.DateTimeField(null=True, blank=True)
 
+    # True when the session was started while the experiment was in the TEST
+    # (preview/pilot) phase. Preview sessions are excluded from stats and
+    # exports so a rehearsal never contaminates the real dataset.
+    is_preview = models.BooleanField(default=False, db_index=True)
+
     # Quality flags computed at completion: count of failed attention checks
     # and a list of flag strings (e.g. "failed_attention", "speeder",
     # "straight_lining").
