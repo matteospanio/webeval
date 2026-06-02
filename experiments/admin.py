@@ -158,6 +158,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "randomize_stimulus_questions",
                     "eligibility_rule",
                     "min_completion_seconds",
+                    "one_submission_per_participant",
                 )
             },
         ),

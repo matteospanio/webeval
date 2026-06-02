@@ -147,6 +147,14 @@ class Experiment(models.Model):
             "consent to submit) are flagged as speeders."
         ),
     )
+    one_submission_per_participant = models.BooleanField(
+        default=False,
+        help_text=(
+            "If enabled, a participant (identified by a long-lived browser "
+            "cookie) who has already completed this study is shown an "
+            "'already completed' page instead of being able to start again."
+        ),
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

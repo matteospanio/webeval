@@ -88,6 +88,11 @@ class ParticipantSession(models.Model):
     browser_family = models.CharField(max_length=64, blank=True)
     country_code = models.CharField(max_length=2, blank=True)
 
+    # Stable per-browser participant identifier (a long-lived cookie). Enables
+    # duplicate-submission detection and links a participant's sessions; blank
+    # when the participant blocks cookies.
+    participant_uid = models.CharField(max_length=64, blank=True, db_index=True)
+
     # Secret token for the "save & continue later" resume link. Generated when
     # the session is created; null on legacy rows from before the feature (so
     # the unique constraint tolerates many NULLs and no backfill is needed).

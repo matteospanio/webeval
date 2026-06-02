@@ -12,11 +12,12 @@ without recomputing. Detects:
 """
 from __future__ import annotations
 
-from .models import Response
+from .models import ParticipantSession, Response
 
 FAILED_ATTENTION = "failed_attention"
 SPEEDER = "speeder"
 STRAIGHT_LINING = "straight_lining"
+DUPLICATE = "duplicate"
 
 _SCALE_TYPES = {"rating", "likert"}
 _STRAIGHT_LINING_MIN = 3
@@ -57,5 +58,16 @@ def compute_flags(session) -> tuple[int, list[str]]:
         and len({str(a) for a in scale_answers}) == 1
     ):
         flags.append(STRAIGHT_LINING)
+
+    if session.participant_uid and (
+        ParticipantSession.objects.filter(
+            experiment=experiment,
+            participant_uid=session.participant_uid,
+            submitted_at__isnull=False,
+        )
+        .exclude(pk=session.pk)
+        .exists()
+    ):
+        flags.append(DUPLICATE)
 
     return failed, flags

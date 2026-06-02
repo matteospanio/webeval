@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import random
 import secrets
+import uuid
 from typing import Any
 
 from django.contrib import messages
@@ -59,6 +60,10 @@ from .models import PairAssignment, ParticipantSession, Response, StimulusAssign
 RUNNABLE_STATES: frozenset[str] = frozenset(
     {Experiment.State.ACTIVE, Experiment.State.TEST}
 )
+
+
+PARTICIPANT_COOKIE = "webeval_pid"
+PARTICIPANT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 
 def _session_key(slug: str) -> str:
@@ -415,6 +420,30 @@ def consent(request, slug: str):
     if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
 
+    pid = request.COOKIES.get(PARTICIPANT_COOKIE) or uuid.uuid4().hex
+
+    def _with_pid(response):
+        response.set_cookie(
+            PARTICIPANT_COOKIE,
+            pid,
+            max_age=PARTICIPANT_COOKIE_MAX_AGE,
+            samesite="Lax",
+        )
+        return response
+
+    # Duplicate-submission gate: a study can allow only one completion per
+    # participant (identified by the long-lived cookie).
+    if experiment.one_submission_per_participant and _already_completed(
+        experiment, pid
+    ):
+        return _with_pid(
+            render(
+                request,
+                "survey/already_completed.html",
+                _base_context(experiment, None),
+            )
+        )
+
     consent_first, consent_rest = _split_consent_text(experiment.consent_text)
 
     if request.method == "POST":
@@ -427,9 +456,9 @@ def consent(request, slug: str):
             ctx["error"] = True
             ctx["consent_first"] = consent_first
             ctx["consent_rest"] = consent_rest
-            return render(request, "survey/consent.html", ctx)
+            return _with_pid(render(request, "survey/consent.html", ctx))
         if session is None:
-            session = _create_session(request, experiment)
+            session = _create_session(request, experiment, participant_uid=pid)
         session.consented_at = timezone.now()
         if _has_screening(experiment):
             session.last_step = ParticipantSession.Step.SCREENING
@@ -437,7 +466,7 @@ def consent(request, slug: str):
             session.save(
                 update_fields=["consented_at", "last_step", "screening_page_index"]
             )
-            return redirect("survey:screening", slug=slug)
+            return _with_pid(redirect("survey:screening", slug=slug))
         needs_audio_check = _audio_check_active(experiment)
         session.last_step = (
             ParticipantSession.Step.AUDIO_CHECK
@@ -446,8 +475,8 @@ def consent(request, slug: str):
         )
         session.save(update_fields=["consented_at", "last_step"])
         if needs_audio_check:
-            return redirect("survey:audio_check", slug=slug)
-        return redirect("survey:instructions", slug=slug)
+            return _with_pid(redirect("survey:audio_check", slug=slug))
+        return _with_pid(redirect("survey:instructions", slug=slug))
 
     Experiment.objects.filter(pk=experiment.pk).update(
         consent_page_views=F("consent_page_views") + 1
@@ -455,10 +484,20 @@ def consent(request, slug: str):
     ctx = _base_context(experiment, session)
     ctx["consent_first"] = consent_first
     ctx["consent_rest"] = consent_rest
-    return render(request, "survey/consent.html", ctx)
+    return _with_pid(render(request, "survey/consent.html", ctx))
 
 
-def _create_session(request, experiment: Experiment) -> ParticipantSession:
+def _already_completed(experiment: Experiment, pid: str) -> bool:
+    if not pid:
+        return False
+    return ParticipantSession.objects.filter(
+        experiment=experiment, participant_uid=pid, submitted_at__isnull=False
+    ).exists()
+
+
+def _create_session(
+    request, experiment: Experiment, participant_uid: str = ""
+) -> ParticipantSession:
     meta = extract_metadata(request)
     session = ParticipantSession.objects.create(
         experiment=experiment,
@@ -466,6 +505,7 @@ def _create_session(request, experiment: Experiment) -> ParticipantSession:
         browser_family=meta.browser_family,
         country_code=meta.country_code,
         resume_token=secrets.token_urlsafe(32),
+        participant_uid=participant_uid,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
