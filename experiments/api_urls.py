@@ -8,7 +8,13 @@ from __future__ import annotations
 
 from django.urls import path
 
-from .api import PairwiseAnswersView, PromptUploadView, StimulusUploadView
+from .api import (
+    AnswersView,
+    PairwiseAnswersView,
+    PromptUploadView,
+    ResultsView,
+    StimulusUploadView,
+)
 
 urlpatterns = [
     path(
@@ -25,5 +31,15 @@ urlpatterns = [
         "experiments/<slug:slug>/pairwise-answers/",
         PairwiseAnswersView.as_view(),
         name="api_pairwise_answers",
+    ),
+    path(
+        "experiments/<slug:slug>/answers/",
+        AnswersView.as_view(),
+        name="api_answers",
+    ),
+    path(
+        "experiments/<slug:slug>/results/",
+        ResultsView.as_view(),
+        name="api_results",
     ),
 ]

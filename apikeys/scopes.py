@@ -10,6 +10,8 @@ SCOPES: dict[str, str] = {
     "stimuli:upload": "Upload stimuli to draft experiments",
     "prompts:upload": "Upload audio prompts to draft experiments",
     "pairwise-answers:read": "Export pairwise comparison answers",
+    "answers:read": "Export submitted per-stimulus answers",
+    "results:read": "Read aggregate per-question results",
 }
 
 

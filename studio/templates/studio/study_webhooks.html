@@ -1,0 +1,59 @@
+{% extends "studio/base.html" %}
+{% block title %}Webhooks · {{ experiment.name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li><a href="{% url 'studio:study_overview' slug=experiment.slug %}">{{ experiment.name }}</a></li>
+  <li>Webhooks</li>
+</ul></nav>
+
+<hgroup>
+  <h1>Webhooks</h1>
+  <p>POST an event to your URL for downstream pipelines. Each delivery is signed with
+     <code>X-Webhook-Signature: sha256=HMAC(secret, body)</code> — verify it with the secret below.</p>
+</hgroup>
+
+<h2>Add a webhook</h2>
+<form method="post">
+  {% csrf_token %}
+  <input type="hidden" name="action" value="add">
+  <div class="grid">
+    <label>Target URL
+      <input type="url" name="url" placeholder="https://hooks.example.com/webeval" required>
+    </label>
+    <label>Event
+      <select name="event">
+        {% for value, label in events %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  <button type="submit">Add webhook</button>
+</form>
+
+<h2>Configured webhooks</h2>
+{% if webhooks %}
+<figure><table>
+  <thead><tr><th>Event</th><th>URL</th><th>Secret</th><th>Last delivery</th><th></th></tr></thead>
+  <tbody>
+    {% for w in webhooks %}
+    <tr>
+      <td><code>{{ w.event }}</code></td>
+      <td><small>{{ w.url }}</small></td>
+      <td><small><code>{{ w.secret }}</code></small></td>
+      <td><small>{% if w.last_delivered_at %}{{ w.last_status|default:"—" }} @ {{ w.last_delivered_at|date:"Y-m-d H:i" }}{% if w.last_error %}<br>{{ w.last_error }}{% endif %}{% else %}never{% endif %}</small></td>
+      <td>
+        <form method="post" onsubmit="return confirm('Remove this webhook?');" style="margin:0">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="webhook_id" value="{{ w.pk }}">
+          <button type="submit" class="secondary outline" style="width:auto;margin:0;padding:.2rem .6rem">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></figure>
+{% else %}
+<p>No webhooks configured yet.</p>
+{% endif %}
+{% endblock %}

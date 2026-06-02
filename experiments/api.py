@@ -284,3 +284,76 @@ class PairwiseAnswersView(LogAPIKeyUsageMixin, APIView):
                 "Your API key's user does not have access to this experiment."
             )
         return Response(list(iter_pairwise_answers(experiment)))
+
+
+class AnswersView(LogAPIKeyUsageMixin, APIView):
+    """Return submitted per-stimulus answers for an experiment as JSON.
+
+    One row per (session, stimulus, question) over real (submitted,
+    non-preview) sessions — the JSON twin of the answers CSV. Free-text marked
+    as PII is redacted unless ``?include_pii=1``. For downstream pipelines.
+    """
+
+    permission_classes = [HasScope("answers:read")]
+
+    def get(self, request, slug: str):
+        from survey.models import Response as SurveyResponse
+
+        experiment = get_object_or_404(Experiment, slug=slug)
+        if not can_view(request.user, experiment):
+            raise PermissionDenied(
+                "Your API key's user does not have access to this experiment."
+            )
+        include_pii = request.query_params.get("include_pii") in ("1", "true", "on")
+        rows = (
+            SurveyResponse.objects.filter(
+                session__experiment=experiment,
+                session__submitted_at__isnull=False,
+                session__is_preview=False,
+                stimulus__isnull=False,
+            )
+            .select_related("session", "stimulus__condition", "question")
+            .order_by("session__id", "stimulus__sort_order", "question__sort_order")
+        )
+        data = [
+            {
+                "session_id": str(r.session_id),
+                "submitted_at": r.session.submitted_at.isoformat()
+                if r.session.submitted_at
+                else None,
+                "stimulus_id": r.stimulus_id,
+                "condition": r.stimulus.condition.name,
+                "question_id": r.question_id,
+                "question_type": r.question.type,
+                "answer": "[redacted]"
+                if (r.question.contains_pii and not include_pii)
+                else r.get_answer(),
+                "elapsed_ms": r.elapsed_ms,
+            }
+            for r in rows
+        ]
+        return Response(data)
+
+
+class ResultsView(LogAPIKeyUsageMixin, APIView):
+    """Return aggregate per-question results for an experiment as JSON.
+
+    The same analysis shown on the studio overview (distributions, summary
+    stats, etc.) — for programmatic dashboards / monitoring.
+    """
+
+    permission_classes = [HasScope("results:read")]
+
+    def get(self, request, slug: str):
+        from dataclasses import asdict
+
+        from experiments.analysis import experiment_question_analysis
+
+        experiment = get_object_or_404(Experiment, slug=slug)
+        if not can_view(request.user, experiment):
+            raise PermissionDenied(
+                "Your API key's user does not have access to this experiment."
+            )
+        return Response(
+            [asdict(r) for r in experiment_question_analysis(experiment)]
+        )
