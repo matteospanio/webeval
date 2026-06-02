@@ -839,6 +839,19 @@ class Question(models.Model):
     def is_attention_check(self) -> bool:
         return self.attention_expected is not None
 
+    def clean_fields(self, exclude=None):
+        # Accept a registered plugin component's type alongside the built-in
+        # Type.choices — otherwise full_clean() rejects it as "not a valid
+        # choice". We've vouched for the value, so we skip the field's own
+        # choice check for it (an unknown type still errors normally).
+        from experiments.components import is_question_component
+
+        exclude = set(exclude or ())
+        valid = {value for value, _ in self.Type.choices}
+        if self.type and (self.type in valid or is_question_component(self.type)):
+            exclude.add("type")
+        super().clean_fields(exclude=exclude)
+
     def clean(self):
         super().clean()
         _ensure_draft(self.experiment if self.experiment_id else None)
@@ -977,6 +990,13 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
             )
         if len(set(items)) != len(items):
             raise ValidationError({"config": "ranking 'items' must be distinct."})
+        return
+
+    # Plugin question-type components validate their own config shape.
+    from experiments.components import get_question_component, is_question_component
+
+    if is_question_component(question_type):
+        get_question_component(question_type).validate_config(config)
         return
 
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})

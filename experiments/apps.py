@@ -5,3 +5,12 @@ class ExperimentsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "experiments"
     verbose_name = "Experiments"
+
+    def ready(self):
+        from django.utils.module_loading import autodiscover_modules
+
+        # Import the registry module (registers the shipped example component),
+        # then let any installed app contribute its own components by defining
+        # a ``question_components`` module.
+        from . import components  # noqa: F401
+        autodiscover_modules("question_components")
