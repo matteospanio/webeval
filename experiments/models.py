@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 from typing import Any
 
 from django.conf import settings
@@ -186,6 +187,23 @@ class Experiment(models.Model):
         help_text="Add a honeypot field to the consent form to deflect simple bots.",
     )
 
+    class AccessMode(models.TextChoices):
+        PUBLIC = "public", "Public (anyone with the link)"
+        CODE = "code", "Shared access code"
+        INVITE = "invite", "Single-use invite links"
+
+    access_mode = models.CharField(
+        max_length=8,
+        choices=AccessMode.choices,
+        default=AccessMode.PUBLIC,
+        help_text="Who can start the study.",
+    )
+    access_code = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="The shared code participants must enter when access mode = Shared access code.",
+    )
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -317,6 +335,37 @@ class Experiment(models.Model):
                     )
                 }
             )
+
+
+def _new_participant_invite_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+class ParticipantInvite(models.Model):
+    """A single-use access token for a private (invite-only) study."""
+
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name="participant_invites",
+    )
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        default=_new_participant_invite_token,
+        editable=False,
+    )
+    label = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("experiment", "-created_at")
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        state = "used" if self.used_at else "unused"
+        return f"{self.token[:8]}… ({state})"
 
 
 # --- Structural-edit guard for child models ---------------------------------

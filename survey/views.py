@@ -38,7 +38,13 @@ from experiments.assignment import (
     get_strategy,
 )
 from experiments.branching import evaluate_condition, is_visible
-from experiments.models import Experiment, Prompt, Question, Stimulus
+from experiments.models import (
+    Experiment,
+    ParticipantInvite,
+    Prompt,
+    Question,
+    Stimulus,
+)
 
 from .flagging import compute_flags
 from .flow import (
@@ -420,6 +426,71 @@ def _withdraw_url(request, slug: str, token) -> str | None:
     )
 
 
+# --- access gate (private studies) -----------------------------------------
+
+
+def _access_gate(request, experiment: Experiment, slug: str):
+    """Return a gate/blocked response for private studies, or None when access
+    is granted (public studies, or a valid code / invite token)."""
+    mode = experiment.access_mode
+    if mode == Experiment.AccessMode.PUBLIC:
+        return None
+    granted_key = f"webeval:access:{slug}"
+    if request.session.get(granted_key):
+        return None
+    if mode == Experiment.AccessMode.CODE:
+        supplied = (request.GET.get("code") or "").strip()
+        if supplied and supplied == experiment.access_code:
+            request.session[granted_key] = True
+            return None
+        return redirect("survey:access", slug=slug)
+    if mode == Experiment.AccessMode.INVITE:
+        token = (request.GET.get("invite") or "").strip()
+        if token:
+            invite = ParticipantInvite.objects.filter(
+                experiment=experiment, token=token, used_at__isnull=True
+            ).first()
+            if invite is not None:
+                request.session[granted_key] = True
+                request.session[f"webeval:invite:{slug}"] = token
+                return None
+        ctx = _base_context(experiment, None)
+        ctx["progress_percent"] = None
+        return render(request, "survey/invite_required.html", ctx, status=403)
+    return None
+
+
+def _consume_invite(request, experiment: Experiment, slug: str) -> None:
+    """Mark the stashed single-use invite token as used (at session creation)."""
+    if experiment.access_mode != Experiment.AccessMode.INVITE:
+        return
+    token = request.session.get(f"webeval:invite:{slug}")
+    if token:
+        ParticipantInvite.objects.filter(
+            experiment=experiment, token=token, used_at__isnull=True
+        ).update(used_at=timezone.now())
+
+
+@require_http_methods(["GET", "POST"])
+def access(request, slug: str):
+    experiment = get_object_or_404(Experiment, slug=slug)
+    if experiment.state not in RUNNABLE_STATES:
+        return _unavailable(request, experiment)
+    if experiment.access_mode != Experiment.AccessMode.CODE:
+        return redirect("survey:consent", slug=slug)
+    error = False
+    if request.method == "POST":
+        supplied = (request.POST.get("access_code") or "").strip()
+        if experiment.access_code and supplied == experiment.access_code:
+            request.session[f"webeval:access:{slug}"] = True
+            return redirect("survey:consent", slug=slug)
+        error = True
+    ctx = _base_context(experiment, None)
+    ctx["progress_percent"] = None
+    ctx["error"] = error
+    return render(request, "survey/access_code.html", ctx)
+
+
 # --- consent ---------------------------------------------------------------
 
 
@@ -428,6 +499,10 @@ def consent(request, slug: str):
     experiment, session = _load_session(request, slug)
     if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
+
+    gate = _access_gate(request, experiment, slug)
+    if gate is not None:
+        return gate
 
     pid = request.COOKIES.get(PARTICIPANT_COOKIE) or uuid.uuid4().hex
 
@@ -486,6 +561,7 @@ def consent(request, slug: str):
             session = _create_session(
                 request, experiment, participant_uid=pid, external_id=external_id
             )
+            _consume_invite(request, experiment, slug)
         session.consented_at = timezone.now()
         if _has_screening(experiment):
             session.last_step = ParticipantSession.Step.SCREENING

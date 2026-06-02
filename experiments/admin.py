@@ -39,7 +39,14 @@ from .data_ops import purge_participant_data
 from .exports import build_experiment_archive
 from .forms import QuestionAdminForm
 from .imports import import_experiment_archive
-from .models import Condition, Experiment, Prompt, Question, Stimulus
+from .models import (
+    Condition,
+    Experiment,
+    ParticipantInvite,
+    Prompt,
+    Question,
+    Stimulus,
+)
 from .stats import (
     bradley_terry_analysis,
     experiment_counts,
@@ -129,6 +136,28 @@ def open_printable(modeladmin, request, queryset):
     )
 
 
+@admin.action(description="Generate 20 participant invite links")
+def generate_participant_invites(modeladmin, request, queryset):
+    created = 0
+    for exp in queryset:
+        ParticipantInvite.objects.bulk_create(
+            [ParticipantInvite(experiment=exp) for _ in range(20)]
+        )
+        created += 20
+    modeladmin.message_user(
+        request, f"Generated {created} invite links.", level=messages.SUCCESS
+    )
+
+
+@admin.register(ParticipantInvite)
+class ParticipantInviteAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
+    list_display = ("token", "experiment", "label", "used_at", "created_at")
+    list_filter = ("experiment",)
+    search_fields = ("token", "label", "experiment__name")
+    readonly_fields = ("token", "used_at", "created_at")
+
+
 @admin.register(Experiment)
 class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     experiment_lookup = "pk"
@@ -137,7 +166,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
     inlines = (ConditionInline, QuestionInline, PromptInline)
-    actions = (export_repro_json, open_printable)
+    actions = (export_repro_json, open_printable, generate_participant_invites)
     actions_list = ("import_experiment",)
     readonly_fields = ("live_stats", "owner")
 
@@ -163,6 +192,8 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "completion_code",
                     "external_id_param",
                     "bot_protection",
+                    "access_mode",
+                    "access_code",
                 )
             },
         ),
