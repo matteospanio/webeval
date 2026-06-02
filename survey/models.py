@@ -35,6 +35,7 @@ class ParticipantSession(models.Model):
         STIMULI = "stimuli", "Listening to stimuli"
         DEMOGRAPHICS = "demographics", "Demographic questions"
         SCREENED_OUT = "screened_out", "Screened out (ineligible)"
+        WITHDRAWN = "withdrawn", "Withdrawn"
         DONE = "done", "Completed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -77,6 +78,7 @@ class ParticipantSession(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     abandoned_at = models.DateTimeField(null=True, blank=True)
     screened_out_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     # Quality flags computed at completion: count of failed attention checks
     # and a list of flag strings (e.g. "failed_attention", "speeder",

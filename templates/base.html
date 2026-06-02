@@ -43,6 +43,9 @@
              aria-label="Resume link" onclick="this.select()" style="width:100%">
     </details>
     {% endif %}
+    {% if withdraw_url %}
+    <p class="withdraw-link"><small><a href="{{ withdraw_url }}">Withdraw from this study and delete my data</a></small></p>
+    {% endif %}
   </main>
   <footer class="survey-footer">
     {% block footer %}

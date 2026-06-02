@@ -411,6 +411,15 @@ def _resume_url(request, experiment: Experiment, session: ParticipantSession | N
     )
 
 
+def _withdraw_url(request, slug: str, token) -> str | None:
+    """Absolute 'withdraw & delete my data' link for a session token."""
+    if not token:
+        return None
+    return request.build_absolute_uri(
+        reverse("survey:withdraw", kwargs={"slug": slug, "token": token})
+    )
+
+
 # --- consent ---------------------------------------------------------------
 
 
@@ -587,6 +596,7 @@ def screening(request, slug: str):
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/screening.html", ctx)
@@ -837,6 +847,7 @@ def play(request, slug: str):
             ),
             "show_prompt": any(q.show_prompt for q in visible_questions),
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -1260,6 +1271,7 @@ def demographics(request, slug: str):
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/demographics.html", ctx)
@@ -1294,6 +1306,8 @@ def _finish_session(request, session: ParticipantSession, slug: str):
     )
     if session.completion_code:
         request.session[f"webeval:code:{slug}"] = session.completion_code
+    if session.resume_token:
+        request.session[f"webeval:token:{slug}"] = session.resume_token
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
@@ -1335,10 +1349,69 @@ def resume(request, slug: str, token: str):
     return redirect(required_step_url(session))
 
 
+def _withdraw_data(session: ParticipantSession) -> None:
+    """Erase a participant's answers + behavioural data, leaving an anonymised
+    tombstone recording that a withdrawal happened (no personal data retained)."""
+    Response.objects.filter(session=session).delete()
+    StimulusAssignment.objects.filter(session=session).delete()
+    PairAssignment.objects.filter(session=session).delete()
+    session.withdrawn_at = timezone.now()
+    session.last_step = ParticipantSession.Step.WITHDRAWN
+    session.submitted_at = None
+    session.completion_code = ""
+    session.external_id = ""
+    session.participant_uid = ""
+    session.country_code = ""
+    session.device_type = ""
+    session.browser_family = ""
+    session.assigned_condition = None
+    session.flags = []
+    session.failed_attention_checks = 0
+    session.resume_token = None
+    session.save()
+
+
+@require_http_methods(["GET", "POST"])
+def withdraw(request, slug: str, token: str):
+    """Participant-visible withdrawal + data deletion via their session token."""
+    experiment = get_object_or_404(Experiment, slug=slug)
+    session = ParticipantSession.objects.filter(
+        experiment=experiment, resume_token=token
+    ).first()
+    if session is None:
+        # Unknown or already-used token (e.g. data already withdrawn).
+        return render(
+            request,
+            "survey/withdrawn.html",
+            {
+                "experiment": experiment,
+                "brand": experiment.name,
+                "progress_percent": None,
+                "already": True,
+            },
+        )
+    if request.method == "POST":
+        _withdraw_data(session)
+        request.session.pop(_session_key(slug), None)
+        return render(
+            request,
+            "survey/withdrawn.html",
+            {
+                "experiment": experiment,
+                "brand": experiment.name,
+                "progress_percent": None,
+            },
+        )
+    ctx = _base_context(experiment, session)
+    ctx["progress_percent"] = None
+    return render(request, "survey/withdraw_confirm.html", ctx)
+
+
 @require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
     completion_code = request.session.pop(f"webeval:code:{slug}", "")
+    token = request.session.pop(f"webeval:token:{slug}", "")
     return render(
         request,
         "survey/thanks.html",
@@ -1348,5 +1421,6 @@ def thanks(request, slug: str):
             "progress_percent": 100,
             "is_test_mode": experiment.state == Experiment.State.TEST,
             "completion_code": completion_code,
+            "withdraw_url": _withdraw_url(request, slug, token),
         },
     )

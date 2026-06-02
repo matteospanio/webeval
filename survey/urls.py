@@ -26,4 +26,5 @@ urlpatterns = [
     path("s/<slug:slug>/demographics/", views.demographics, name="demographics"),
     path("s/<slug:slug>/thanks/", views.thanks, name="thanks"),
     path("s/<slug:slug>/resume/<str:token>/", views.resume, name="resume"),
+    path("s/<slug:slug>/withdraw/<str:token>/", views.withdraw, name="withdraw"),
 ]
