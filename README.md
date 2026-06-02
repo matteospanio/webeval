@@ -6,9 +6,15 @@
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 ![Modes: standard + pairwise](https://img.shields.io/badge/modes-standard%20%2B%20pairwise-6C5CE7)
 
-webeval is a Django app for running anonymous online evaluation studies with audio, image, and text stimuli.
+**webeval is a self-hosted framework for human evaluation of AI systems.**
 
-It was originally built for LLM-output evaluation, but the current architecture is broader than that: researchers can configure single-stimulus or pairwise-comparison studies, collect structured participant responses, and review results from the Django admin without building a separate dashboard.
+Run rigorous, privacy-respecting studies where people rate or compare the outputs of LLMs, generative audio/image/video models, text-to-speech, RAG pipelines, agents — or any other AI system — in single-stimulus or pairwise designs, then analyse the results online and pull them out as CSV, JSON, or webhooks.
+
+It is **AI-evaluation-first**, but the survey engine underneath is general: the same building blocks design studies with **non-AI targets** too (media, products, UX research, psychophysics, A/B copy). If you can show it to a person and ask a question about it, you can evaluate it here.
+
+Because you **host it yourself**, participant data never leaves infrastructure you control — a privacy- and compliance-friendly alternative to shipping your evaluation data to a third-party SaaS. webeval ships the features you need to run studies responsibly (consent versioning, data-subject requests, retention, audit trails) — see [GDPR & privacy](#gdpr--privacy).
+
+📚 **[Documentation](docs/README.md)** · [Install](docs/installation.md) · [Deploy on a server](docs/deployment.md) · [Using the app](docs/usage.md) · [Writing plugins](docs/plugins.md) · [GDPR & privacy](docs/gdpr.md)
 
 ## Features
 
@@ -42,13 +48,32 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Experiment archive import for cloning or sharing studies across instances
 - Lightweight participant metadata capture: device type, browser family, and country code
 
-## Current Scope
+## What you can evaluate
 
-webeval is currently best suited to anonymous, single-session studies where participants rate or compare media items in a guided flow.
+- **AI model outputs** — compare LLM completions, generative audio/image/video, TTS voices, or RAG/agent responses; rate quality dimensions or pick the better of two.
+- **Human-subject research** — perception/psychophysics studies, media or product preference, UX copy A/B tests, questionnaire research.
+- **Anything you can present** — audio, video, images, text, raw HTML, or an embedded URL, asked about with rating, choice, Likert, numeric, matrix, ranking, or your own custom question types.
 
-Today the product is intentionally narrower than a full survey platform. It does not yet provide participant accounts or longitudinal scheduling.
+Studies can be anonymous and single-session, multi-phase/longitudinal with return visits, public or invite-only, and crowdsourcing-platform-ready (completion codes, external IDs).
+
+## GDPR & privacy
+
+webeval is built to be **self-hosted**, so you remain the sole data controller — participant data never leaves infrastructure you run. The platform is designed around data-protection good practice and ships concrete features that help you meet GDPR (and similar) obligations:
+
+- **Data minimisation by design.** Participants are anonymous by default (no account). Client IP addresses are used only for an *offline* country lookup and are **never stored** — sessions keep just a coarse device type, browser family, and 2-letter country code. ([survey/metadata.py](survey/metadata.py))
+- **Lawful basis & consent.** Every study records a consent text and a lawful basis (GDPR Art. 6); each session is stamped with a hash of the exact consent wording it agreed to, so data stays tied to its consent version.
+- **Right to erasure (Art. 17).** Participants can withdraw and delete their own data from a private link at any time; researchers can erase a participant's data across studies from the data-subject-request tool.
+- **Right of access / portability (Arts. 15 & 20).** Export one participant's full data as JSON, or a study's data as CSV/JSON.
+- **Storage limitation (Art. 5(1)(e)).** Per-study retention windows + a scheduled `purge_expired_data` command delete data past its retention period.
+- **Records of processing & accountability (Art. 30).** Append-only audit trails log access changes and every edit/export/destructive action (who, what, when, from where).
+- **Special-category / free-text care.** Mark free-text questions as containing PII to redact them from exports by default.
+- **Security.** Scoped, hashed, auditable API keys; rate limiting; HTTPS/secure-cookie/HSTS toggles; HMAC-signed webhooks.
+
+> **Compliance is a shared responsibility.** webeval gives you the tooling; whether a given deployment is *compliant* also depends on how you configure and operate it (hosting region, consent wording, retention policy, DPA with any processors, etc.). It is not legal advice. See **[docs/gdpr.md](docs/gdpr.md)** for the full feature-to-article mapping and an operator checklist.
 
 ## Quick Start
+
+> New here? The **[installation guide](docs/installation.md)** walks through local setup and the **[deployment guide](docs/deployment.md)** covers putting webeval on a VPS or other Python host.
 
 ### Requirements
 
@@ -211,6 +236,8 @@ Django admin under **Users & access**.
 
 ## Extending webeval: custom question types (plugins)
 
+> Full guide with worked examples (custom question types, assignment strategies, consuming webhooks): **[docs/plugins.md](docs/plugins.md)**.
+
 New question widgets are **plugins** — you can add one without touching the core. A *component* bundles the four things a question type needs (config validation, participant-facing rendering, answer parsing, and a label), mirroring the existing pluggable assignment strategies.
 
 Drop a `question_components.py` module in any installed app and register a component:
@@ -348,9 +375,7 @@ leisure.
 
 ## Production deployment
 
-webeval ships a production Docker image and a `docker-compose.yml` (app + Postgres + Redis). All production behaviour is env-driven (see `.env.example`); tests and local dev are unaffected by it.
-
-### Docker Compose (quickstart)
+webeval ships a production Docker image and a `docker-compose.yml` (app + Postgres + Redis). The fastest path:
 
 ```bash
 cp .env.example .env          # set SECRET_KEY, ALLOWED_HOSTS, SECURE_DEPLOY=True, …
@@ -358,25 +383,21 @@ docker compose up --build     # builds the image, runs migrations, serves on :80
 docker compose run --rm web python manage.py createsuperuser
 ```
 
-The image installs the `production` dependency group (gunicorn, WhiteNoise, psycopg, django-storages), runs `collectstatic`, applies migrations on start, and serves via gunicorn. Set `WEB_CONCURRENCY` to tune worker count.
+All production behaviour is env-driven and off by default: `DATABASE_URL` (Postgres), `USE_S3` (object storage), `USE_WHITENOISE` (static), `SECURE_DEPLOY` (HTTPS/HSTS/secure cookies), `REDIS_URL` (shared rate-limit cache). A `GET /healthz` endpoint reports DB liveness for your load balancer.
 
-### Configuration for production
+👉 **Full guide** — Docker *and* a manual gunicorn + Postgres + nginx VPS setup with HTTPS, backups, retention, and a production checklist: **[docs/deployment.md](docs/deployment.md)**.
 
-- **Database:** set `DATABASE_URL=postgres://user:pass@host:5432/db` (compose wires this to the bundled Postgres automatically).
-- **Object storage:** set `USE_S3=True` + `AWS_*` to store uploaded media in S3-compatible storage (AWS, MinIO, R2, Spaces via `AWS_S3_ENDPOINT_URL`); otherwise media lives on the `media` volume.
-- **Static files:** `USE_WHITENOISE=True` (the image sets this) serves compressed, hashed static assets from the app process — no nginx required.
-- **Security:** set `SECURE_DEPLOY=True` behind TLS to enable HTTPS redirect, secure cookies, and HSTS; set `CSRF_TRUSTED_ORIGINS=https://your.host`.
-- **Rate limiting:** the REST API is throttled (defaults 30/min anon, 240/min per key, overridable). Set `REDIS_URL` so limits are shared across gunicorn workers.
+## Documentation
 
-### Health checks & monitoring
+Full guides live in [`docs/`](docs/README.md):
 
-`GET /healthz` returns `200` (`{"status": "ok"}`) when the database is reachable and `503` otherwise — point your load balancer / uptime monitor at it. It is unauthenticated and PII-free.
+- [Installation](docs/installation.md) — run locally (uv or pip)
+- [Deployment](docs/deployment.md) — VPS / Docker, with HTTPS, backups, and a checklist
+- [Using the app](docs/usage.md) — studio + participant walkthrough, with screenshots
+- [Writing plugins & extending](docs/plugins.md) — custom question types, strategies, webhooks
+- [GDPR & privacy](docs/gdpr.md) — feature-to-article mapping + operator checklist
 
-### Backup & restore
-
-- **Database:** `pg_dump`/`pg_restore` (Postgres) — e.g. `docker compose exec db pg_dump -U webeval webeval > backup.sql`. A full-database JSON dump is also available to superusers at `/admin/database-export.json`.
-- **Media:** back up the `media` volume (or rely on your object-storage provider's versioning/backups when `USE_S3` is on).
-- **Retention:** schedule `python manage.py purge_expired_data` (cron) to honour each study's retention window.
+Contributor-facing architecture notes are in [CLAUDE.md](CLAUDE.md).
 
 ## Contributing
 
