@@ -11,13 +11,15 @@ staff users; a native studio editor is a later epic.
 """
 from __future__ import annotations
 
+import json
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import send_mail
 from django.db import transaction
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -25,10 +27,17 @@ from django.utils.text import slugify
 from accounts import services
 from accounts.forms import InviteForm
 from accounts.models import Invitation, Membership
-from accounts.permissions import can_manage, can_view, role_for
+from accounts.permissions import can_edit, can_manage, can_view, role_for
 from accounts.roles import Role
+from experiments.analysis import (
+    analyse_question,
+    available_segments,
+    segmented_question_analysis,
+)
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.cloning import clone_experiment
+from experiments.components import available_question_components
+from experiments.stats_tests import compare_conditions
 from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
@@ -36,7 +45,7 @@ from experiments.csv_exports import (
     pairwise_answers_csv_response,
 )
 from experiments.exports import build_experiment_archive
-from experiments.models import Experiment
+from experiments.models import Experiment, Question
 from experiments.readiness import readiness_problems
 from experiments.stats import (
     bradley_terry_analysis,
@@ -114,6 +123,19 @@ def study_create(request):
     return render(request, "studio/study_form.html", {"form": form})
 
 
+def _question_results(experiment):
+    """Per-question analysis + (where applicable) a condition comparison."""
+    results = []
+    for q in experiment.questions.all().order_by("section", "sort_order", "id"):
+        comparison = None
+        if q.section == Question.Section.STIMULUS:
+            comp = compare_conditions(experiment, q)
+            if comp.get("applicable"):
+                comparison = comp
+        results.append({"analysis": analyse_question(experiment, q), "comparison": comparison})
+    return results
+
+
 @login_required
 def study_overview(request, slug):
     experiment = _experiment_or_404(request, slug)
@@ -136,7 +158,14 @@ def study_overview(request, slug):
         "next_phases": list(experiment.next_phases.all()),
         "is_live": experiment.state == Experiment.State.ACTIVE,
         "readiness_problems": readiness_problems(experiment),
+        "segment_options": available_segments(),
     }
+    segment = request.GET.get("segment")
+    if segment in dict(available_segments()):
+        context["segment"] = segment
+        context["segmented_results"] = segmented_question_analysis(experiment, segment)
+    else:
+        context["question_results"] = _question_results(experiment)
     if experiment.is_pairwise:
         context["pairwise_stats"] = pairwise_experiment_stats(experiment)
         context["bt_stats"] = bradley_terry_analysis(experiment)
@@ -160,6 +189,150 @@ def study_clone(request, slug):
         "Edit it, then activate when ready.",
     )
     return redirect("studio:study_overview", slug=clone.slug)
+
+
+# --- drag-&-drop question builder ------------------------------------------
+
+
+_BUILTIN_DEFAULT_CONFIG = {
+    "rating": {"min": 0, "max": 100, "step": 1},
+    "choice": {"choices": ["Option 1", "Option 2"], "multi": False},
+    "text": {"max_length": 500},
+    "likert": {
+        "steps": 5,
+        "labels": ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"],
+    },
+    "numeric": {},
+    "matrix": {"rows": ["Row 1"], "columns": ["Column 1", "Column 2"]},
+    "ranking": {"items": ["Item 1", "Item 2"]},
+}
+
+
+def _palette() -> list[dict]:
+    """Question types offered in the builder: built-ins + registered plugins."""
+    palette = [
+        {
+            "type": value,
+            "label": label,
+            "plugin": False,
+            "default_config": _BUILTIN_DEFAULT_CONFIG.get(value, {}),
+        }
+        for value, label in Question.Type.choices
+    ]
+    palette += [
+        {
+            "type": comp.type,
+            "label": comp.label,
+            "plugin": True,
+            "default_config": comp.default_config(),
+        }
+        for comp in available_question_components()
+    ]
+    return palette
+
+
+def _serialize_question(q: Question) -> dict:
+    return {
+        "id": q.pk,
+        "section": q.section,
+        "type": q.type,
+        "prompt": q.prompt,
+        "required": q.required,
+        "page_break_before": q.page_break_before,
+        "show_prompt": q.show_prompt,
+        "config": q.config or {},
+    }
+
+
+@login_required
+def study_build(request, slug):
+    """The drag-&-drop question builder for a draft study."""
+    experiment = _experiment_or_404(request, slug)
+    if not can_edit(request.user, experiment):
+        raise PermissionDenied
+    questions = [
+        _serialize_question(q)
+        for q in experiment.questions.all().order_by("section", "sort_order", "id")
+    ]
+    return render(
+        request,
+        "studio/study_build.html",
+        {
+            "experiment": experiment,
+            "is_draft": experiment.state == Experiment.State.DRAFT,
+            "questions": questions,
+            "palette": _palette(),
+            "save_url": reverse("studio:study_build_save", kwargs={"slug": slug}),
+        },
+    )
+
+
+def _question_errors(exc: ValidationError) -> dict:
+    if hasattr(exc, "message_dict"):
+        return exc.message_dict
+    return {"__all__": exc.messages}
+
+
+@login_required
+def study_build_save(request, slug):
+    """Persist the builder's question set (create / update / delete + reorder)."""
+    experiment = _experiment_or_404(request, slug)
+    if not can_edit(request.user, experiment):
+        raise PermissionDenied
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+    if experiment.state != Experiment.State.DRAFT:
+        return JsonResponse(
+            {"ok": False, "error": "Questions can only be edited while the study is a draft."},
+            status=409,
+        )
+    try:
+        items = json.loads(request.body or "{}")["questions"]
+        if not isinstance(items, list):
+            raise ValueError
+    except (ValueError, KeyError, TypeError):
+        return JsonResponse({"ok": False, "error": "Invalid payload."}, status=400)
+
+    with transaction.atomic():
+        existing = {q.pk: q for q in experiment.questions.all()}
+        errors: dict[str, dict] = {}
+        prepared: list[Question] = []
+        for idx, item in enumerate(items):
+            qid = item.get("id")
+            q = existing.get(qid) if qid else None
+            if q is None:
+                q = Question(experiment=experiment)
+            q.section = item.get("section") or Question.Section.STIMULUS
+            q.type = item.get("type") or ""
+            q.prompt = item.get("prompt") or ""
+            q.required = bool(item.get("required", True))
+            q.page_break_before = bool(item.get("page_break_before", False))
+            q.show_prompt = bool(item.get("show_prompt", False))
+            q.config = item.get("config") if isinstance(item.get("config"), dict) else {}
+            q.sort_order = idx
+            try:
+                q.full_clean()
+            except ValidationError as exc:
+                errors[str(idx)] = _question_errors(exc)
+            prepared.append(q)
+
+        if errors:
+            transaction.set_rollback(True)
+            return JsonResponse({"ok": False, "errors": errors}, status=400)
+
+        kept_ids = set()
+        for q in prepared:
+            q.save()
+            kept_ids.add(q.pk)
+        for pk, q in existing.items():
+            if pk not in kept_ids:
+                q.delete()
+
+    # ids are returned in posted order so the builder can adopt them on the
+    # new cards (a second save then updates instead of re-creating).
+    return JsonResponse(
+        {"ok": True, "count": len(prepared), "ids": [q.pk for q in prepared]}
+    )
 
 
 def _access_context(request, experiment, invite_form):

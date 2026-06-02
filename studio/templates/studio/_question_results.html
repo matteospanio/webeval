@@ -1,0 +1,47 @@
+{% comment %}Per-question results. Expects `question_results` (overall) or, when
+`segment` is set, `segmented_results`; plus `segment_options`.{% endcomment %}
+<h2>Per-question results</h2>
+<p class="segment-nav">Segment by:
+  <a href="?"{% if not segment %} aria-current="page"{% endif %}>Overall</a>
+  {% for key, label in segment_options %} ·
+  <a href="?segment={{ key }}"{% if segment == key %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</p>
+
+{% if segment %}
+  {% for item in segmented_results %}
+  <article class="qresult">
+    <header><strong>{{ item.prompt }}</strong> <span class="badge">{{ item.type }}</span></header>
+    {% for seg in item.segments %}
+      <h5 class="segment-label">{{ seg.label }} <small>· {{ seg.result.n }} response{{ seg.result.n|pluralize }}</small></h5>
+      {% include "studio/_result_body.html" with a=seg.result %}
+    {% empty %}
+      <p><small>No responses yet.</small></p>
+    {% endfor %}
+  </article>
+  {% endfor %}
+
+{% elif question_results %}
+  {% for item in question_results %}
+  {% with a=item.analysis %}
+  <article class="qresult">
+    <header>
+      <strong>{{ a.prompt }}</strong>
+      <span class="badge">{{ a.type }}</span>
+      <small>· {{ a.n }} response{{ a.n|pluralize }}</small>
+    </header>
+    {% include "studio/_result_body.html" with a=a %}
+    {% if item.comparison %}{% with c=item.comparison %}
+    <p class="qcompare">
+      <strong>Across conditions:</strong> {{ c.test }} — statistic {{ c.statistic|floatformat:3 }},
+      df {{ c.df }}, p = {{ c.p_value|floatformat:4 }}
+      {% if c.p_value < 0.05 %}<mark>significant (p &lt; .05)</mark>{% else %}(n.s.){% endif %}
+      {% if c.groups %}<br><small>{% for g in c.groups %}{{ g.condition }}{% if 'mean' in g %}: {{ g.mean|floatformat:2 }}{% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+    </p>
+    {% endwith %}{% endif %}
+  </article>
+  {% endwith %}
+  {% endfor %}
+{% else %}
+  <p>No questions yet.</p>
+{% endif %}

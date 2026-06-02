@@ -11,6 +11,12 @@ urlpatterns = [
     path("", views.studies, name="studies"),
     path("new/", views.study_create, name="study_create"),
     path("<slug:slug>/", views.study_overview, name="study_overview"),
+    path("<slug:slug>/build/", views.study_build, name="study_build"),
+    path(
+        "<slug:slug>/build/save/",
+        views.study_build_save,
+        name="study_build_save",
+    ),
     path("<slug:slug>/clone/", views.study_clone, name="study_clone"),
     path("<slug:slug>/access/", views.study_access, name="study_access"),
     path("<slug:slug>/answers.csv", views.answers_csv, name="answers_csv"),

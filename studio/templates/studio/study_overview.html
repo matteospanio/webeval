@@ -1,5 +1,19 @@
 {% extends "studio/base.html" %}
 {% block title %}{{ experiment.name }} · webeval studio{% endblock %}
+{% block extra_head %}
+<style>
+  .qresult { margin-bottom: 0.75rem; }
+  .qresult header { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
+  table.dist { width: 100%; margin: 0; }
+  table.dist th[scope="row"] { width: 12rem; font-weight: 500; }
+  .dist-bar { width: 60%; }
+  .dist-bar span { display: inline-block; height: 0.8rem; background: var(--pico-primary); border-radius: 0.2rem; min-width: 1px; }
+  .dist-num { white-space: nowrap; text-align: right; }
+  .numeric-stats { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; list-style: none; padding: 0; }
+  .qcompare { margin-top: 0.4rem; }
+  .qcompare mark { padding: 0 0.3rem; }
+</style>
+{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb"><ul>
   <li><a href="{% url 'studio:studies' %}">My studies</a></li>
@@ -44,6 +58,8 @@
   </article>
 </div>
 
+{% include "studio/_question_results.html" %}
+
 <h2>Data &amp; exports</h2>
 <ul>
   <li><a href="{% url 'studio:answers_csv' slug=experiment.slug %}">Answers CSV</a>
@@ -75,12 +91,18 @@
     </form>
     <small>Creates an editable draft copy you own (stimuli, questions, branding and all).</small>
   </li>
+  {% if can_edit %}
+  <li>
+    <a href="{% url 'studio:study_build' slug=experiment.slug %}">Build questions (drag &amp; drop)</a>
+    {% if experiment.state != "draft" %} <small>(read-only — only drafts are editable)</small>{% endif %}
+  </li>
+  {% endif %}
   {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}
   {% if show_admin_edit %}
-    <li><a href="{{ admin_change_url }}">Edit structure (conditions, stimuli, questions) in admin</a></li>
+    <li><a href="{{ admin_change_url }}">Edit conditions &amp; stimuli in admin</a></li>
     {% if experiment.state == "draft" %}<li><a href="{% url 'admin:experiments_experiment_add_from_bank' slug=experiment.slug %}">Add questions from your bank</a></li>{% endif %}
   {% elif can_edit %}
-    <li><em>Structural editing of stimuli and questions currently requires Django admin (staff) access — ask a platform admin to grant it. A native studio editor is on the roadmap.</em></li>
+    <li><em>Editing conditions and stimuli currently requires Django admin (staff) access — ask a platform admin to grant it. Question editing is available right here in the builder.</em></li>
   {% endif %}
 </ul>
 {% endblock %}

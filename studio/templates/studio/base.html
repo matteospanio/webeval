@@ -17,6 +17,7 @@
     .badge { font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 1rem;
              background: var(--pico-secondary-background); vertical-align: middle; }
   </style>
+  {% block extra_head %}{% endblock %}
 </head>
 <body>
   <header class="container">
@@ -54,5 +55,6 @@
   <footer class="container">
     <small>webeval — open-source human-evaluation platform</small>
   </footer>
+  {% block scripts %}{% endblock %}
 </body>
 </html>
