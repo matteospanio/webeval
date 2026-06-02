@@ -35,6 +35,11 @@
       {% if messages %}
         {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
       {% endif %}
+      {% if experiment.collect_participant_code %}
+      <label>{{ experiment.participant_code_label }}
+        <input type="text" name="participant_code" autocomplete="off" required>
+      </label>
+      {% endif %}
       <label>
         <input type="checkbox" name="agree" required>
         I have read and understood the information above, and I agree to take part.

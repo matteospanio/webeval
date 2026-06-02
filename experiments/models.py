@@ -203,6 +203,19 @@ class Experiment(models.Model):
         blank=True,
         help_text="The shared code participants must enter when access mode = Shared access code.",
     )
+    collect_participant_code = models.BooleanField(
+        default=False,
+        help_text=(
+            "Ask participants for a stable code at the start (an optional "
+            "lightweight 'account'). The code becomes their participant id, so "
+            "duplicate checks and return visits work across devices."
+        ),
+    )
+    participant_code_label = models.CharField(
+        max_length=100,
+        default="Participant code",
+        help_text="Label for the participant-code field on the consent page.",
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,

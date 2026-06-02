@@ -194,6 +194,8 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "bot_protection",
                     "access_mode",
                     "access_code",
+                    "collect_participant_code",
+                    "participant_code_label",
                 )
             },
         ),

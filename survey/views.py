@@ -557,9 +557,36 @@ def consent(request, slug: str):
             ctx["consent_first"] = consent_first
             ctx["consent_rest"] = consent_rest
             return _with_pid(render(request, "survey/consent.html", ctx))
+        effective_uid = pid
+        if experiment.collect_participant_code:
+            code = (request.POST.get("participant_code") or "").strip()
+            if not code:
+                messages.error(
+                    request,
+                    f"Please enter your {experiment.participant_code_label.lower()}.",
+                )
+                ctx = _base_context(experiment, session)
+                ctx["error"] = True
+                ctx["consent_first"] = consent_first
+                ctx["consent_rest"] = consent_rest
+                return _with_pid(render(request, "survey/consent.html", ctx))
+            if experiment.one_submission_per_participant and _already_completed(
+                experiment, code
+            ):
+                return _with_pid(
+                    render(
+                        request,
+                        "survey/already_completed.html",
+                        _base_context(experiment, None),
+                    )
+                )
+            effective_uid = code
         if session is None:
             session = _create_session(
-                request, experiment, participant_uid=pid, external_id=external_id
+                request,
+                experiment,
+                participant_uid=effective_uid,
+                external_id=external_id,
             )
             _consume_invite(request, experiment, slug)
         session.consented_at = timezone.now()
