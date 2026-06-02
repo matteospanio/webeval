@@ -15,6 +15,21 @@ from accounts.admin_mixins import OwnerScopedAdminMixin
 from .models import PairAssignment, ParticipantSession, Response, StimulusAssignment
 
 
+class FlaggedFilter(admin.SimpleListFilter):
+    title = "flagged"
+    parameter_name = "flagged"
+
+    def lookups(self, request, model_admin):
+        return (("yes", "Flagged"), ("no", "Not flagged"))
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.exclude(flags=[])
+        if self.value() == "no":
+            return queryset.filter(flags=[])
+        return queryset
+
+
 @admin.register(ParticipantSession)
 class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     experiment_lookup = "experiment"
@@ -25,13 +40,19 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
         "last_step",
         "started_at",
         "submitted_at",
+        "failed_attention_checks",
+        "flag_list",
         "country_code",
         "device_type",
     )
-    list_filter = ("experiment", "last_step", "device_type")
+    list_filter = ("experiment", "last_step", "device_type", FlaggedFilter)
     search_fields = ("id", "experiment__name", "country_code")
     readonly_fields = tuple(f.name for f in ParticipantSession._meta.fields)
     date_hierarchy = "started_at"
+
+    @admin.display(description="Flags")
+    def flag_list(self, obj):
+        return ", ".join(obj.flags) if obj.flags else "—"
 
     def has_add_permission(self, request):
         return False

@@ -78,6 +78,12 @@ class ParticipantSession(models.Model):
     abandoned_at = models.DateTimeField(null=True, blank=True)
     screened_out_at = models.DateTimeField(null=True, blank=True)
 
+    # Quality flags computed at completion: count of failed attention checks
+    # and a list of flag strings (e.g. "failed_attention", "speeder",
+    # "straight_lining").
+    failed_attention_checks = models.PositiveSmallIntegerField(default=0)
+    flags = models.JSONField(default=list, blank=True)
+
     device_type = models.CharField(max_length=16, blank=True)
     browser_family = models.CharField(max_length=64, blank=True)
     country_code = models.CharField(max_length=2, blank=True)
@@ -98,6 +104,10 @@ class ParticipantSession(models.Model):
     @property
     def is_complete(self) -> bool:
         return self.submitted_at is not None
+
+    @property
+    def is_flagged(self) -> bool:
+        return bool(self.flags)
 
 
 class StimulusAssignment(models.Model):

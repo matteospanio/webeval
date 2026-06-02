@@ -287,14 +287,22 @@ def _handle_access_post(request, experiment):
 # --- result/export pass-throughs (reuse experiments builders) ---------------
 
 
+def _exclude_flagged(request) -> bool:
+    return request.GET.get("exclude_flagged") in ("1", "true", "on")
+
+
 @login_required
 def answers_csv(request, slug):
-    return answers_csv_response(_experiment_or_404(request, slug))
+    return answers_csv_response(
+        _experiment_or_404(request, slug), exclude_flagged=_exclude_flagged(request)
+    )
 
 
 @login_required
 def demographics_csv(request, slug):
-    return demographics_csv_response(_experiment_or_404(request, slug))
+    return demographics_csv_response(
+        _experiment_or_404(request, slug), exclude_flagged=_exclude_flagged(request)
+    )
 
 
 @login_required

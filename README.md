@@ -20,6 +20,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Conditional display / skip logic: show a question only when earlier answers match
 - Save & continue later: resume an in-progress session from a private link, on any device
 - Pre-task screening / eligibility flows that screen out ineligible participants before the main task
+- Attention checks and automatic quality flags (failed check, speeder, straight-lining) with one-click "exclude flagged" exports
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index

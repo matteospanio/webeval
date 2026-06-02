@@ -157,6 +157,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "require_audio_check",
                     "randomize_stimulus_questions",
                     "eligibility_rule",
+                    "min_completion_seconds",
                 )
             },
         ),
@@ -724,6 +725,18 @@ class QuestionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "lower sort order."
                 ),
                 "fields": ("visible_if",),
+            },
+        ),
+        (
+            "Attention check",
+            {
+                "description": (
+                    "Optional. If set, this question is an attention check; a "
+                    "participant whose answer differs from the expected value "
+                    'is flagged. Enter the expected answer as JSON, e.g. '
+                    '"Strongly agree" or 4.'
+                ),
+                "fields": ("attention_expected",),
             },
         ),
         (

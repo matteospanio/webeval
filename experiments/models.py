@@ -139,6 +139,14 @@ class Experiment(models.Model):
             "eligible. Participants who fail are screened out before the task."
         ),
     )
+    min_completion_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, participants who finish faster than this (seconds from "
+            "consent to submit) are flagged as speeders."
+        ),
+    )
 
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -634,12 +642,26 @@ class Question(models.Model):
             "must be earlier (lower sort order) in the same section."
         ),
     )
+    attention_expected = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, this question is an attention check: a participant whose "
+            "answer differs from this value is flagged. Enter the expected "
+            'answer as JSON, e.g. "Strongly agree" or 4. Leave blank for a '
+            "normal question."
+        ),
+    )
 
     class Meta:
         ordering = ("experiment", "section", "sort_order", "id")
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return f"[{self.get_section_display()}] {self.prompt[:60]}"
+
+    @property
+    def is_attention_check(self) -> bool:
+        return self.attention_expected is not None
 
     def clean(self):
         super().clean()

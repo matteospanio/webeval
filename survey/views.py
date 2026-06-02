@@ -39,6 +39,7 @@ from experiments.assignment import (
 from experiments.branching import evaluate_condition, is_visible
 from experiments.models import Experiment, Prompt, Question, Stimulus
 
+from .flagging import compute_flags
 from .flow import (
     paginate_questions,
     pairwise_progress_percent,
@@ -1212,7 +1213,18 @@ def demographics(request, slug: str):
 def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
-    session.save(update_fields=["submitted_at", "last_step", "demographic_page_index"])
+    failed, flags = compute_flags(session)
+    session.failed_attention_checks = failed
+    session.flags = flags
+    session.save(
+        update_fields=[
+            "submitted_at",
+            "last_step",
+            "demographic_page_index",
+            "failed_attention_checks",
+            "flags",
+        ]
+    )
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
