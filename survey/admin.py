@@ -21,6 +21,7 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     list_display = (
         "id",
         "experiment",
+        "assigned_condition",
         "last_step",
         "started_at",
         "submitted_at",

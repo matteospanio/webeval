@@ -608,17 +608,34 @@ def instructions(request, slug: str):
 def _build_assignments(session: ParticipantSession) -> None:
     if session.assignments.exists():
         return
+    experiment = session.experiment
     try:
-        strategy = get_strategy(session.experiment.assignment_strategy)
+        strategy = get_strategy(experiment.assignment_strategy)
     except UnknownStrategyError:
         strategy = get_strategy("balanced_random")
-    counts = _fetch_counts(session.experiment)
+    counts = _fetch_counts(experiment)
+    # Ordinal of this participant among those already assigned — lets the
+    # counterbalanced / between-subject strategies balance across the sample.
+    participant_index = (
+        ParticipantSession.objects.filter(
+            experiment=experiment, assignments__isnull=False
+        )
+        .distinct()
+        .count()
+    )
     selected: list[Stimulus] = strategy.select(
-        experiment=session.experiment,
-        n=session.experiment.stimuli_per_participant,
+        experiment=experiment,
+        n=experiment.stimuli_per_participant,
         counts=counts,
         rng=random.Random(str(session.id)),
+        participant_index=participant_index,
     )
+    # Between-subject designs assign each participant to one condition; record
+    # it when the selection is single-condition so analysis can group by it.
+    condition_ids = {stim.condition_id for stim in selected}
+    if len(condition_ids) == 1:
+        session.assigned_condition_id = next(iter(condition_ids))
+        session.save(update_fields=["assigned_condition"])
     for order, stim in enumerate(selected):
         StimulusAssignment.objects.create(
             session=session,

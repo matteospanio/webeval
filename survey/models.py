@@ -43,6 +43,15 @@ class ParticipantSession(models.Model):
         on_delete=models.CASCADE,
         related_name="sessions",
     )
+    # Between-subject treatment: the single condition this participant was
+    # assigned to (null for within-subject designs that show all conditions).
+    assigned_condition = models.ForeignKey(
+        "experiments.Condition",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     last_step = models.CharField(
         max_length=16,

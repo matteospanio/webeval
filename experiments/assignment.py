@@ -62,8 +62,24 @@ class StrategyBase:
         n: int | None,
         counts: Mapping[int, int],
         rng: random.Random | None = None,
+        participant_index: int | None = None,
     ) -> list["Stimulus"]:
         raise NotImplementedError
+
+
+def _active_stimuli_by_condition(experiment: "Experiment"):
+    """Return (active_stimuli, {condition_id: [stimulus, ...]})."""
+    from experiments.models import Stimulus
+
+    active = list(
+        Stimulus.objects.filter(
+            condition__experiment=experiment, is_active=True
+        ).select_related("condition")
+    )
+    by_cond: dict[int, list["Stimulus"]] = {}
+    for stim in active:
+        by_cond.setdefault(stim.condition_id, []).append(stim)
+    return active, by_cond
 
 
 class BalancedRandomStrategy(StrategyBase):
@@ -94,6 +110,7 @@ class BalancedRandomStrategy(StrategyBase):
         n: int | None,
         counts: Mapping[int, int],
         rng: random.Random | None = None,
+        participant_index: int | None = None,
     ) -> list["Stimulus"]:
         from experiments.models import Stimulus  # local import: avoid cycles at import time
 
@@ -147,8 +164,100 @@ class BalancedRandomStrategy(StrategyBase):
         return selected
 
 
+class BlockRandomStrategy(StrategyBase):
+    """Within-subject ordering in randomized blocks.
+
+    Selects the same balanced set as ``balanced_random``, then arranges it so
+    each block contains at most one stimulus per condition (order shuffled
+    within the block). Conditions are spread evenly through the session, which
+    controls for gradual order effects better than a fully random order.
+    """
+
+    name = "block_random"
+
+    def select(self, experiment, n, counts, rng=None, participant_index=None):
+        rng = rng or random.Random()
+        selected = BalancedRandomStrategy().select(experiment, n, counts, rng=rng)
+        by_cond: dict[int, list] = {}
+        for stim in selected:
+            by_cond.setdefault(stim.condition_id, []).append(stim)
+        cond_ids = list(by_cond.keys())
+        ordered: list = []
+        rounds = max((len(pool) for pool in by_cond.values()), default=0)
+        for r in range(rounds):
+            block = [by_cond[c][r] for c in cond_ids if r < len(by_cond[c])]
+            rng.shuffle(block)
+            ordered.extend(block)
+        return ordered
+
+
+class CounterbalancedStrategy(StrategyBase):
+    """Systematic counterbalancing of condition order across participants.
+
+    Like ``block_random`` but the order of conditions within each block is
+    rotated deterministically by ``participant_index`` (a Latin-square-style
+    rotation), so first-position is balanced across the sample rather than left
+    to chance.
+    """
+
+    name = "counterbalanced"
+
+    def select(self, experiment, n, counts, rng=None, participant_index=None):
+        rng = rng or random.Random()
+        selected = BalancedRandomStrategy().select(experiment, n, counts, rng=rng)
+        by_cond: dict[int, list] = {}
+        for stim in selected:
+            by_cond.setdefault(stim.condition_id, []).append(stim)
+        cond_ids = sorted(by_cond.keys())
+        if cond_ids:
+            rot = (participant_index or 0) % len(cond_ids)
+            cond_order = cond_ids[rot:] + cond_ids[:rot]
+        else:
+            cond_order = cond_ids
+        ordered: list = []
+        rounds = max((len(pool) for pool in by_cond.values()), default=0)
+        for r in range(rounds):
+            for c in cond_order:
+                if r < len(by_cond[c]):
+                    ordered.append(by_cond[c][r])
+        return ordered
+
+
+class BetweenSubjectStrategy(StrategyBase):
+    """Between-subjects assignment: each participant sees a single condition.
+
+    The condition is chosen round-robin by ``participant_index`` so assignment
+    is balanced across the sample. The participant sees that condition's active
+    stimuli (the ``n`` least-historically-used when ``n`` is set), in random
+    order. The survey records the chosen condition on the session for analysis.
+    """
+
+    name = "between_subject"
+
+    def select(self, experiment, n, counts, rng=None, participant_index=None):
+        rng = rng or random.Random()
+        _, by_cond = _active_stimuli_by_condition(experiment)
+        cond_ids = sorted(by_cond.keys())
+        if not cond_ids:
+            return []
+        if participant_index is None:
+            chosen = rng.choice(cond_ids)
+        else:
+            chosen = cond_ids[participant_index % len(cond_ids)]
+        pool = list(by_cond[chosen])
+        # Least-historically-used first (random tiebreak), then trim to n.
+        pool.sort(key=lambda s: (counts.get(s.id, 0), rng.random()))
+        if n is not None and n < len(pool):
+            pool = pool[:n]
+        rng.shuffle(pool)
+        return pool
+
+
 _REGISTRY: dict[str, StrategyBase] = {
     BalancedRandomStrategy.name: BalancedRandomStrategy(),
+    BlockRandomStrategy.name: BlockRandomStrategy(),
+    CounterbalancedStrategy.name: CounterbalancedStrategy(),
+    BetweenSubjectStrategy.name: BetweenSubjectStrategy(),
 }
 
 
