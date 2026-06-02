@@ -323,6 +323,34 @@ class Experiment(models.Model):
                     and self.mode == self.Mode.PAIRWISE_AUDIO
                 ):
                     self._validate_pairwise_audio_activation()
+                # Readiness: block going live (or into preview) on a study that
+                # isn't complete enough to collect usable data.
+                becoming_active = (
+                    self.state == self.State.ACTIVE
+                    and old_state != self.State.ACTIVE
+                )
+                entering_test = (
+                    self.state == self.State.TEST and old_state == self.State.DRAFT
+                )
+                if becoming_active or entering_test:
+                    from experiments.readiness import is_walkable, readiness_problems
+
+                    if becoming_active:
+                        problems = readiness_problems(self)
+                        if problems:
+                            raise ValidationError(
+                                {"state": "Cannot activate yet — " + " ".join(problems)}
+                            )
+                    elif not is_walkable(self):
+                        raise ValidationError(
+                            {
+                                "state": (
+                                    "Add at least one condition, one active "
+                                    "stimulus, and one per-stimulus question "
+                                    "before previewing."
+                                )
+                            }
+                        )
 
     def _validate_pairwise_audio_activation(self) -> None:
         active_stimuli = Stimulus.objects.filter(

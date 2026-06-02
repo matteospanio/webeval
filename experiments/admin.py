@@ -475,8 +475,18 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             return HttpResponseRedirect(change_url)
 
         counts = experiment_counts(experiment)
+        from experiments.readiness import readiness_problems
+
+        problems = readiness_problems(experiment)
 
         if request.method == "POST":
+            if problems:
+                self.message_user(
+                    request,
+                    "Cannot activate yet — " + " ".join(problems),
+                    level=messages.ERROR,
+                )
+                return HttpResponseRedirect(request.path)
             purge = request.POST.get("purge") == "on"
             purged_counts = None
             if purge:
@@ -514,6 +524,7 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             "experiment": experiment,
             "counts": counts,
             "change_url": change_url,
+            "readiness_problems": problems,
         }
         return render(
             request,

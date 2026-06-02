@@ -18,6 +18,15 @@
 {% endblock %}
 
 {% block content %}
+{% if readiness_problems %}
+<div class="mb-6 rounded-default border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950 px-4 py-3 text-sm">
+  <strong>This study isn't ready to activate:</strong>
+  <ul class="list-disc ml-5 mt-1">
+    {% for problem in readiness_problems %}<li>{{ problem }}</li>{% endfor %}
+  </ul>
+  <p class="mt-2 text-base-500">Fix these in the change form, then return here to activate.</p>
+</div>
+{% endif %}
 <form method="post" class="max-w-2xl">
   {% csrf_token %}
 
@@ -44,8 +53,8 @@
   </div>
 
   <div class="flex items-center gap-2">
-    <button type="submit"
-            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
+    <button type="submit" {% if readiness_problems %}disabled{% endif %}
+            class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary-600">
       <span class="material-symbols-outlined -ml-0.5">rocket_launch</span>
       Activate
     </button>

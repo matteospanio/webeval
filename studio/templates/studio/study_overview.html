@@ -11,6 +11,21 @@
      · {{ experiment.get_mode_display }} · your role: {{ role }}</p>
 </hgroup>
 
+{% if not is_live %}
+<article class="readiness">
+  <header><strong>Readiness</strong></header>
+  {% if readiness_problems %}
+    <p>Finish these before this study can go live:</p>
+    <ul>
+      {% for problem in readiness_problems %}<li>⚠️ {{ problem }}</li>{% endfor %}
+    </ul>
+    <p><small>Activation happens in the Django admin once these are resolved.</small></p>
+  {% else %}
+    <p>✓ This study has everything it needs to go live. Activation happens in the Django admin.</p>
+  {% endif %}
+</article>
+{% endif %}
+
 <div class="grid">
   <article>
     <header><strong>Participation</strong></header>

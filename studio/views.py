@@ -36,6 +36,7 @@ from experiments.csv_exports import (
 )
 from experiments.exports import build_experiment_archive
 from experiments.models import Experiment
+from experiments.readiness import readiness_problems
 from experiments.stats import (
     bradley_terry_analysis,
     experiment_counts,
@@ -132,6 +133,8 @@ def study_overview(request, slug):
         "mean_listen_ms": mean_listen_duration_ms(experiment),
         "follows": experiment.follows,
         "next_phases": list(experiment.next_phases.all()),
+        "is_live": experiment.state == Experiment.State.ACTIVE,
+        "readiness_problems": readiness_problems(experiment),
     }
     if experiment.is_pairwise:
         context["pairwise_stats"] = pairwise_experiment_stats(experiment)

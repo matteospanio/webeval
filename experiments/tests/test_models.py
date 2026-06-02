@@ -35,6 +35,9 @@ class TestExperimentLifecycle:
 
     def test_draft_to_active_allowed(self):
         exp = ExperimentFactory()
+        cond = ConditionFactory(experiment=exp)
+        StimulusFactory(condition=cond)
+        RatingQuestionFactory(experiment=exp)
         exp.state = Experiment.State.ACTIVE
         exp.full_clean()
         exp.save()
@@ -481,6 +484,7 @@ class TestPairwiseAudioActivation:
         cond_b = ConditionFactory(experiment=exp, name="B")
         StimulusFactory(condition=cond_a, prompt_group="g", title="a1")
         StimulusFactory(condition=cond_b, prompt_group="g", title="b1")
+        RatingQuestionFactory(experiment=exp)
         return exp
 
     def test_activation_requires_prompt_for_every_group(self):
@@ -517,5 +521,6 @@ class TestPairwiseAudioActivation:
         cond_b = ConditionFactory(experiment=exp, name="B")
         StimulusFactory(condition=cond_a, prompt_group="g")
         StimulusFactory(condition=cond_b, prompt_group="g")
+        RatingQuestionFactory(experiment=exp)
         exp.state = Experiment.State.ACTIVE
         exp.full_clean()  # no Prompt required in plain PAIRWISE mode
