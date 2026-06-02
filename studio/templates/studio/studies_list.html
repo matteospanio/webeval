@@ -1,0 +1,29 @@
+{% extends "studio/base.html" %}
+{% block title %}My studies · webeval studio{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>My studies</h1>
+  <p>Studies you own or collaborate on.</p>
+</hgroup>
+<p><a href="{% url 'studio:study_create' %}" role="button">+ New study</a></p>
+{% if rows %}
+<table>
+  <thead>
+    <tr><th>Name</th><th>State</th><th>Mode</th><th>Your role</th><th>Owner</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td><a href="{% url 'studio:study_overview' slug=row.experiment.slug %}">{{ row.experiment.name }}</a></td>
+      <td>{{ row.experiment.get_state_display }}</td>
+      <td>{{ row.experiment.get_mode_display }}</td>
+      <td><span class="badge">{{ row.role }}</span></td>
+      <td>{{ row.experiment.owner.get_username|default:"—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>You don't have any studies yet. Create one to get started.</p>
+{% endif %}
+{% endblock %}

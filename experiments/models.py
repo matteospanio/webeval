@@ -23,6 +23,7 @@ import hashlib
 import os
 from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.text import slugify
@@ -123,6 +124,19 @@ class Experiment(models.Model):
             "questions in a randomised order seeded by their session so the "
             "order is stable across page refreshes. Disable to show all "
             "participants the same order defined by Question.sort_order."
+        ),
+    )
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="owned_experiments",
+        help_text=(
+            "The researcher who owns this study. The owner and their "
+            "collaborators are the only non-superusers who can see, edit, or "
+            "export it. Managed from the studio dashboard."
         ),
     )
 

@@ -12,6 +12,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 
 ## Features
 
+- Multi-user platform: per-study ownership with owner/editor/viewer roles, collaboration by invitation, and a researcher dashboard at `/studio/` (separate from the Django admin)
 - Standard single-stimulus studies and pairwise comparison studies
 - Audio, image, and text stimuli in one experiment model
 - Rating, multiple-choice, free-text, and Likert questions
@@ -49,7 +50,8 @@ uv run ./manage.py runserver
 
 Then open:
 
-- `http://127.0.0.1:8000/admin/` for the staff interface
+- `http://127.0.0.1:8000/studio/` for the researcher dashboard (sign in at `/accounts/login/`, or register at `/accounts/register/`)
+- `http://127.0.0.1:8000/admin/` for the staff/superuser interface
 - `http://127.0.0.1:8000/s/<slug>/` for a participant-facing study
 
 The default setup uses SQLite. Environment variables are documented in `.env.example`.
@@ -118,8 +120,35 @@ The admin UI is built on Django admin with django-unfold and contains the full s
 - printable and machine-readable reproducibility exports
 - ZIP archive export and import for study portability
 
+## Accounts, roles & collaboration
+
+webeval is multi-user. Each study has an **owner**, and access is scoped by role:
+
+- **Owner** — full control: edit, results/exports, manage collaborators, transfer ownership, lifecycle.
+- **Editor** — edit the study (structure, stimulus/prompt uploads) and view results.
+- **Viewer** — view results and exports only.
+
+Researchers work from the **studio dashboard** at `/studio/` (outside the Django
+admin): they see only studies they own or collaborate on, create new studies,
+view live stats/exports, and manage access. Owners invite collaborators by email
+from a study's **Access** page; the invitee follows a single-use, expiring link
+(`/accounts/invite/<token>/`) and signs in or registers to accept. Every
+access-control change is recorded in an append-only audit log.
+
+The same ownership rules are enforced everywhere: the Django admin changelists
+and per-study views are scoped to a non-superuser's own/shared studies, and the
+REST API checks that a key's user has edit/view access to the target study.
+Superusers retain full visibility. Studies created before this model existed
+(no owner) remain accessible to staff users until an owner is assigned, so
+upgrading is non-breaking.
+
+Platform admins manage users, groups and the access/audit changelists from the
+Django admin under **Users & access**.
+
 ## Project Layout
 
+- `accounts/`: identity + access — profiles, per-study memberships/roles, invitations, the permission helper, the access audit log, and auth/invite views
+- `studio/`: the researcher-facing dashboard (study list, creation, results, and access management) outside the Django admin
 - `experiments/`: experiment models, admin, assignment strategies, exports, analytics, and charts
 - `survey/`: participant sessions, response capture, flow control, metadata capture, and participant-facing views
 - `core/`: Django settings, URL wiring, and project-level integration

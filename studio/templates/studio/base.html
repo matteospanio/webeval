@@ -1,0 +1,58 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}webeval studio{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <style>
+    .logout-form { display: inline; margin: 0; }
+    .logout-form button { padding: 0.25rem 0.75rem; margin: 0; }
+    .inline-form { display: inline; margin: 0; }
+    .inline-form button, .inline-form select { margin: 0; padding: 0.25rem 0.6rem; }
+    .messages { margin-bottom: 1rem; }
+    .message { padding: 0.5rem 1rem; margin-bottom: 0.5rem; }
+    .message.error { border-left: 4px solid var(--pico-del-color, #b3261e); }
+    .message.success { border-left: 4px solid var(--pico-ins-color, #1a7f37); }
+    .badge { font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 1rem;
+             background: var(--pico-secondary-background); vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <header class="container">
+    <nav>
+      <ul>
+        <li><strong><a href="{% url 'studio:studies' %}">webeval studio</a></strong></li>
+      </ul>
+      <ul>
+        {% if user.is_authenticated %}
+        <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+        <li><a href="{% url 'accounts:profile' %}">{{ user.get_username }}</a></li>
+        {% if user.is_staff %}<li><a href="{% url 'admin:index' %}">Admin</a></li>{% endif %}
+        <li>
+          <form method="post" action="{% url 'accounts:logout' %}" class="logout-form">
+            {% csrf_token %}
+            <button type="submit" class="secondary outline">Log out</button>
+          </form>
+        </li>
+        {% else %}
+        <li><a href="{% url 'accounts:login' %}">Log in</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+  </header>
+  <main class="container">
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <article class="message {{ message.tags }}">{{ message }}</article>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="container">
+    <small>webeval — open-source human-evaluation platform</small>
+  </footer>
+</body>
+</html>

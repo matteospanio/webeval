@@ -10,11 +10,14 @@ from __future__ import annotations
 from django.contrib import admin
 from unfold.admin import ModelAdmin as UnfoldModelAdmin
 
+from accounts.admin_mixins import OwnerScopedAdminMixin
+
 from .models import PairAssignment, ParticipantSession, Response, StimulusAssignment
 
 
 @admin.register(ParticipantSession)
-class ParticipantSessionAdmin(UnfoldModelAdmin):
+class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
     list_display = (
         "id",
         "experiment",
@@ -34,7 +37,8 @@ class ParticipantSessionAdmin(UnfoldModelAdmin):
 
 
 @admin.register(Response)
-class ResponseAdmin(UnfoldModelAdmin):
+class ResponseAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "session__experiment"
     list_display = ("session", "question", "stimulus", "answered_at")
     list_filter = ("question__experiment", "question__section", "question__type")
     search_fields = ("session__id", "question__prompt", "answer_value")
@@ -45,7 +49,8 @@ class ResponseAdmin(UnfoldModelAdmin):
 
 
 @admin.register(StimulusAssignment)
-class StimulusAssignmentAdmin(UnfoldModelAdmin):
+class StimulusAssignmentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "session__experiment"
     list_display = ("session", "stimulus", "sort_order", "listen_duration_ms")
     list_filter = ("stimulus__condition__experiment",)
     readonly_fields = tuple(f.name for f in StimulusAssignment._meta.fields)
@@ -55,7 +60,8 @@ class StimulusAssignmentAdmin(UnfoldModelAdmin):
 
 
 @admin.register(PairAssignment)
-class PairAssignmentAdmin(UnfoldModelAdmin):
+class PairAssignmentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "session__experiment"
     list_display = (
         "session",
         "stimulus_a",

@@ -15,11 +15,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apikeys.mixins import LogAPIKeyUsageMixin
 from apikeys.permissions import HasScope
+
+from accounts.permissions import can_edit, can_view
 
 from .csv_exports import iter_pairwise_answers
 from .models import Condition, Experiment, Prompt, Stimulus
@@ -86,6 +89,10 @@ class StimulusUploadView(LogAPIKeyUsageMixin, APIView):
 
     def post(self, request, slug: str):
         experiment = get_object_or_404(Experiment, slug=slug)
+        if not can_edit(request.user, experiment):
+            raise PermissionDenied(
+                "Your API key's user does not have edit access to this experiment."
+            )
         if experiment.state != Experiment.State.DRAFT:
             return Response(
                 {
@@ -188,6 +195,10 @@ class PromptUploadView(LogAPIKeyUsageMixin, APIView):
 
     def post(self, request, slug: str):
         experiment = get_object_or_404(Experiment, slug=slug)
+        if not can_edit(request.user, experiment):
+            raise PermissionDenied(
+                "Your API key's user does not have edit access to this experiment."
+            )
         if experiment.state != Experiment.State.DRAFT:
             return Response(
                 {
@@ -268,4 +279,8 @@ class PairwiseAnswersView(LogAPIKeyUsageMixin, APIView):
 
     def get(self, request, slug: str):
         experiment = get_object_or_404(Experiment, slug=slug)
+        if not can_view(request.user, experiment):
+            raise PermissionDenied(
+                "Your API key's user does not have access to this experiment."
+            )
         return Response(list(iter_pairwise_answers(experiment)))
