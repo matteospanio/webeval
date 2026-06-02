@@ -20,6 +20,11 @@ from django.core.exceptions import ValidationError
 from django.forms.models import construct_instance
 from django.forms.models import InlineForeignKeyField
 
+from .components import (
+    available_question_components,
+    get_question_component,
+    is_question_component,
+)
 from .models import Question
 
 
@@ -112,12 +117,29 @@ class QuestionAdminForm(forms.ModelForm):
         help_text="One item per line. Participants assign each a unique rank.",
     )
 
+    # Raw config for custom (plugin) question types — see experiments.components.
+    plugin_config = forms.JSONField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 6}),
+        help_text=(
+            "Used only for custom (plugin) question types: the raw JSON config, "
+            'e.g. {"items": ["A", "B"], "total": 100}. The component validates '
+            "its own shape."
+        ),
+    )
+
     class Meta:
         model = Question
         exclude = ("config",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Offer registered plugin components in the type dropdown.
+        extra = [
+            (c.type, f"{c.label} (plugin)") for c in available_question_components()
+        ]
+        if extra and "type" in self.fields:
+            self.fields["type"].choices = list(self.fields["type"].choices) + extra
         if self.instance and self.instance.pk:
             self._populate_from_instance()
 
@@ -168,6 +190,8 @@ class QuestionAdminForm(forms.ModelForm):
                 self.fields["ranking_items"].initial = "\n".join(
                     str(i) for i in items
                 )
+        elif is_question_component(t):
+            self.fields["plugin_config"].initial = cfg
 
     def clean(self):
         cleaned = super().clean()
@@ -276,6 +300,16 @@ class QuestionAdminForm(forms.ModelForm):
                 self.add_error("ranking_items", "Items must be distinct.")
             else:
                 config = {"items": items}
+        elif is_question_component(question_type):
+            raw = cleaned.get("plugin_config") or {}
+            if not isinstance(raw, dict):
+                self.add_error("plugin_config", "Config must be a JSON object.")
+            else:
+                try:
+                    get_question_component(question_type).validate_config(raw)
+                    config = raw
+                except ValidationError as exc:
+                    self.add_error("plugin_config", exc.messages)
 
         # Whatever we built, push it onto the instance so the model-level
         # validator in Question.clean() sees the right shape. On errors we

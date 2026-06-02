@@ -2,7 +2,7 @@
   Render a single question input (rating / choice / text / likert). Expects
   `q` in the local context.
 {% endcomment %}
-{% load markdown_extras %}
+{% load markdown_extras component_tags %}
 <fieldset{% if q.visible_if %} data-visible-if="{{ q.visible_if|as_json }}" data-qid="{{ q.pk }}"{% endif %}>
   <legend>{{ q.prompt|markdown_inline|safe }}{% if not q.required %} <small>(optional)</small>{% endif %}{% if q.help_text %}<span class="help-tooltip"><span class="help-icon" tabindex="0" aria-label="Show help">?</span><span class="help-content" role="tooltip">{{ q.help_text|markdown_inline|safe }}</span></span>{% endif %}</legend>
 
@@ -132,5 +132,7 @@
       {% endfor %}
     </ol>
     <small class="ranking-hint">Assign each item a unique rank (1 = first).</small>
+  {% else %}
+    {% question_widget q %}
   {% endif %}
 </fieldset>

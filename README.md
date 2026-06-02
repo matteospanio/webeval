@@ -27,6 +27,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Bot protection (consent honeypot), private studies (shared access code or single-use invite links), and optional participant codes for a stable cross-device identity
 - Longitudinal / multi-phase studies: chain studies into ordered phases a participant returns to over time, with an optional minimum gap between phases and a return link + reusable participant code shown on completion
 - Authoring productivity: one-click study duplication (deep copy incl. media + skip logic), activation-readiness checks that block going live on an incomplete study, a preview/pilot phase whose data is kept out of the real dataset, per-study branding (accent color, logo, custom CSS), and a reusable question bank
+- Plugin question types: add a custom question widget (config validation + server render + answer parsing) in one self-contained class via a decorator/registry — no core changes, auto-discovered at startup; ships a constant-sum (allocate points) example
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -182,6 +183,46 @@ upgrading is non-breaking.
 
 Platform admins manage users, groups and the access/audit changelists from the
 Django admin under **Users & access**.
+
+## Extending webeval: custom question types (plugins)
+
+New question widgets are **plugins** — you can add one without touching the core. A *component* bundles the four things a question type needs (config validation, participant-facing rendering, answer parsing, and a label), mirroring the existing pluggable assignment strategies.
+
+Drop a `question_components.py` module in any installed app and register a component:
+
+```python
+from django.utils.html import format_html
+from experiments.components import QuestionComponent, question_component
+
+
+@question_component
+class YesNoComponent(QuestionComponent):
+    type = "yes_no"            # the stored Question.type value (≤16 chars)
+    label = "Yes / No"
+
+    def validate_config(self, config):
+        ...                    # raise ValidationError on a bad config dict
+
+    def render(self, question, *, post=None):
+        checked = (post or {}).get(f"q_{question.pk}", "")
+        return format_html(
+            '<label><input type="radio" name="q_{0}" value="yes" {1}> Yes</label>'
+            '<label><input type="radio" name="q_{0}" value="no" {2}> No</label>',
+            question.pk,
+            "checked" if checked == "yes" else "",
+            "checked" if checked == "no" else "",
+        )
+
+    def read_answer(self, post, question):
+        raw = post.get(f"q_{question.pk}", "")
+        if not raw:
+            return False, None, None          # (answered, value, error)
+        if raw not in ("yes", "no"):
+            return True, None, "has an invalid value"
+        return True, raw, None
+```
+
+`ExperimentsConfig.ready()` auto-discovers the module at startup. The new type then works **end-to-end** with no other changes: it appears in the admin question-type dropdown (with a raw-JSON `plugin_config` field), renders inside the standard survey page, validates and stores answers like any built-in type, and flows into stats/exports. Built-in types are untouched. webeval ships one worked example — `constant_sum` (allocate a fixed number of points across items) in [experiments/components.py](experiments/components.py).
 
 ## Project Layout
 
