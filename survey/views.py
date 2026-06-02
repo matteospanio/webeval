@@ -38,6 +38,7 @@ from experiments.assignment import (
     get_strategy,
 )
 from experiments.branching import evaluate_condition, is_visible
+from experiments.components import get_question_component, is_question_component
 from experiments.models import (
     Experiment,
     ParticipantInvite,
@@ -142,6 +143,8 @@ def _read_one(request, question: Question) -> tuple[bool, Any, str | None]:
     identically across both flows.
     """
     t = question.type
+    if is_question_component(t):
+        return get_question_component(t).read_answer(request.POST, question)
     if t == Question.Type.MATRIX:
         return _read_matrix(request, question)
     if t == Question.Type.RANKING:
