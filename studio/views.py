@@ -43,6 +43,7 @@ from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
     demographics_csv_response,
+    events_csv_response,
     pairwise_answers_csv_response,
 )
 from experiments.exports import build_experiment_archive
@@ -603,6 +604,11 @@ def demographics_csv(request, slug):
 @login_required
 def completion_codes_csv(request, slug):
     return completion_codes_csv_response(_experiment_or_404(request, slug))
+
+
+@login_required
+def events_csv(request, slug):
+    return events_csv_response(_experiment_or_404(request, slug))
 
 
 @login_required

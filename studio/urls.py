@@ -37,6 +37,7 @@ urlpatterns = [
         views.pairwise_csv,
         name="pairwise_csv",
     ),
+    path("<slug:slug>/events.csv", views.events_csv, name="events_csv"),
     path("<slug:slug>/export.zip", views.export_zip, name="export_zip"),
     path("<slug:slug>/chart.svg", views.chart, name="chart"),
 ]

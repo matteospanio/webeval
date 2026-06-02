@@ -12,7 +12,13 @@ from unfold.admin import ModelAdmin as UnfoldModelAdmin
 
 from accounts.admin_mixins import OwnerScopedAdminMixin
 
-from .models import PairAssignment, ParticipantSession, Response, StimulusAssignment
+from .models import (
+    PairAssignment,
+    ParticipantSession,
+    Response,
+    StimulusAssignment,
+    SurveyEvent,
+)
 
 
 class FlaggedFilter(admin.SimpleListFilter):
@@ -116,6 +122,19 @@ class PairAssignmentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     )
     list_filter = ("session__experiment",)
     readonly_fields = tuple(f.name for f in PairAssignment._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(SurveyEvent)
+class SurveyEventAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "session__experiment"
+    list_display = ("session", "event_type", "label", "elapsed_ms", "created_at")
+    list_filter = ("event_type",)
+    search_fields = ("session__id", "label")
+    readonly_fields = tuple(f.name for f in SurveyEvent._meta.fields)
+    date_hierarchy = "created_at"
 
     def has_add_permission(self, request):
         return False

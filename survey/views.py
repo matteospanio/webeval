@@ -55,7 +55,13 @@ from .flow import (
     required_step_url,
 )
 from .metadata import extract_metadata
-from .models import PairAssignment, ParticipantSession, Response, StimulusAssignment
+from .models import (
+    PairAssignment,
+    ParticipantSession,
+    Response,
+    StimulusAssignment,
+    SurveyEvent,
+)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -398,6 +404,20 @@ def _now_ms() -> int:
     return int(timezone.now().timestamp() * 1000)
 
 
+def _log_event(session, event_type, label="", elapsed_ms=None, **meta) -> None:
+    """Append a raw flow event. Best-effort: never break the participant flow."""
+    try:
+        SurveyEvent.objects.create(
+            session=session,
+            event_type=event_type,
+            label=label or "",
+            elapsed_ms=elapsed_ms,
+            meta=meta or {},
+        )
+    except Exception:  # pragma: no cover - logging must not interrupt the flow
+        pass
+
+
 def _page_elapsed_ms(request) -> int | None:
     """Server-measured dwell time from the page's ``_t0`` stamp (ms), or None.
 
@@ -708,6 +728,7 @@ def _create_session(
         is_preview=experiment.state == Experiment.State.TEST,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
+    _log_event(session, SurveyEvent.Type.STARTED)
     return session
 
 
@@ -785,6 +806,7 @@ def _finish_screening(request, session: ParticipantSession, slug: str):
         session.last_step = ParticipantSession.Step.SCREENED_OUT
         session.screened_out_at = timezone.now()
         session.save(update_fields=["last_step", "screened_out_at"])
+        _log_event(session, SurveyEvent.Type.SCREENED_OUT)
         request.session.pop(_session_key(slug), None)
         return redirect("survey:screened_out", slug=slug)
     return _advance_past_screening(request, session, slug)
@@ -1065,6 +1087,10 @@ def _save_page_answers(
 
     with transaction.atomic():
         Response.objects.bulk_create(responses)
+        _log_event(
+            session, SurveyEvent.Type.PAGE_SUBMIT, label="stimulus",
+            elapsed_ms=_page_elapsed_ms(request),
+        )
         session.current_page_index += 1
         if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
             session.last_step = ParticipantSession.Step.DEMOGRAPHICS
@@ -1431,6 +1457,10 @@ def demographics(request, slug: str):
             return render(request, "survey/demographics.html", ctx, status=400)
         with transaction.atomic():
             Response.objects.bulk_create(responses)
+            _log_event(
+                session, SurveyEvent.Type.PAGE_SUBMIT, label="demographic",
+                elapsed_ms=_page_elapsed_ms(request),
+            )
             session.demographic_page_index += 1
             if _next_renderable_demographic_page(session, pages) == "finish":
                 return _finish_session(request, session, slug)
@@ -1471,6 +1501,7 @@ def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
     session.completion_code = _completion_code_for(session)
+    _log_event(session, SurveyEvent.Type.COMPLETED)
     failed, flags = compute_flags(session)
     session.failed_attention_checks = failed
     session.flags = flags
@@ -1537,6 +1568,7 @@ def _withdraw_data(session: ParticipantSession) -> None:
     Response.objects.filter(session=session).delete()
     StimulusAssignment.objects.filter(session=session).delete()
     PairAssignment.objects.filter(session=session).delete()
+    SurveyEvent.objects.filter(session=session).delete()
     session.withdrawn_at = timezone.now()
     session.last_step = ParticipantSession.Step.WITHDRAWN
     session.submitted_at = None

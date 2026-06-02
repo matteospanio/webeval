@@ -18,7 +18,7 @@ import csv
 from django.http import HttpResponse
 
 from experiments.models import Experiment, Question
-from survey.models import ParticipantSession, Response
+from survey.models import ParticipantSession, Response, SurveyEvent
 
 
 ANSWER_FIELDNAMES = [
@@ -269,3 +269,31 @@ def write_completion_codes_csv(
 def completion_codes_csv_response(experiment: Experiment) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-completion-codes.csv")
     return write_completion_codes_csv(experiment, response)
+
+
+EVENT_FIELDNAMES = ["session_id", "event_type", "label", "elapsed_ms", "created_at"]
+
+
+def write_events_csv(experiment: Experiment, response: HttpResponse) -> HttpResponse:
+    """Raw participant-flow event log (all sessions, including preview)."""
+    writer = csv.DictWriter(response, fieldnames=EVENT_FIELDNAMES)
+    writer.writeheader()
+    for e in (
+        SurveyEvent.objects.filter(session__experiment=experiment)
+        .order_by("session__id", "created_at", "id")
+    ):
+        writer.writerow(
+            {
+                "session_id": str(e.session_id),
+                "event_type": e.event_type,
+                "label": e.label,
+                "elapsed_ms": e.elapsed_ms if e.elapsed_ms is not None else "",
+                "created_at": e.created_at.isoformat(),
+            }
+        )
+    return response
+
+
+def events_csv_response(experiment: Experiment) -> HttpResponse:
+    response = _csv_response(f"{experiment.slug}-events.csv")
+    return write_events_csv(experiment, response)
