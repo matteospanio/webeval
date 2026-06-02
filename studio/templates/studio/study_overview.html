@@ -60,6 +60,8 @@
 
 {% include "studio/_question_results.html" %}
 
+<p><a href="{% url 'studio:power_analysis' slug=experiment.slug %}">Power &amp; sample-size analysis →</a></p>
+
 <h2>Data &amp; exports</h2>
 <ul>
   <li><a href="{% url 'studio:answers_csv' slug=experiment.slug %}">Answers CSV</a>

@@ -12,6 +12,7 @@ urlpatterns = [
     path("compare/", views.compare, name="compare"),
     path("new/", views.study_create, name="study_create"),
     path("<slug:slug>/", views.study_overview, name="study_overview"),
+    path("<slug:slug>/power/", views.power_analysis, name="power_analysis"),
     path("<slug:slug>/build/", views.study_build, name="study_build"),
     path(
         "<slug:slug>/build/save/",

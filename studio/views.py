@@ -37,7 +37,8 @@ from experiments.analysis import (
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.cloning import clone_experiment
 from experiments.components import available_question_components
-from experiments.stats_tests import compare_conditions
+from experiments.power import achieved_power, cohens_d, required_n_per_group
+from experiments.stats_tests import _grouped_answers, compare_conditions
 from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
@@ -364,6 +365,71 @@ def study_build_save(request, slug):
     # new cards (a second save then updates instead of re-creating).
     return JsonResponse(
         {"ok": True, "count": len(prepared), "ids": [q.pk for q in prepared]}
+    )
+
+
+def _float(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _pilot_power_rows(experiment, alpha, power):
+    """Observed effect size + implied sample size from pilot data, per rating /
+    numeric / likert per-stimulus question (its two best-attested conditions)."""
+    rows = []
+    numeric_types = (
+        Question.Type.RATING, Question.Type.NUMERIC, Question.Type.LIKERT,
+    )
+    qs = experiment.questions.filter(
+        section=Question.Section.STIMULUS, type__in=numeric_types
+    )
+    for q in qs:
+        numeric = {}
+        for cond, values in _grouped_answers(experiment, q).items():
+            nums = []
+            for v in values:
+                try:
+                    nums.append(float(v))
+                except (TypeError, ValueError):
+                    continue
+            if len(nums) >= 2:
+                numeric[cond] = nums
+        if len(numeric) < 2:
+            continue
+        top = sorted(numeric.values(), key=len, reverse=True)[:2]
+        d = cohens_d(top[0], top[1])
+        if d is None or d == 0:
+            continue
+        rows.append({
+            "prompt": q.prompt,
+            "effect_size": abs(d),
+            "observed_n": min(len(top[0]), len(top[1])),
+            "required_n": required_n_per_group(abs(d), alpha, power),
+            "achieved_power": achieved_power(abs(d), min(len(top[0]), len(top[1])), alpha),
+        })
+    return rows
+
+
+@login_required
+def power_analysis(request, slug):
+    experiment = _experiment_or_404(request, slug)
+    d = _float(request.GET.get("d"), 0.5)
+    alpha = _float(request.GET.get("alpha"), 0.05)
+    target = _float(request.GET.get("power"), 0.8)
+    manual = {
+        "d": d, "alpha": alpha, "power": target,
+        "required_n": required_n_per_group(d, alpha, target),
+    }
+    return render(
+        request,
+        "studio/power.html",
+        {
+            "experiment": experiment,
+            "manual": manual,
+            "pilot": _pilot_power_rows(experiment, alpha, target),
+        },
     )
 
 
