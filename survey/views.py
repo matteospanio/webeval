@@ -20,6 +20,7 @@ from datetime import timedelta
 from typing import Any
 
 from django.contrib import messages
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import F
 from django.http import (
@@ -1523,7 +1524,37 @@ def _finish_session(request, session: ParticipantSession, slug: str):
     if session.participant_uid:
         request.session[f"webeval:uid:{slug}"] = session.participant_uid
     request.session.pop(_session_key(slug), None)
+    _dispatch_completion_hooks(session)
     return redirect("survey:thanks", slug=slug)
+
+
+def _dispatch_completion_hooks(session: ParticipantSession) -> None:
+    """Fire outbound webhooks + the operator notification on completion.
+
+    Best-effort: integration failures must never break the participant's
+    completion (which has already been persisted by this point)."""
+    try:
+        from experiments.webhooks import deliver_event
+
+        deliver_event(session, "session.completed")
+    except Exception:  # pragma: no cover - defensive
+        pass
+    email = session.experiment.notify_email
+    if email:
+        try:
+            send_mail(
+                subject=f"[webeval] A participant completed '{session.experiment.name}'",
+                message=(
+                    f"A participant just completed '{session.experiment.name}'.\n"
+                    f"Session: {session.id}\n"
+                    f"Completed at: {session.submitted_at:%Y-%m-%d %H:%M} UTC\n"
+                ),
+                from_email=None,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+        except Exception:  # pragma: no cover - defensive
+            pass
 
 
 # --- thanks ---------------------------------------------------------------

@@ -48,7 +48,7 @@ from experiments.csv_exports import (
     pairwise_answers_csv_response,
 )
 from experiments.exports import build_experiment_archive
-from experiments.models import Experiment, Question
+from experiments.models import Experiment, Question, Webhook
 from experiments.readiness import readiness_problems
 from experiments.stats import (
     bradley_terry_analysis,
@@ -508,6 +508,43 @@ def power_analysis(request, slug):
             "experiment": experiment,
             "manual": manual,
             "pilot": _pilot_power_rows(experiment, alpha, target),
+        },
+    )
+
+
+@login_required
+def study_webhooks(request, slug):
+    """Manage outbound webhooks for a study (owner/manager only)."""
+    experiment = _experiment_or_404(request, slug)
+    if not can_manage(request.user, experiment):
+        raise PermissionDenied
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "add":
+            url = (request.POST.get("url") or "").strip()
+            event = request.POST.get("event") or Webhook.Event.SESSION_COMPLETED
+            if url and event in dict(Webhook.Event.choices):
+                Webhook.objects.create(experiment=experiment, url=url, event=event)
+                services.record_audit(
+                    experiment, AuditEvent.Action.EDIT, actor=request.user,
+                    target="webhook", request=request,
+                )
+                messages.success(request, "Webhook added.")
+            else:
+                messages.error(request, "Enter a valid URL and event.")
+        elif action == "delete":
+            Webhook.objects.filter(
+                experiment=experiment, pk=request.POST.get("webhook_id")
+            ).delete()
+            messages.success(request, "Webhook removed.")
+        return redirect("studio:study_webhooks", slug=slug)
+    return render(
+        request,
+        "studio/study_webhooks.html",
+        {
+            "experiment": experiment,
+            "webhooks": list(experiment.webhooks.all()),
+            "events": Webhook.Event.choices,
         },
     )
 

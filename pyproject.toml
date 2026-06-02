@@ -42,6 +42,13 @@ analysis = [
     "scipy>=1.11",
     "requests>=2.32,<3.0",
 ]
+# Installed in the Docker image / on production hosts (not in dev or CI).
+production = [
+    "gunicorn>=22.0",
+    "whitenoise>=6.6",
+    "psycopg[binary]>=3.1",
+    "django-storages[s3]>=1.14",
+]
 scripts = [
     "requests>=2.32,<3.0",
 ]

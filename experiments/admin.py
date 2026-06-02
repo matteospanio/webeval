@@ -49,6 +49,7 @@ from .models import (
     Question,
     QuestionTemplate,
     Stimulus,
+    Webhook,
 )
 from .stats import (
     bradley_terry_analysis,
@@ -166,6 +167,17 @@ def duplicate_experiment(modeladmin, request, queryset):
         f"Duplicated {cloned} stud{'y' if cloned == 1 else 'ies'} into new drafts.",
         level=messages.SUCCESS,
     )
+
+
+@admin.register(Webhook)
+class WebhookAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
+    experiment_lookup = "experiment"
+    list_display = (
+        "experiment", "event", "url", "is_active", "last_status", "last_delivered_at"
+    )
+    list_filter = ("event", "is_active")
+    search_fields = ("experiment__name", "url")
+    readonly_fields = ("secret", "created_at", "last_delivered_at", "last_status", "last_error")
 
 
 @admin.register(ParticipantInvite)

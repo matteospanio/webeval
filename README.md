@@ -32,6 +32,8 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Online results & analysis: per-question summaries for every question type (choice/Likert distributions, rating/numeric stats, matrix breakdowns, ranking mean-ranks) viewed in the studio, ready-to-use across-condition tests (one-way ANOVA / chi-square with p-values, no scipy required), and segmentation by device, country, condition, or cohort
 - Page/question response times, a cross-experiment comparison view, power & sample-size analysis (including from pilot data), and an append-only raw participant-flow event log (viewable in the admin, exportable as CSV)
 - Compliance & governance: study metadata (IRB #, legal basis, data contact, retention window), consent-version tracking tied to each session, an append-only audit trail of edits/exports/destructive actions, automated retention sweeps, PII redaction of free-text in exports, and a data-subject-request workflow (export or erase a participant's data across your studies)
+- Production-ready: a Docker image + Compose stack (app + Postgres + Redis), env-driven Postgres / S3 object storage / WhiteNoise static serving, a `/healthz` health check, REST-API rate limiting, hardened-security toggles, and backup/retention commands
+- Integrations: a scoped REST API to pull aggregate results and submitted answers as JSON, outbound HMAC-signed webhooks fired on participant completion for downstream pipelines, and per-study operator email notifications
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -307,7 +309,22 @@ Available scopes are declared in [`apikeys/scopes.py`](apikeys/scopes.py):
 | Scope                     | Grants                                     |
 |---------------------------|--------------------------------------------|
 | `stimuli:upload`          | `POST /api/v1/experiments/<slug>/stimuli/` |
+| `prompts:upload`          | `POST /api/v1/experiments/<slug>/prompts/` |
 | `pairwise-answers:read`   | `GET  /api/v1/experiments/<slug>/pairwise-answers/` |
+| `answers:read`            | `GET  /api/v1/experiments/<slug>/answers/` (submitted per-stimulus answers as JSON; PII redacted unless `?include_pii=1`) |
+| `results:read`            | `GET  /api/v1/experiments/<slug>/results/` (aggregate per-question results as JSON) |
+
+Every endpoint is object-scoped: a key only reaches experiments its user can access. The API is rate-limited (see the deploy section).
+
+### Webhooks
+
+Each study can register outbound **webhooks** (studio → a study → *Webhooks*, or the admin) that fire on participant events (e.g. `session.completed`) by POSTing a JSON payload to a URL you control — for downstream pipelines, Slack/Zapier relays, etc. Deliveries are signed:
+
+```
+X-Webhook-Signature: sha256=HMAC_SHA256(secret, raw_body)
+```
+
+Verify the signature with the per-webhook secret shown in the studio. Delivery is best-effort and synchronous; per-hook status is recorded for debugging. A study can also set an **operator email** to be notified on each completion.
 
 Superusers also see a cross-user overview at `/admin/api-keys/?scope=all`
 and can revoke any key. The full event log is additionally browsable via
@@ -329,17 +346,37 @@ the scopes you need, and update your `.env`. The orphaned
 `authtoken_token` SQLite table can be left in place or dropped at your
 leisure.
 
-## Deployment Notes
+## Production deployment
 
-webeval is a self-hosted Django application. The repository is ready for local development and research deployments, but production hardening is still the operator's responsibility.
+webeval ships a production Docker image and a `docker-compose.yml` (app + Postgres + Redis). All production behaviour is env-driven (see `.env.example`); tests and local dev are unaffected by it.
 
-For public deployments, you should at least provide:
+### Docker Compose (quickstart)
 
-- HTTPS
-- a proper production database strategy
-- media storage and backups
-- secure admin credentials
-- monitoring and log retention
+```bash
+cp .env.example .env          # set SECRET_KEY, ALLOWED_HOSTS, SECURE_DEPLOY=True, …
+docker compose up --build     # builds the image, runs migrations, serves on :8000
+docker compose run --rm web python manage.py createsuperuser
+```
+
+The image installs the `production` dependency group (gunicorn, WhiteNoise, psycopg, django-storages), runs `collectstatic`, applies migrations on start, and serves via gunicorn. Set `WEB_CONCURRENCY` to tune worker count.
+
+### Configuration for production
+
+- **Database:** set `DATABASE_URL=postgres://user:pass@host:5432/db` (compose wires this to the bundled Postgres automatically).
+- **Object storage:** set `USE_S3=True` + `AWS_*` to store uploaded media in S3-compatible storage (AWS, MinIO, R2, Spaces via `AWS_S3_ENDPOINT_URL`); otherwise media lives on the `media` volume.
+- **Static files:** `USE_WHITENOISE=True` (the image sets this) serves compressed, hashed static assets from the app process — no nginx required.
+- **Security:** set `SECURE_DEPLOY=True` behind TLS to enable HTTPS redirect, secure cookies, and HSTS; set `CSRF_TRUSTED_ORIGINS=https://your.host`.
+- **Rate limiting:** the REST API is throttled (defaults 30/min anon, 240/min per key, overridable). Set `REDIS_URL` so limits are shared across gunicorn workers.
+
+### Health checks & monitoring
+
+`GET /healthz` returns `200` (`{"status": "ok"}`) when the database is reachable and `503` otherwise — point your load balancer / uptime monitor at it. It is unauthenticated and PII-free.
+
+### Backup & restore
+
+- **Database:** `pg_dump`/`pg_restore` (Postgres) — e.g. `docker compose exec db pg_dump -U webeval webeval > backup.sql`. A full-database JSON dump is also available to superusers at `/admin/database-export.json`.
+- **Media:** back up the `media` volume (or rely on your object-storage provider's versioning/backups when `USE_S3` is on).
+- **Retention:** schedule `python manage.py purge_expired_data` (cron) to honour each study's retention window.
 
 ## Contributing
 

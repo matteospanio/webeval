@@ -21,6 +21,7 @@ urlpatterns = [
         name="study_build_save",
     ),
     path("<slug:slug>/clone/", views.study_clone, name="study_clone"),
+    path("<slug:slug>/webhooks/", views.study_webhooks, name="study_webhooks"),
     path("<slug:slug>/access/", views.study_access, name="study_access"),
     path("<slug:slug>/answers.csv", views.answers_csv, name="answers_csv"),
     path(

@@ -115,6 +115,13 @@ class Experiment(models.Model):
             "this window."
         ),
     )
+    notify_email = models.EmailField(
+        blank=True,
+        help_text=(
+            "If set, this address is emailed when a participant completes the "
+            "study (best-effort; suited to low/moderate-volume studies)."
+        ),
+    )
 
     state = models.CharField(
         max_length=16,
@@ -1357,3 +1364,43 @@ class QuestionTemplate(models.Model):
             attention_expected=self.attention_expected,
             sort_order=sort_order,
         )
+
+
+def _new_webhook_secret() -> str:
+    return secrets.token_urlsafe(32)
+
+
+class Webhook(models.Model):
+    """An outbound webhook fired to a researcher-configured URL on an event.
+
+    Deliveries are HMAC-signed (see :mod:`experiments.webhooks`) so the
+    receiver can verify authenticity. Best-effort and synchronous.
+    """
+
+    class Event(models.TextChoices):
+        SESSION_COMPLETED = "session.completed", "Session completed"
+        SESSION_SCREENED_OUT = "session.screened_out", "Session screened out"
+
+    experiment = models.ForeignKey(
+        Experiment, on_delete=models.CASCADE, related_name="webhooks"
+    )
+    url = models.URLField()
+    secret = models.CharField(
+        max_length=64,
+        default=_new_webhook_secret,
+        help_text="Signs deliveries: X-Webhook-Signature: sha256=HMAC(secret, body).",
+    )
+    event = models.CharField(
+        max_length=32, choices=Event.choices, default=Event.SESSION_COMPLETED
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_delivered_at = models.DateTimeField(null=True, blank=True)
+    last_status = models.PositiveIntegerField(null=True, blank=True)
+    last_error = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ("experiment", "-created_at")
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.event} → {self.url}"

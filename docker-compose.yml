@@ -1,0 +1,42 @@
+# Local production-like stack: app + Postgres + Redis.
+# Prereqs: `cp .env.example .env` and set SECRET_KEY (+ ALLOWED_HOSTS).
+# Run: docker compose up --build
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: webeval
+      POSTGRES_USER: webeval
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webeval}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webeval"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+  web:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://webeval:${POSTGRES_PASSWORD:-webeval}@db:5432/webeval
+      REDIS_URL: redis://redis:6379/0
+      USE_WHITENOISE: "True"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      # Persist uploaded media on the host (when not using S3 object storage).
+      - media:/app/media
+
+volumes:
+  pgdata:
+  media:

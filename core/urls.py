@@ -4,9 +4,10 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 
-from core.views import database_export
+from core.views import database_export, healthz
 
 urlpatterns = [
+    path("healthz", healthz, name="healthz"),
     # Mount the database export ahead of ``admin.site.urls`` so the more
     # specific path wins the match.
     path(

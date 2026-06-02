@@ -20,3 +20,14 @@ def _isolated_media_root(settings, tmp_path_factory):
     media = tmp_path_factory.mktemp("media")
     settings.MEDIA_ROOT = str(media)
     yield
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """Reset the cache between tests so DRF rate-limit counters don't leak
+    across tests (and cached data stays test-local)."""
+    from django.core.cache import cache
+
+    cache.clear()
+    yield
+    cache.clear()
