@@ -29,6 +29,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Authoring productivity: one-click study duplication (deep copy incl. media + skip logic), activation-readiness checks that block going live on an incomplete study, a preview/pilot phase whose data is kept out of the real dataset, per-study branding (accent color, logo, custom CSS), and a reusable question bank
 - Plugin question types: add a custom question widget (config validation + server render + answer parsing) in one self-contained class via a decorator/registry — no core changes, auto-discovered at startup; ships a constant-sum (allocate points) example
 - Drag-&-drop question builder in the studio: drag question types (built-ins and plugins) from a palette onto a canvas, reorder by dragging, edit inline, and save — no Django admin needed, available to non-staff editors
+- Online results & analysis: per-question summaries for every question type (choice/Likert distributions, rating/numeric stats, matrix breakdowns, ranking mean-ranks) viewed in the studio, ready-to-use across-condition tests (one-way ANOVA / chi-square with p-values, no scipy required), and segmentation by device or country
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -146,6 +147,12 @@ Phases form a chain (each study follows at most one predecessor); self-reference
 Questions can be marked as required, split onto separate pages, and optionally show the originating stimulus prompt to participants.
 
 A question may also carry **skip logic** (`visible_if`): show it only when earlier answers in the same section match, e.g. `{"question": 12, "op": "eq", "value": "Yes"}` (or `{"all": [...]}` / `{"any": [...]}`). Cross-page branching is fully server-side; same-page dependents are revealed live by a small progressive-enhancement script.
+
+### Results & analysis
+
+The study overview shows a **per-question results** section for every question type — choice/Likert distributions (with bars), rating/numeric summary stats (mean, median, SD, range), matrix per-row breakdowns, ranking mean-ranks, and response counts for free-text/plugin types — computed over real (submitted, non-preview) sessions.
+
+For per-stimulus questions it also runs a **ready-to-use across-condition test**: a one-way ANOVA for rating/numeric/Likert outcomes (a t-test when there are two conditions) or a chi-square test for choice outcomes, each with a p-value and a significance flag. P-values are computed from hand-rolled special functions, so this works with no extra dependencies (scipy is only needed for the optional `analysis` extra). Results can be **segmented** by device or country.
 
 ## Admin and Exports
 
