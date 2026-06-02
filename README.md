@@ -26,6 +26,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Participant-visible withdrawal & data deletion via a private link (erases answers, leaves an anonymized tombstone, drops out of results)
 - Bot protection (consent honeypot), private studies (shared access code or single-use invite links), and optional participant codes for a stable cross-device identity
 - Longitudinal / multi-phase studies: chain studies into ordered phases a participant returns to over time, with an optional minimum gap between phases and a return link + reusable participant code shown on completion
+- Authoring productivity: one-click study duplication (deep copy incl. media + skip logic), activation-readiness checks that block going live on an incomplete study, a preview/pilot phase whose data is kept out of the real dataset, per-study branding (accent color, logo, custom CSS), and a reusable question bank
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -69,13 +70,22 @@ The default setup uses SQLite. Environment variables are documented in `.env.exa
 
 ### Experiment lifecycle
 
-Experiments move through three states:
+Experiments move through four states:
 
-- `draft`
-- `active`
-- `closed`
+- `draft` — author freely; structural edits (conditions, stimuli, questions) are allowed only here
+- `test` — a preview / pilot phase: walk the real participant flow, but sessions started here are marked as preview and kept out of stats and exports
+- `active` — collecting real data
+- `closed` — finished
 
 Conditions, stimuli, and questions can only be structurally edited while an experiment is in `draft`. This protects active studies from accidental mid-run changes.
+
+Leaving `draft` for the preview or live phase runs **activation-readiness checks**: an empty or inconsistent study (no conditions, no active stimulus, no per-stimulus question, missing consent text, more stimuli-per-participant than exist, …) is blocked until the gaps are fixed. Promoting a test study to active lets you either discard the preview data or keep it — kept preview sessions are promoted into the real dataset.
+
+### Authoring productivity
+
+- **Duplicate a study** in one click (from the studio or the admin): a faithful deep copy into a new draft you own — every authored field, the raw media of audio/image/video stimuli and pairwise prompts, and skip-logic / eligibility references remapped to the cloned questions.
+- **Question bank:** save any question to a personal (or shared) bank, then insert saved questions into any draft study you own.
+- **Branding:** give a study an accent color, a header logo, and optional custom CSS applied to its participant pages.
 
 ### Participant flow
 
