@@ -491,6 +491,14 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             purged_counts = None
             if purge:
                 purged_counts = purge_participant_data(experiment)
+            else:
+                # Keep test-phase data: promote those preview sessions into the
+                # real dataset so they count in stats and exports.
+                from survey.models import ParticipantSession
+
+                ParticipantSession.objects.filter(
+                    experiment=experiment, is_preview=True
+                ).update(is_preview=False)
             experiment.state = Experiment.State.ACTIVE
             # Bypass the clean() guard that blocks direct TEST→ACTIVE via
             # the normal change form: we've just walked the user through

@@ -38,6 +38,7 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
         "experiment",
         "last_step",
         "submitted_at",
+        "is_preview",
         "failed_attention_checks",
         "flag_list",
         "external_id",
@@ -48,6 +49,7 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     list_filter = (
         "experiment",
         "last_step",
+        "is_preview",
         "device_type",
         "compensation_status",
         FlaggedFilter,

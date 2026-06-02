@@ -678,6 +678,7 @@ def _create_session(
         resume_token=secrets.token_urlsafe(32),
         participant_uid=participant_uid,
         external_id=external_id,
+        is_preview=experiment.state == Experiment.State.TEST,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session

@@ -50,6 +50,7 @@ def write_answers_csv(
         Response.objects.filter(
             session__experiment=experiment,
             session__submitted_at__isnull=False,
+            session__is_preview=False,
             stimulus__isnull=False,
         )
         .select_related("session", "stimulus", "stimulus__condition", "question")
@@ -63,7 +64,7 @@ def write_answers_csv(
     assignment_map: dict[tuple[str, int], int] = {}
     for sess_id, stim_id, ms in (
         ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False
+            experiment=experiment, submitted_at__isnull=False, is_preview=False
         )
         .values_list("id", "assignments__stimulus_id", "assignments__listen_duration_ms")
     ):
@@ -112,7 +113,7 @@ def write_demographics_csv(
     writer.writeheader()
 
     sessions = ParticipantSession.objects.filter(
-        experiment=experiment, submitted_at__isnull=False
+        experiment=experiment, submitted_at__isnull=False, is_preview=False
     ).order_by("started_at")
     if exclude_flagged:
         sessions = sessions.filter(flags=[])
@@ -167,6 +168,7 @@ def iter_pairwise_answers(experiment: Experiment):
         Response.objects.filter(
             session__experiment=experiment,
             session__submitted_at__isnull=False,
+            session__is_preview=False,
             pair_assignment__isnull=False,
         )
         .select_related(
@@ -248,7 +250,7 @@ def write_completion_codes_csv(
     writer.writeheader()
     for s in (
         ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False
+            experiment=experiment, submitted_at__isnull=False, is_preview=False
         ).order_by("started_at")
     ):
         writer.writerow(
