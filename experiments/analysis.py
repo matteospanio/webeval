@@ -229,11 +229,14 @@ def experiment_question_analysis(experiment: Experiment) -> list[QuestionResult]
     return [analyse_question(experiment, q) for q in questions]
 
 
-# --- segmentation (break results down by a session attribute) ---------------
+# --- segmentation (break results down by a session/response attribute) ------
 
+# segment key -> (ORM field path, human label)
 _SEGMENTS = {
     "device": ("session__device_type", "Device"),
     "country": ("session__country_code", "Country"),
+    "condition": ("stimulus__condition__name", "Condition"),
+    "cohort": ("session__submitted_at", "Cohort (week)"),
 }
 
 
@@ -241,7 +244,17 @@ def available_segments() -> list[tuple[str, str]]:
     return [(key, label) for key, (_, label) in _SEGMENTS.items()]
 
 
-def _segmented_values(experiment, question, field) -> dict[str, list[Any]]:
+def _segment_label(segment_by: str, raw_seg) -> str:
+    if raw_seg in (None, ""):
+        return "(none)"
+    if segment_by == "cohort":
+        # Bucket by ISO year-week of submission (a temporal cohort).
+        return raw_seg.strftime("%G-W%V")
+    return str(raw_seg)
+
+
+def _segmented_values(experiment, question, segment_by) -> dict[str, list[Any]]:
+    field = _SEGMENTS[segment_by][0]
     raws = Response.objects.filter(
         question=question,
         session__experiment=experiment,
@@ -254,16 +267,15 @@ def _segmented_values(experiment, question, field) -> dict[str, list[Any]]:
             value = json.loads(raw)
         except (TypeError, ValueError):
             continue
-        groups.setdefault(seg or "(unknown)", []).append(value)
+        groups.setdefault(_segment_label(segment_by, seg), []).append(value)
     return groups
 
 
 def segmented_question_analysis(experiment: Experiment, segment_by: str) -> list[dict]:
-    """Per-question summaries split by a session attribute (device / country)."""
-    field = _SEGMENTS[segment_by][0]
+    """Per-question summaries split by device / country / condition / cohort."""
     out = []
     for q in experiment.questions.all().order_by("section", "sort_order", "id"):
-        groups = _segmented_values(experiment, q, field)
+        groups = _segmented_values(experiment, q, segment_by)
         segments = [
             {"label": label, "result": _summarise(q, values)}
             for label, values in sorted(groups.items())
