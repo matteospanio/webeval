@@ -40,6 +40,7 @@ STEP_URL_NAMES = {
     ParticipantSession.Step.STIMULI: "survey:play",
     ParticipantSession.Step.DEMOGRAPHICS: "survey:demographics",
     ParticipantSession.Step.SCREENED_OUT: "survey:screened_out",
+    ParticipantSession.Step.WITHDRAWN: "survey:consent",
     ParticipantSession.Step.DONE: "survey:thanks",
 }
 

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article style="max-width:28rem;margin:2rem auto;">
+    <h1>Access code required</h1>
+    <p>This study is private. Enter the access code you were given to continue.</p>
+    {% if error %}<p role="alert"><mark>That code wasn't recognised.</mark></p>{% endif %}
+    <form method="post">
+      {% csrf_token %}
+      <label>Access code <input type="text" name="access_code" autofocus required></label>
+      <button type="submit">Continue</button>
+    </form>
+  </article>
+{% endblock %}

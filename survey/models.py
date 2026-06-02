@@ -35,6 +35,7 @@ class ParticipantSession(models.Model):
         STIMULI = "stimuli", "Listening to stimuli"
         DEMOGRAPHICS = "demographics", "Demographic questions"
         SCREENED_OUT = "screened_out", "Screened out (ineligible)"
+        WITHDRAWN = "withdrawn", "Withdrawn"
         DONE = "done", "Completed"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -77,6 +78,7 @@ class ParticipantSession(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     abandoned_at = models.DateTimeField(null=True, blank=True)
     screened_out_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     # Quality flags computed at completion: count of failed attention checks
     # and a list of flag strings (e.g. "failed_attention", "speeder",
@@ -92,6 +94,22 @@ class ParticipantSession(models.Model):
     # duplicate-submission detection and links a participant's sessions; blank
     # when the participant blocks cookies.
     participant_uid = models.CharField(max_length=64, blank=True, db_index=True)
+
+    # Crowdsourcing / payment reconciliation.
+    external_id = models.CharField(max_length=200, blank=True, db_index=True)
+    completion_code = models.CharField(max_length=100, blank=True)
+
+    class CompensationStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        PAID = "paid", "Paid"
+        REJECTED = "rejected", "Rejected"
+
+    compensation_status = models.CharField(
+        max_length=10,
+        choices=CompensationStatus.choices,
+        default=CompensationStatus.PENDING,
+    )
 
     # Secret token for the "save & continue later" resume link. Generated when
     # the session is created; null on legacy rows from before the feature (so

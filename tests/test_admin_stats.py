@@ -14,7 +14,7 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 
-from experiments.models import Experiment, Question
+from experiments.models import Experiment
 from experiments.tests.factories import (
     ChoiceQuestionFactory,
     ConditionFactory,
@@ -68,10 +68,10 @@ def populated_experiment(db):
             browser_family="Firefox",
             country_code="IT",
         )
-        assign_a = StimulusAssignment.objects.create(
+        StimulusAssignment.objects.create(
             session=session, stimulus=stim_a, sort_order=0, listen_duration_ms=20000
         )
-        assign_b = StimulusAssignment.objects.create(
+        StimulusAssignment.objects.create(
             session=session, stimulus=stim_b, sort_order=1, listen_duration_ms=18500
         )
         Response.objects.create(

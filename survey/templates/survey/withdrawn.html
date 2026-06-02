@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <h1>Your data has been removed</h1>
+    {% if already %}
+    <p>This link is no longer active — your data may already have been removed.</p>
+    {% else %}
+    <p>Your responses for <strong>{{ experiment.name }}</strong> have been deleted.
+       Thank you for letting us know.</p>
+    {% endif %}
+  </article>
+{% endblock %}

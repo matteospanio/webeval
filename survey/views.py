@@ -22,7 +22,6 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import F
 from django.http import (
-    Http404,
     HttpResponseBadRequest,
     HttpResponseRedirect,
     JsonResponse,
@@ -38,7 +37,13 @@ from experiments.assignment import (
     get_strategy,
 )
 from experiments.branching import evaluate_condition, is_visible
-from experiments.models import Experiment, Prompt, Question, Stimulus
+from experiments.models import (
+    Experiment,
+    ParticipantInvite,
+    Prompt,
+    Question,
+    Stimulus,
+)
 
 from .flagging import compute_flags
 from .flow import (
@@ -411,6 +416,80 @@ def _resume_url(request, experiment: Experiment, session: ParticipantSession | N
     )
 
 
+def _withdraw_url(request, slug: str, token) -> str | None:
+    """Absolute 'withdraw & delete my data' link for a session token."""
+    if not token:
+        return None
+    return request.build_absolute_uri(
+        reverse("survey:withdraw", kwargs={"slug": slug, "token": token})
+    )
+
+
+# --- access gate (private studies) -----------------------------------------
+
+
+def _access_gate(request, experiment: Experiment, slug: str):
+    """Return a gate/blocked response for private studies, or None when access
+    is granted (public studies, or a valid code / invite token)."""
+    mode = experiment.access_mode
+    if mode == Experiment.AccessMode.PUBLIC:
+        return None
+    granted_key = f"webeval:access:{slug}"
+    if request.session.get(granted_key):
+        return None
+    if mode == Experiment.AccessMode.CODE:
+        supplied = (request.GET.get("code") or "").strip()
+        if supplied and supplied == experiment.access_code:
+            request.session[granted_key] = True
+            return None
+        return redirect("survey:access", slug=slug)
+    if mode == Experiment.AccessMode.INVITE:
+        token = (request.GET.get("invite") or "").strip()
+        if token:
+            invite = ParticipantInvite.objects.filter(
+                experiment=experiment, token=token, used_at__isnull=True
+            ).first()
+            if invite is not None:
+                request.session[granted_key] = True
+                request.session[f"webeval:invite:{slug}"] = token
+                return None
+        ctx = _base_context(experiment, None)
+        ctx["progress_percent"] = None
+        return render(request, "survey/invite_required.html", ctx, status=403)
+    return None
+
+
+def _consume_invite(request, experiment: Experiment, slug: str) -> None:
+    """Mark the stashed single-use invite token as used (at session creation)."""
+    if experiment.access_mode != Experiment.AccessMode.INVITE:
+        return
+    token = request.session.get(f"webeval:invite:{slug}")
+    if token:
+        ParticipantInvite.objects.filter(
+            experiment=experiment, token=token, used_at__isnull=True
+        ).update(used_at=timezone.now())
+
+
+@require_http_methods(["GET", "POST"])
+def access(request, slug: str):
+    experiment = get_object_or_404(Experiment, slug=slug)
+    if experiment.state not in RUNNABLE_STATES:
+        return _unavailable(request, experiment)
+    if experiment.access_mode != Experiment.AccessMode.CODE:
+        return redirect("survey:consent", slug=slug)
+    error = False
+    if request.method == "POST":
+        supplied = (request.POST.get("access_code") or "").strip()
+        if experiment.access_code and supplied == experiment.access_code:
+            request.session[f"webeval:access:{slug}"] = True
+            return redirect("survey:consent", slug=slug)
+        error = True
+    ctx = _base_context(experiment, None)
+    ctx["progress_percent"] = None
+    ctx["error"] = error
+    return render(request, "survey/access_code.html", ctx)
+
+
 # --- consent ---------------------------------------------------------------
 
 
@@ -420,7 +499,20 @@ def consent(request, slug: str):
     if experiment.state not in RUNNABLE_STATES:
         return _unavailable(request, experiment)
 
+    gate = _access_gate(request, experiment, slug)
+    if gate is not None:
+        return gate
+
     pid = request.COOKIES.get(PARTICIPANT_COOKIE) or uuid.uuid4().hex
+
+    # Capture an external/platform id from the configured URL param; stash it in
+    # the Django session so it survives the consent GET → POST.
+    ext_key = f"webeval:extid:{slug}"
+    if experiment.external_id_param:
+        incoming = (request.GET.get(experiment.external_id_param) or "").strip()
+        if incoming:
+            request.session[ext_key] = incoming[:200]
+    external_id = request.session.get(ext_key, "")
 
     def _with_pid(response):
         response.set_cookie(
@@ -447,6 +539,13 @@ def consent(request, slug: str):
     consent_first, consent_rest = _split_consent_text(experiment.consent_text)
 
     if request.method == "POST":
+        if experiment.bot_protection and request.POST.get("hp_url", "").strip():
+            # Honeypot filled → almost certainly a bot. Silently re-render the
+            # consent page without creating a session.
+            ctx = _base_context(experiment, session)
+            ctx["consent_first"] = consent_first
+            ctx["consent_rest"] = consent_rest
+            return _with_pid(render(request, "survey/consent.html", ctx))
         if not request.POST.get("agree"):
             messages.error(
                 request,
@@ -457,8 +556,38 @@ def consent(request, slug: str):
             ctx["consent_first"] = consent_first
             ctx["consent_rest"] = consent_rest
             return _with_pid(render(request, "survey/consent.html", ctx))
+        effective_uid = pid
+        if experiment.collect_participant_code:
+            code = (request.POST.get("participant_code") or "").strip()
+            if not code:
+                messages.error(
+                    request,
+                    f"Please enter your {experiment.participant_code_label.lower()}.",
+                )
+                ctx = _base_context(experiment, session)
+                ctx["error"] = True
+                ctx["consent_first"] = consent_first
+                ctx["consent_rest"] = consent_rest
+                return _with_pid(render(request, "survey/consent.html", ctx))
+            if experiment.one_submission_per_participant and _already_completed(
+                experiment, code
+            ):
+                return _with_pid(
+                    render(
+                        request,
+                        "survey/already_completed.html",
+                        _base_context(experiment, None),
+                    )
+                )
+            effective_uid = code
         if session is None:
-            session = _create_session(request, experiment, participant_uid=pid)
+            session = _create_session(
+                request,
+                experiment,
+                participant_uid=effective_uid,
+                external_id=external_id,
+            )
+            _consume_invite(request, experiment, slug)
         session.consented_at = timezone.now()
         if _has_screening(experiment):
             session.last_step = ParticipantSession.Step.SCREENING
@@ -496,7 +625,10 @@ def _already_completed(experiment: Experiment, pid: str) -> bool:
 
 
 def _create_session(
-    request, experiment: Experiment, participant_uid: str = ""
+    request,
+    experiment: Experiment,
+    participant_uid: str = "",
+    external_id: str = "",
 ) -> ParticipantSession:
     meta = extract_metadata(request)
     session = ParticipantSession.objects.create(
@@ -506,6 +638,7 @@ def _create_session(
         country_code=meta.country_code,
         resume_token=secrets.token_urlsafe(32),
         participant_uid=participant_uid,
+        external_id=external_id,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
@@ -572,6 +705,7 @@ def screening(request, slug: str):
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/screening.html", ctx)
@@ -822,6 +956,7 @@ def play(request, slug: str):
             ),
             "show_prompt": any(q.show_prompt for q in visible_questions),
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/play.html", ctx)
@@ -1245,14 +1380,26 @@ def demographics(request, slug: str):
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
             "resume_url": _resume_url(request, experiment, session),
+            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
     )
     return render(request, "survey/demographics.html", ctx)
 
 
+def _completion_code_for(session: ParticipantSession) -> str:
+    experiment = session.experiment
+    mode = experiment.completion_code_mode
+    if mode == Experiment.CompletionCodeMode.FIXED:
+        return experiment.completion_code
+    if mode == Experiment.CompletionCodeMode.UNIQUE:
+        return secrets.token_hex(6).upper()
+    return ""
+
+
 def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
+    session.completion_code = _completion_code_for(session)
     failed, flags = compute_flags(session)
     session.failed_attention_checks = failed
     session.flags = flags
@@ -1263,8 +1410,13 @@ def _finish_session(request, session: ParticipantSession, slug: str):
             "demographic_page_index",
             "failed_attention_checks",
             "flags",
+            "completion_code",
         ]
     )
+    if session.completion_code:
+        request.session[f"webeval:code:{slug}"] = session.completion_code
+    if session.resume_token:
+        request.session[f"webeval:token:{slug}"] = session.resume_token
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
@@ -1306,9 +1458,69 @@ def resume(request, slug: str, token: str):
     return redirect(required_step_url(session))
 
 
+def _withdraw_data(session: ParticipantSession) -> None:
+    """Erase a participant's answers + behavioural data, leaving an anonymised
+    tombstone recording that a withdrawal happened (no personal data retained)."""
+    Response.objects.filter(session=session).delete()
+    StimulusAssignment.objects.filter(session=session).delete()
+    PairAssignment.objects.filter(session=session).delete()
+    session.withdrawn_at = timezone.now()
+    session.last_step = ParticipantSession.Step.WITHDRAWN
+    session.submitted_at = None
+    session.completion_code = ""
+    session.external_id = ""
+    session.participant_uid = ""
+    session.country_code = ""
+    session.device_type = ""
+    session.browser_family = ""
+    session.assigned_condition = None
+    session.flags = []
+    session.failed_attention_checks = 0
+    session.resume_token = None
+    session.save()
+
+
+@require_http_methods(["GET", "POST"])
+def withdraw(request, slug: str, token: str):
+    """Participant-visible withdrawal + data deletion via their session token."""
+    experiment = get_object_or_404(Experiment, slug=slug)
+    session = ParticipantSession.objects.filter(
+        experiment=experiment, resume_token=token
+    ).first()
+    if session is None:
+        # Unknown or already-used token (e.g. data already withdrawn).
+        return render(
+            request,
+            "survey/withdrawn.html",
+            {
+                "experiment": experiment,
+                "brand": experiment.name,
+                "progress_percent": None,
+                "already": True,
+            },
+        )
+    if request.method == "POST":
+        _withdraw_data(session)
+        request.session.pop(_session_key(slug), None)
+        return render(
+            request,
+            "survey/withdrawn.html",
+            {
+                "experiment": experiment,
+                "brand": experiment.name,
+                "progress_percent": None,
+            },
+        )
+    ctx = _base_context(experiment, session)
+    ctx["progress_percent"] = None
+    return render(request, "survey/withdraw_confirm.html", ctx)
+
+
 @require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
+    completion_code = request.session.pop(f"webeval:code:{slug}", "")
+    token = request.session.pop(f"webeval:token:{slug}", "")
     return render(
         request,
         "survey/thanks.html",
@@ -1317,5 +1529,7 @@ def thanks(request, slug: str):
             "brand": experiment.name,
             "progress_percent": 100,
             "is_test_mode": experiment.state == Experiment.State.TEST,
+            "completion_code": completion_code,
+            "withdraw_url": _withdraw_url(request, slug, token),
         },
     )

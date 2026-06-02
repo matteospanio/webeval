@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import secrets
 from typing import Any
 
 from django.conf import settings
@@ -156,6 +157,66 @@ class Experiment(models.Model):
         ),
     )
 
+    class CompletionCodeMode(models.TextChoices):
+        NONE = "none", "No completion code"
+        FIXED = "fixed", "Fixed code for everyone"
+        UNIQUE = "unique", "Unique code per participant"
+
+    completion_code_mode = models.CharField(
+        max_length=8,
+        choices=CompletionCodeMode.choices,
+        default=CompletionCodeMode.NONE,
+        help_text="Show a completion code on the thank-you page (e.g. for crowdsourcing platforms).",
+    )
+    completion_code = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="The fixed code shown to every participant when mode = Fixed.",
+    )
+    external_id_param = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text=(
+            "Optional URL query parameter captured as the participant's "
+            "external id (e.g. 'PROLIFIC_PID' or 'workerId'), for payment "
+            "reconciliation."
+        ),
+    )
+    bot_protection = models.BooleanField(
+        default=False,
+        help_text="Add a honeypot field to the consent form to deflect simple bots.",
+    )
+
+    class AccessMode(models.TextChoices):
+        PUBLIC = "public", "Public (anyone with the link)"
+        CODE = "code", "Shared access code"
+        INVITE = "invite", "Single-use invite links"
+
+    access_mode = models.CharField(
+        max_length=8,
+        choices=AccessMode.choices,
+        default=AccessMode.PUBLIC,
+        help_text="Who can start the study.",
+    )
+    access_code = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="The shared code participants must enter when access mode = Shared access code.",
+    )
+    collect_participant_code = models.BooleanField(
+        default=False,
+        help_text=(
+            "Ask participants for a stable code at the start (an optional "
+            "lightweight 'account'). The code becomes their participant id, so "
+            "duplicate checks and return visits work across devices."
+        ),
+    )
+    participant_code_label = models.CharField(
+        max_length=100,
+        default="Participant code",
+        help_text="Label for the participant-code field on the consent page.",
+    )
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,
@@ -287,6 +348,37 @@ class Experiment(models.Model):
                     )
                 }
             )
+
+
+def _new_participant_invite_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+class ParticipantInvite(models.Model):
+    """A single-use access token for a private (invite-only) study."""
+
+    experiment = models.ForeignKey(
+        Experiment,
+        on_delete=models.CASCADE,
+        related_name="participant_invites",
+    )
+    token = models.CharField(
+        max_length=64,
+        unique=True,
+        db_index=True,
+        default=_new_participant_invite_token,
+        editable=False,
+    )
+    label = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("experiment", "-created_at")
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        state = "used" if self.used_at else "unused"
+        return f"{self.token[:8]}… ({state})"
 
 
 # --- Structural-edit guard for child models ---------------------------------

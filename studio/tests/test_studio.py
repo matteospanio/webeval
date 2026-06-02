@@ -23,7 +23,7 @@ def _client(user):
 def test_studies_list_shows_only_my_studies():
     me = UserFactory()
     other = UserFactory()
-    mine = ExperimentFactory(owner=me, name="Mine-Study")
+    ExperimentFactory(owner=me, name="Mine-Study")
     ExperimentFactory(owner=other, name="Their-Study")
 
     resp = _client(me).get(reverse("studio:studies"))

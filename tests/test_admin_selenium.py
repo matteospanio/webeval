@@ -63,8 +63,6 @@ def browser():
     autodetected binary paths if your system installs them elsewhere.
     """
     pytest.importorskip("selenium")
-    from selenium import webdriver
-    from selenium.common.exceptions import WebDriverException
 
     driver = _try_firefox() or _try_chromium()
     if driver is None:

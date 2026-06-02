@@ -36,18 +36,36 @@ class ParticipantSessionAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     list_display = (
         "id",
         "experiment",
-        "assigned_condition",
         "last_step",
-        "started_at",
         "submitted_at",
         "failed_attention_checks",
         "flag_list",
-        "country_code",
-        "device_type",
+        "external_id",
+        "completion_code",
+        "compensation_status",
     )
-    list_filter = ("experiment", "last_step", "device_type", FlaggedFilter)
-    search_fields = ("id", "experiment__name", "country_code")
-    readonly_fields = tuple(f.name for f in ParticipantSession._meta.fields)
+    list_editable = ("compensation_status",)
+    list_filter = (
+        "experiment",
+        "last_step",
+        "device_type",
+        "compensation_status",
+        FlaggedFilter,
+    )
+    search_fields = (
+        "id",
+        "experiment__name",
+        "country_code",
+        "external_id",
+        "completion_code",
+    )
+    # Everything is read-only except compensation_status, which researchers
+    # update as they reconcile payments.
+    readonly_fields = tuple(
+        f.name
+        for f in ParticipantSession._meta.fields
+        if f.name != "compensation_status"
+    )
     date_hierarchy = "started_at"
 
     @admin.display(description="Flags")

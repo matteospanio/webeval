@@ -200,7 +200,6 @@ def test_pairwise_audio_ignores_show_prompt():
 def test_plain_pairwise_still_renders_show_prompt():
     """Regression: plain PAIRWISE (non-audio) must keep rendering the prompt
     when Question.show_prompt=True — only PAIRWISE_AUDIO suppresses it."""
-    from experiments.models import Stimulus
     from experiments.tests.factories import (
         ChoiceQuestionFactory,
         ConditionFactory,

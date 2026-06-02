@@ -18,7 +18,7 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-from experiments.models import Experiment, Question, Stimulus
+from experiments.models import Experiment, Question
 from experiments.tests.factories import (
     ChoiceQuestionFactory,
     ConditionFactory,

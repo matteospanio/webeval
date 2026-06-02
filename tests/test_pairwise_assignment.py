@@ -6,7 +6,7 @@ import random
 import pytest
 
 from experiments.assignment import PairwiseBalancedStrategy
-from experiments.models import Experiment, Stimulus
+from experiments.models import Stimulus
 from experiments.tests.factories import (
     ConditionFactory,
     PairwiseExperimentFactory,

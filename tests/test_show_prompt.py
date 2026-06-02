@@ -5,7 +5,7 @@ import pytest
 from django.test import Client
 from django.urls import reverse
 
-from experiments.models import Experiment, Question
+from experiments.models import Experiment
 from experiments.tests.factories import (
     ConditionFactory,
     ExperimentFactory,

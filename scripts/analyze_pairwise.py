@@ -272,10 +272,10 @@ def compute_win_rates(
     wins: dict[str, int] = {m: 0 for m in models}
     total: dict[str, int] = {m: 0 for m in models}
     for _, row in comparisons.iterrows():
-        w, l = row["winner"], row["loser"]
+        w, loser = row["winner"], row["loser"]
         wins[w] += 1
         total[w] += 1
-        total[l] += 1
+        total[loser] += 1
     return {
         m: {"wins": wins[m], "total": total[m],
             "win_pct": 100.0 * wins[m] / total[m] if total[m] else 0.0}

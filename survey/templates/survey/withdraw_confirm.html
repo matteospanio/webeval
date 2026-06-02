@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ experiment.name }}{% endblock %}
+
+{% block content %}
+  <article>
+    <h1>Withdraw from this study</h1>
+    <p>This will permanently delete the responses you have given so far for
+       <strong>{{ experiment.name }}</strong>. This cannot be undone.</p>
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="contrast">Withdraw and delete my data</button>
+      <a href="{% url 'survey:consent' slug=experiment.slug %}" role="button" class="secondary">Cancel</a>
+    </form>
+  </article>
+{% endblock %}

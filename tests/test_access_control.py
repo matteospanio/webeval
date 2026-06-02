@@ -12,7 +12,7 @@ from rest_framework.test import APIClient
 from accounts import services
 from accounts.models import Membership
 from accounts.roles import Role
-from accounts.tests.factories import StaffUserFactory, UserFactory
+from accounts.tests.factories import StaffUserFactory
 from apikeys.models import APIKey
 from experiments.models import Stimulus
 from experiments.tests.factories import ConditionFactory, ExperimentFactory
