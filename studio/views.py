@@ -28,6 +28,7 @@ from accounts.models import Invitation, Membership
 from accounts.permissions import can_manage, can_view, role_for
 from accounts.roles import Role
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
+from experiments.cloning import clone_experiment
 from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
@@ -142,6 +143,23 @@ def study_overview(request, slug):
     else:
         context["per_stimulus"] = per_stimulus_mean_ratings(experiment)
     return render(request, "studio/study_overview.html", context)
+
+
+@login_required
+def study_clone(request, slug):
+    """Duplicate a study the user can view into a fresh DRAFT they own."""
+    experiment = _experiment_or_404(request, slug)
+    if request.method != "POST":
+        return redirect("studio:study_overview", slug=experiment.slug)
+    with transaction.atomic():
+        clone = clone_experiment(experiment, owner=request.user)
+        services.grant_owner_membership(clone, request.user, actor=request.user)
+    messages.success(
+        request,
+        f"Duplicated '{experiment.name}' as a new draft you own. "
+        "Edit it, then activate when ready.",
+    )
+    return redirect("studio:study_overview", slug=clone.slug)
 
 
 def _access_context(request, experiment, invite_form):

@@ -149,6 +149,22 @@ def generate_participant_invites(modeladmin, request, queryset):
     )
 
 
+@admin.action(description="Duplicate selected studies (new draft you own)")
+def duplicate_experiment(modeladmin, request, queryset):
+    from experiments.cloning import clone_experiment
+
+    cloned = 0
+    for exp in queryset:
+        clone = clone_experiment(exp, owner=request.user)
+        grant_owner_membership(clone, request.user, actor=request.user)
+        cloned += 1
+    modeladmin.message_user(
+        request,
+        f"Duplicated {cloned} stud{'y' if cloned == 1 else 'ies'} into new drafts.",
+        level=messages.SUCCESS,
+    )
+
+
 @admin.register(ParticipantInvite)
 class ParticipantInviteAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     experiment_lookup = "experiment"
@@ -166,7 +182,12 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
     search_fields = ("name", "slug", "description")
     prepopulated_fields = {"slug": ("name",)}
     inlines = (ConditionInline, QuestionInline, PromptInline)
-    actions = (export_repro_json, open_printable, generate_participant_invites)
+    actions = (
+        export_repro_json,
+        open_printable,
+        generate_participant_invites,
+        duplicate_experiment,
+    )
     actions_list = ("import_experiment",)
     readonly_fields = ("live_stats", "owner")
     autocomplete_fields = ("follows",)

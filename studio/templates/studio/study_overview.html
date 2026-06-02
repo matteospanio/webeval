@@ -68,6 +68,13 @@
 
 <h2>Manage</h2>
 <ul>
+  <li>
+    <form method="post" action="{% url 'studio:study_clone' slug=experiment.slug %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="secondary outline" style="display:inline;width:auto;padding:.25rem .75rem">Duplicate this study</button>
+    </form>
+    <small>Creates an editable draft copy you own (stimuli, questions, branding and all).</small>
+  </li>
   {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>{% endif %}
   {% if show_admin_edit %}
     <li><a href="{{ admin_change_url }}">Edit structure (conditions, stimuli, questions) in admin</a></li>
