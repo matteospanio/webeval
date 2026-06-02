@@ -233,6 +233,20 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
             },
         ),
         (
+            "Branding",
+            {
+                "description": (
+                    "Customise the look of the participant-facing pages for this "
+                    "study. All optional."
+                ),
+                "fields": (
+                    "brand_primary_color",
+                    "brand_logo",
+                    "brand_custom_css",
+                ),
+            },
+        ),
+        (
             "Statistics",
             {
                 "description": (

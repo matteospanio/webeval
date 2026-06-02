@@ -26,6 +26,7 @@ from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils.text import slugify
 
@@ -233,6 +234,33 @@ class Experiment(models.Model):
         help_text=(
             "Minimum hours after completing the previous phase before this "
             "phase opens (for spaced return visits)."
+        ),
+    )
+
+    # --- Per-study branding (applied to participant pages) ------------------
+    brand_primary_color = models.CharField(
+        max_length=7,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r"^#[0-9a-fA-F]{6}$",
+                "Enter a 6-digit hex color like #2a6f97.",
+            )
+        ],
+        help_text="Accent color for participant pages, e.g. #2a6f97.",
+    )
+    brand_logo = models.ImageField(
+        upload_to="branding/",
+        blank=True,
+        null=True,
+        help_text="Optional logo shown in the participant survey header.",
+    )
+    brand_custom_css = models.TextField(
+        blank=True,
+        help_text=(
+            "Optional raw CSS appended to participant pages (trusted, like the "
+            "consent / instructions HTML). Advanced — leave blank for the "
+            "default look."
         ),
     )
 
