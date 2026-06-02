@@ -16,6 +16,7 @@
 
     <form method="post" novalidate>
       {% csrf_token %}
+      <input type="hidden" name="_t0" value="{{ page_served_at }}">
       {% for q in page_questions %}
         {% include "survey/_question.html" %}
       {% endfor %}

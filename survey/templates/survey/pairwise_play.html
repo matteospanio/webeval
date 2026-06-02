@@ -88,6 +88,7 @@
 
     <form method="post" novalidate>
       {% csrf_token %}
+      <input type="hidden" name="_t0" value="{{ page_served_at }}">
 
       {% comment %}
         Render A/B choice questions as a compact comparison table.

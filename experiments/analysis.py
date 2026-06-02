@@ -35,6 +35,7 @@ class QuestionResult:
     kind: str  # distribution | numeric | matrix | ranking | text | other
     rows: list[dict] = field(default_factory=list)
     stats: dict | None = None
+    median_time_ms: float | None = None
 
 
 def _answer_values(experiment: Experiment, question: Question) -> list[Any]:
@@ -86,8 +87,23 @@ def _distribution_rows(counts: Counter, labels: list[str], total: int) -> list[d
     return rows
 
 
+def _median_response_time_ms(experiment: Experiment, question: Question) -> float | None:
+    times = list(
+        Response.objects.filter(
+            question=question,
+            session__experiment=experiment,
+            session__submitted_at__isnull=False,
+            session__is_preview=False,
+            elapsed_ms__isnull=False,
+        ).values_list("elapsed_ms", flat=True)
+    )
+    return median(times) if times else None
+
+
 def analyse_question(experiment: Experiment, question: Question) -> QuestionResult:
-    return _summarise(question, _answer_values(experiment, question))
+    result = _summarise(question, _answer_values(experiment, question))
+    result.median_time_ms = _median_response_time_ms(experiment, question)
+    return result
 
 
 def _summarise(question: Question, values: list[Any]) -> QuestionResult:

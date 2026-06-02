@@ -237,6 +237,9 @@ class Response(models.Model):
     answer_value = models.TextField(
         help_text="JSON-encoded answer payload (int, str, or list depending on question type).",
     )
+    # Server-measured time the participant spent on the page that produced this
+    # answer (milliseconds); null for legacy rows or when timing is unavailable.
+    elapsed_ms = models.PositiveIntegerField(null=True, blank=True)
     answered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

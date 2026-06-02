@@ -394,11 +394,35 @@ def _progress(
     )
 
 
+def _now_ms() -> int:
+    return int(timezone.now().timestamp() * 1000)
+
+
+def _page_elapsed_ms(request) -> int | None:
+    """Server-measured dwell time from the page's ``_t0`` stamp (ms), or None.
+
+    ``_t0`` is the server epoch-ms when the page was rendered (injected by
+    ``_base_context``); both ends use the server clock. Absurd / negative
+    deltas (clock skew, re-used tabs) are dropped rather than stored.
+    """
+    raw = request.POST.get("_t0")
+    if not raw:
+        return None
+    try:
+        delta = _now_ms() - int(raw)
+    except (TypeError, ValueError):
+        return None
+    if delta < 0 or delta > 6 * 60 * 60 * 1000:  # > 6 hours → untrustworthy
+        return None
+    return delta
+
+
 def _base_context(experiment: Experiment, session: ParticipantSession | None) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "experiment": experiment,
         "brand": experiment.name,
         "is_test_mode": experiment.state == Experiment.State.TEST,
+        "page_served_at": _now_ms(),
     }
     if session is not None:
         ctx["session"] = session
@@ -1088,6 +1112,7 @@ def _collect_answers(
 ) -> tuple[list[str], list[Response]]:
     errors: list[str] = []
     responses: list[Response] = []
+    elapsed = _page_elapsed_ms(request)
     for q in questions:
         answered, value, error = _read_one(request, q)
         if error is not None:
@@ -1103,6 +1128,7 @@ def _collect_answers(
                 stimulus=stimulus,
                 question=q,
                 answer_value=json.dumps(value, ensure_ascii=False),
+                elapsed_ms=elapsed,
             )
         )
     return errors, responses
@@ -1286,6 +1312,7 @@ def _collect_pairwise_answers(
     questions = _visible_with_submitted(request, questions, {})
     errors: list[str] = []
     responses: list[Response] = []
+    elapsed = _page_elapsed_ms(request)
     for q in questions:
         answered, value, error = _read_one(request, q)
         if error is not None:
@@ -1302,6 +1329,7 @@ def _collect_pairwise_answers(
                 pair_assignment=pair,
                 question=q,
                 answer_value=json.dumps(value, ensure_ascii=False),
+                elapsed_ms=elapsed,
             )
         )
     return errors, responses

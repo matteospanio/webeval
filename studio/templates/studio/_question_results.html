@@ -28,7 +28,7 @@
     <header>
       <strong>{{ a.prompt }}</strong>
       <span class="badge">{{ a.type }}</span>
-      <small>· {{ a.n }} response{{ a.n|pluralize }}</small>
+      <small>· {{ a.n }} response{{ a.n|pluralize }}{% if a.median_time_ms %} · median {{ a.median_time_ms|floatformat:0 }} ms on page{% endif %}</small>
     </header>
     {% include "studio/_result_body.html" with a=a %}
     {% if item.comparison %}{% with c=item.comparison %}
