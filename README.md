@@ -28,6 +28,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Longitudinal / multi-phase studies: chain studies into ordered phases a participant returns to over time, with an optional minimum gap between phases and a return link + reusable participant code shown on completion
 - Authoring productivity: one-click study duplication (deep copy incl. media + skip logic), activation-readiness checks that block going live on an incomplete study, a preview/pilot phase whose data is kept out of the real dataset, per-study branding (accent color, logo, custom CSS), and a reusable question bank
 - Plugin question types: add a custom question widget (config validation + server render + answer parsing) in one self-contained class via a decorator/registry — no core changes, auto-discovered at startup; ships a constant-sum (allocate points) example
+- Drag-&-drop question builder in the studio: drag question types (built-ins and plugins) from a palette onto a canvas, reorder by dragging, edit inline, and save — no Django admin needed, available to non-staff editors
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index
@@ -87,6 +88,7 @@ Leaving `draft` for the preview or live phase runs **activation-readiness checks
 - **Duplicate a study** in one click (from the studio or the admin): a faithful deep copy into a new draft you own — every authored field, the raw media of audio/image/video stimuli and pairwise prompts, and skip-logic / eligibility references remapped to the cloned questions.
 - **Question bank:** save any question to a personal (or shared) bank, then insert saved questions into any draft study you own.
 - **Branding:** give a study an accent color, a header logo, and optional custom CSS applied to its participant pages.
+- **Drag-&-drop builder:** author a draft study's questions visually at `/studio/<slug>/build/` — drag a type (built-in or plugin) from the palette onto the canvas, drag cards to reorder, edit each inline, and save. The server reconciles the posted set (create/update/delete/reorder) and validates every question, so plugin configs and skip logic are enforced. Available to non-staff editors; conditions and stimuli are still edited in the admin.
 
 ### Participant flow
 
