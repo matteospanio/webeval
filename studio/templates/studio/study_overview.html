@@ -35,6 +35,7 @@
       · <a href="{% url 'studio:answers_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
   <li><a href="{% url 'studio:demographics_csv' slug=experiment.slug %}">Demographics CSV</a>
       · <a href="{% url 'studio:demographics_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
+  <li><a href="{% url 'studio:completion_codes_csv' slug=experiment.slug %}">Completion codes &amp; compensation CSV</a></li>
   {% if experiment.is_pairwise %}<li><a href="{% url 'studio:pairwise_csv' slug=experiment.slug %}">Pairwise answers CSV</a></li>{% endif %}
   <li><a href="{% url 'studio:export_zip' slug=experiment.slug %}">Reproducibility ZIP</a></li>
 </ul>

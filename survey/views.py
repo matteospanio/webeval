@@ -422,6 +422,15 @@ def consent(request, slug: str):
 
     pid = request.COOKIES.get(PARTICIPANT_COOKIE) or uuid.uuid4().hex
 
+    # Capture an external/platform id from the configured URL param; stash it in
+    # the Django session so it survives the consent GET → POST.
+    ext_key = f"webeval:extid:{slug}"
+    if experiment.external_id_param:
+        incoming = (request.GET.get(experiment.external_id_param) or "").strip()
+        if incoming:
+            request.session[ext_key] = incoming[:200]
+    external_id = request.session.get(ext_key, "")
+
     def _with_pid(response):
         response.set_cookie(
             PARTICIPANT_COOKIE,
@@ -458,7 +467,9 @@ def consent(request, slug: str):
             ctx["consent_rest"] = consent_rest
             return _with_pid(render(request, "survey/consent.html", ctx))
         if session is None:
-            session = _create_session(request, experiment, participant_uid=pid)
+            session = _create_session(
+                request, experiment, participant_uid=pid, external_id=external_id
+            )
         session.consented_at = timezone.now()
         if _has_screening(experiment):
             session.last_step = ParticipantSession.Step.SCREENING
@@ -496,7 +507,10 @@ def _already_completed(experiment: Experiment, pid: str) -> bool:
 
 
 def _create_session(
-    request, experiment: Experiment, participant_uid: str = ""
+    request,
+    experiment: Experiment,
+    participant_uid: str = "",
+    external_id: str = "",
 ) -> ParticipantSession:
     meta = extract_metadata(request)
     session = ParticipantSession.objects.create(
@@ -506,6 +520,7 @@ def _create_session(
         country_code=meta.country_code,
         resume_token=secrets.token_urlsafe(32),
         participant_uid=participant_uid,
+        external_id=external_id,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
     return session
@@ -1250,9 +1265,20 @@ def demographics(request, slug: str):
     return render(request, "survey/demographics.html", ctx)
 
 
+def _completion_code_for(session: ParticipantSession) -> str:
+    experiment = session.experiment
+    mode = experiment.completion_code_mode
+    if mode == Experiment.CompletionCodeMode.FIXED:
+        return experiment.completion_code
+    if mode == Experiment.CompletionCodeMode.UNIQUE:
+        return secrets.token_hex(6).upper()
+    return ""
+
+
 def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
+    session.completion_code = _completion_code_for(session)
     failed, flags = compute_flags(session)
     session.failed_attention_checks = failed
     session.flags = flags
@@ -1263,8 +1289,11 @@ def _finish_session(request, session: ParticipantSession, slug: str):
             "demographic_page_index",
             "failed_attention_checks",
             "flags",
+            "completion_code",
         ]
     )
+    if session.completion_code:
+        request.session[f"webeval:code:{slug}"] = session.completion_code
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
@@ -1309,6 +1338,7 @@ def resume(request, slug: str, token: str):
 @require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
+    completion_code = request.session.pop(f"webeval:code:{slug}", "")
     return render(
         request,
         "survey/thanks.html",
@@ -1317,5 +1347,6 @@ def thanks(request, slug: str):
             "brand": experiment.name,
             "progress_percent": 100,
             "is_test_mode": experiment.state == Experiment.State.TEST,
+            "completion_code": completion_code,
         },
     )

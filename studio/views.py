@@ -30,6 +30,7 @@ from accounts.roles import Role
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.csv_exports import (
     answers_csv_response,
+    completion_codes_csv_response,
     demographics_csv_response,
     pairwise_answers_csv_response,
 )
@@ -303,6 +304,11 @@ def demographics_csv(request, slug):
     return demographics_csv_response(
         _experiment_or_404(request, slug), exclude_flagged=_exclude_flagged(request)
     )
+
+
+@login_required
+def completion_codes_csv(request, slug):
+    return completion_codes_csv_response(_experiment_or_404(request, slug))
 
 
 @login_required

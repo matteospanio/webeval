@@ -19,6 +19,11 @@ urlpatterns = [
         name="demographics_csv",
     ),
     path(
+        "<slug:slug>/completion-codes.csv",
+        views.completion_codes_csv,
+        name="completion_codes_csv",
+    ),
+    path(
         "<slug:slug>/pairwise-answers.csv",
         views.pairwise_csv,
         name="pairwise_csv",

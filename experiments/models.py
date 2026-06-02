@@ -156,6 +156,32 @@ class Experiment(models.Model):
         ),
     )
 
+    class CompletionCodeMode(models.TextChoices):
+        NONE = "none", "No completion code"
+        FIXED = "fixed", "Fixed code for everyone"
+        UNIQUE = "unique", "Unique code per participant"
+
+    completion_code_mode = models.CharField(
+        max_length=8,
+        choices=CompletionCodeMode.choices,
+        default=CompletionCodeMode.NONE,
+        help_text="Show a completion code on the thank-you page (e.g. for crowdsourcing platforms).",
+    )
+    completion_code = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="The fixed code shown to every participant when mode = Fixed.",
+    )
+    external_id_param = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text=(
+            "Optional URL query parameter captured as the participant's "
+            "external id (e.g. 'PROLIFIC_PID' or 'workerId'), for payment "
+            "reconciliation."
+        ),
+    )
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

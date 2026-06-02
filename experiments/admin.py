@@ -159,6 +159,9 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     "eligibility_rule",
                     "min_completion_seconds",
                     "one_submission_per_participant",
+                    "completion_code_mode",
+                    "completion_code",
+                    "external_id_param",
                 )
             },
         ),

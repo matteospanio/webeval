@@ -228,3 +228,42 @@ def demographics_csv_response(
 ) -> HttpResponse:
     response = _csv_response(f"{experiment.slug}-demographics.csv")
     return write_demographics_csv(experiment, response, exclude_flagged=exclude_flagged)
+
+
+COMPLETION_CODE_FIELDNAMES = [
+    "session_id",
+    "submitted_at",
+    "external_id",
+    "completion_code",
+    "compensation_status",
+    "flags",
+]
+
+
+def write_completion_codes_csv(
+    experiment: Experiment, response: HttpResponse
+) -> HttpResponse:
+    """One row per completed session for crowdsourcing payment reconciliation."""
+    writer = csv.DictWriter(response, fieldnames=COMPLETION_CODE_FIELDNAMES)
+    writer.writeheader()
+    for s in (
+        ParticipantSession.objects.filter(
+            experiment=experiment, submitted_at__isnull=False
+        ).order_by("started_at")
+    ):
+        writer.writerow(
+            {
+                "session_id": str(s.id),
+                "submitted_at": s.submitted_at.isoformat() if s.submitted_at else "",
+                "external_id": s.external_id,
+                "completion_code": s.completion_code,
+                "compensation_status": s.compensation_status,
+                "flags": ";".join(s.flags) if s.flags else "",
+            }
+        )
+    return response
+
+
+def completion_codes_csv_response(experiment: Experiment) -> HttpResponse:
+    response = _csv_response(f"{experiment.slug}-completion-codes.csv")
+    return write_completion_codes_csv(experiment, response)

@@ -93,6 +93,22 @@ class ParticipantSession(models.Model):
     # when the participant blocks cookies.
     participant_uid = models.CharField(max_length=64, blank=True, db_index=True)
 
+    # Crowdsourcing / payment reconciliation.
+    external_id = models.CharField(max_length=200, blank=True, db_index=True)
+    completion_code = models.CharField(max_length=100, blank=True)
+
+    class CompensationStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        APPROVED = "approved", "Approved"
+        PAID = "paid", "Paid"
+        REJECTED = "rejected", "Rejected"
+
+    compensation_status = models.CharField(
+        max_length=10,
+        choices=CompensationStatus.choices,
+        default=CompensationStatus.PENDING,
+    )
+
     # Secret token for the "save & continue later" resume link. Generated when
     # the session is created; null on legacy rows from before the feature (so
     # the unique constraint tolerates many NULLs and no backfill is needed).

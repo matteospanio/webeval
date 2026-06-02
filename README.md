@@ -22,6 +22,7 @@ It was originally built for LLM-output evaluation, but the current architecture 
 - Pre-task screening / eligibility flows that screen out ineligible participants before the main task
 - Attention checks and automatic quality flags (failed check, speeder, straight-lining, duplicate) with one-click "exclude flagged" exports
 - Stable per-browser participant IDs, with optional one-submission-per-participant enforcement and duplicate-session detection
+- Completion codes (fixed or unique) for crowdsourcing platforms, external-id capture (e.g. `PROLIFIC_PID`), and compensation tracking with a reconciliation CSV
 - Pluggable assignment strategies: balanced-random, block randomization, counterbalanced ordering, and between-subject (each participant sees one condition)
 - Optional audio playback check before the study begins
 - Direct per-experiment participant links with no public study index

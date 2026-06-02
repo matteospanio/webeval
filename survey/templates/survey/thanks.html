@@ -15,6 +15,12 @@
         Your responses have been recorded. Your participation is greatly appreciated.
       </p>
     {% endif %}
+    {% if completion_code %}
+    <p class="completion-code">
+      Your completion code: <strong>{{ completion_code }}</strong><br>
+      <small>Copy this code back into the platform you came from to confirm your participation.</small>
+    </p>
+    {% endif %}
     <p>
       If you would like to take the study again with a new set of items, you can
       <a href="{% url 'survey:consent' slug=experiment.slug %}">start a fresh session</a>.
