@@ -276,6 +276,13 @@ UNFOLD = {
                             "admin:survey_response_changelist"
                         ),
                     },
+                    {
+                        "title": "Event log",
+                        "icon": "timeline",
+                        "link": reverse_lazy(
+                            "admin:survey_surveyevent_changelist"
+                        ),
+                    },
                 ],
             },
             {

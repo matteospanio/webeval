@@ -1,0 +1,46 @@
+{% extends "studio/base.html" %}
+{% block title %}Compare studies · webeval studio{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li>Compare</li>
+</ul></nav>
+
+<hgroup>
+  <h1>Compare studies</h1>
+  <p>Key metrics for every study you own or collaborate on, side by side (real, non-preview sessions).</p>
+</hgroup>
+
+{% if rows %}
+<figure>
+<table>
+  <thead>
+    <tr>
+      <th scope="col">Study</th>
+      <th scope="col">State</th>
+      <th scope="col">Started</th>
+      <th scope="col">Completed</th>
+      <th scope="col">Completion</th>
+      <th scope="col">Responses</th>
+      <th scope="col">Headline</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <th scope="row"><a href="{% url 'studio:study_overview' slug=row.experiment.slug %}">{{ row.experiment.name }}</a></th>
+      <td><span class="badge">{{ row.experiment.get_state_display }}</span></td>
+      <td>{{ row.counts.total_sessions }}</td>
+      <td>{{ row.counts.completed_sessions }}</td>
+      <td>{% widthratio row.counts.completion_rate 1 100 %}%</td>
+      <td>{{ row.responses }}</td>
+      <td>{{ row.headline }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</figure>
+{% else %}
+<p>You don't have any studies yet. <a href="{% url 'studio:study_create' %}">Create one</a>.</p>
+{% endif %}
+{% endblock %}

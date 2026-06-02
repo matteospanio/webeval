@@ -237,6 +237,9 @@ class Response(models.Model):
     answer_value = models.TextField(
         help_text="JSON-encoded answer payload (int, str, or list depending on question type).",
     )
+    # Server-measured time the participant spent on the page that produced this
+    # answer (milliseconds); null for legacy rows or when timing is unavailable.
+    elapsed_ms = models.PositiveIntegerField(null=True, blank=True)
     answered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -249,3 +252,34 @@ class Response(models.Model):
         if not self.answer_value:
             return None
         return json.loads(self.answer_value)
+
+
+class SurveyEvent(models.Model):
+    """Append-only raw log of participant-flow events (funnel + debugging).
+
+    Lightweight markers — never PII — written at lifecycle transitions and on
+    each page submission. Logging is best-effort and must never break the
+    participant flow.
+    """
+
+    class Type(models.TextChoices):
+        STARTED = "started", "Session started"
+        PAGE_SUBMIT = "page_submit", "Page submitted"
+        SCREENED_OUT = "screened_out", "Screened out"
+        COMPLETED = "completed", "Completed"
+
+    session = models.ForeignKey(
+        ParticipantSession, on_delete=models.CASCADE, related_name="events"
+    )
+    event_type = models.CharField(max_length=20, choices=Type.choices)
+    label = models.CharField(max_length=64, blank=True)
+    elapsed_ms = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    meta = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ("session", "created_at", "id")
+        indexes = [models.Index(fields=["session", "created_at"])]
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return f"{self.event_type} @ {self.created_at:%Y-%m-%d %H:%M:%S}"

@@ -181,6 +181,35 @@ def test_segmented_analysis_groups_by_device():
     assert segments["desktop"].n == 2 and segments["mobile"].n == 3
 
 
+def test_segment_by_condition():
+    from experiments.analysis import segmented_question_analysis
+
+    exp = ExperimentFactory()
+    _two_condition_rating(exp, [80, 82], [40, 42])  # responses tied to A / B stimuli
+    result = segmented_question_analysis(exp, "condition")
+    labels = {s["label"] for s in result[0]["segments"]}
+    assert {"A", "B"} <= labels
+
+
+def test_segment_by_cohort_buckets_by_week():
+    from datetime import timedelta
+
+    from experiments.analysis import segmented_question_analysis
+
+    exp = ExperimentFactory()
+    q = RatingQuestionFactory(experiment=exp)
+    s1 = _session(exp)
+    _resp(s1, q, 50)
+    s2 = _session(exp)
+    s2.submitted_at = timezone.now() - timedelta(days=14)
+    s2.save(update_fields=["submitted_at"])
+    _resp(s2, q, 60)
+
+    result = segmented_question_analysis(exp, "cohort")
+    weeks = {s["label"] for s in result[0]["segments"]}
+    assert len(weeks) == 2  # two distinct ISO-week cohorts
+
+
 def test_studio_overview_segment_view_renders():
     owner = UserFactory()
     exp = ExperimentFactory(owner=owner)

@@ -55,7 +55,13 @@ from .flow import (
     required_step_url,
 )
 from .metadata import extract_metadata
-from .models import PairAssignment, ParticipantSession, Response, StimulusAssignment
+from .models import (
+    PairAssignment,
+    ParticipantSession,
+    Response,
+    StimulusAssignment,
+    SurveyEvent,
+)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -394,11 +400,49 @@ def _progress(
     )
 
 
+def _now_ms() -> int:
+    return int(timezone.now().timestamp() * 1000)
+
+
+def _log_event(session, event_type, label="", elapsed_ms=None, **meta) -> None:
+    """Append a raw flow event. Best-effort: never break the participant flow."""
+    try:
+        SurveyEvent.objects.create(
+            session=session,
+            event_type=event_type,
+            label=label or "",
+            elapsed_ms=elapsed_ms,
+            meta=meta or {},
+        )
+    except Exception:  # pragma: no cover - logging must not interrupt the flow
+        pass
+
+
+def _page_elapsed_ms(request) -> int | None:
+    """Server-measured dwell time from the page's ``_t0`` stamp (ms), or None.
+
+    ``_t0`` is the server epoch-ms when the page was rendered (injected by
+    ``_base_context``); both ends use the server clock. Absurd / negative
+    deltas (clock skew, re-used tabs) are dropped rather than stored.
+    """
+    raw = request.POST.get("_t0")
+    if not raw:
+        return None
+    try:
+        delta = _now_ms() - int(raw)
+    except (TypeError, ValueError):
+        return None
+    if delta < 0 or delta > 6 * 60 * 60 * 1000:  # > 6 hours → untrustworthy
+        return None
+    return delta
+
+
 def _base_context(experiment: Experiment, session: ParticipantSession | None) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "experiment": experiment,
         "brand": experiment.name,
         "is_test_mode": experiment.state == Experiment.State.TEST,
+        "page_served_at": _now_ms(),
     }
     if session is not None:
         ctx["session"] = session
@@ -684,6 +728,7 @@ def _create_session(
         is_preview=experiment.state == Experiment.State.TEST,
     )
     request.session[_session_key(experiment.slug)] = str(session.id)
+    _log_event(session, SurveyEvent.Type.STARTED)
     return session
 
 
@@ -761,6 +806,7 @@ def _finish_screening(request, session: ParticipantSession, slug: str):
         session.last_step = ParticipantSession.Step.SCREENED_OUT
         session.screened_out_at = timezone.now()
         session.save(update_fields=["last_step", "screened_out_at"])
+        _log_event(session, SurveyEvent.Type.SCREENED_OUT)
         request.session.pop(_session_key(slug), None)
         return redirect("survey:screened_out", slug=slug)
     return _advance_past_screening(request, session, slug)
@@ -1041,6 +1087,10 @@ def _save_page_answers(
 
     with transaction.atomic():
         Response.objects.bulk_create(responses)
+        _log_event(
+            session, SurveyEvent.Type.PAGE_SUBMIT, label="stimulus",
+            elapsed_ms=_page_elapsed_ms(request),
+        )
         session.current_page_index += 1
         if _next_renderable_stimulus_page(session, assignments, pages) == "demographics":
             session.last_step = ParticipantSession.Step.DEMOGRAPHICS
@@ -1088,6 +1138,7 @@ def _collect_answers(
 ) -> tuple[list[str], list[Response]]:
     errors: list[str] = []
     responses: list[Response] = []
+    elapsed = _page_elapsed_ms(request)
     for q in questions:
         answered, value, error = _read_one(request, q)
         if error is not None:
@@ -1103,6 +1154,7 @@ def _collect_answers(
                 stimulus=stimulus,
                 question=q,
                 answer_value=json.dumps(value, ensure_ascii=False),
+                elapsed_ms=elapsed,
             )
         )
     return errors, responses
@@ -1286,6 +1338,7 @@ def _collect_pairwise_answers(
     questions = _visible_with_submitted(request, questions, {})
     errors: list[str] = []
     responses: list[Response] = []
+    elapsed = _page_elapsed_ms(request)
     for q in questions:
         answered, value, error = _read_one(request, q)
         if error is not None:
@@ -1302,6 +1355,7 @@ def _collect_pairwise_answers(
                 pair_assignment=pair,
                 question=q,
                 answer_value=json.dumps(value, ensure_ascii=False),
+                elapsed_ms=elapsed,
             )
         )
     return errors, responses
@@ -1403,6 +1457,10 @@ def demographics(request, slug: str):
             return render(request, "survey/demographics.html", ctx, status=400)
         with transaction.atomic():
             Response.objects.bulk_create(responses)
+            _log_event(
+                session, SurveyEvent.Type.PAGE_SUBMIT, label="demographic",
+                elapsed_ms=_page_elapsed_ms(request),
+            )
             session.demographic_page_index += 1
             if _next_renderable_demographic_page(session, pages) == "finish":
                 return _finish_session(request, session, slug)
@@ -1443,6 +1501,7 @@ def _finish_session(request, session: ParticipantSession, slug: str):
     session.submitted_at = timezone.now()
     session.last_step = ParticipantSession.Step.DONE
     session.completion_code = _completion_code_for(session)
+    _log_event(session, SurveyEvent.Type.COMPLETED)
     failed, flags = compute_flags(session)
     session.failed_attention_checks = failed
     session.flags = flags
@@ -1509,6 +1568,7 @@ def _withdraw_data(session: ParticipantSession) -> None:
     Response.objects.filter(session=session).delete()
     StimulusAssignment.objects.filter(session=session).delete()
     PairAssignment.objects.filter(session=session).delete()
+    SurveyEvent.objects.filter(session=session).delete()
     session.withdrawn_at = timezone.now()
     session.last_step = ParticipantSession.Step.WITHDRAWN
     session.submitted_at = None

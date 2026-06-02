@@ -37,11 +37,13 @@ from experiments.analysis import (
 from experiments.charts import mean_ratings_svg, pairwise_win_rates_svg
 from experiments.cloning import clone_experiment
 from experiments.components import available_question_components
-from experiments.stats_tests import compare_conditions
+from experiments.power import achieved_power, cohens_d, required_n_per_group
+from experiments.stats_tests import _grouped_answers, compare_conditions
 from experiments.csv_exports import (
     answers_csv_response,
     completion_codes_csv_response,
     demographics_csv_response,
+    events_csv_response,
     pairwise_answers_csv_response,
 )
 from experiments.exports import build_experiment_archive
@@ -54,6 +56,7 @@ from experiments.stats import (
     pairwise_experiment_stats,
     per_stimulus_mean_ratings,
 )
+from survey.models import Response
 
 from .forms import StudyCreateForm
 
@@ -79,28 +82,59 @@ def _unique_slug(name: str) -> str:
     return slug
 
 
-@login_required
-def studies(request):
+def _visible_experiments(user):
     ids = set(
-        Membership.objects.filter(user=request.user).values_list(
-            "experiment_id", flat=True
-        )
+        Membership.objects.filter(user=user).values_list("experiment_id", flat=True)
     )
     ids |= set(
-        Experiment.objects.filter(owner=request.user).values_list(
-            "id", flat=True
-        )
+        Experiment.objects.filter(owner=user).values_list("id", flat=True)
     )
-    experiments = (
+    return (
         Experiment.objects.filter(pk__in=ids)
         .select_related("owner")
         .order_by("-created_at")
     )
+
+
+@login_required
+def studies(request):
     rows = [
         {"experiment": exp, "role": role_for(request.user, exp)}
-        for exp in experiments
+        for exp in _visible_experiments(request.user)
     ]
     return render(request, "studio/studies_list.html", {"rows": rows})
+
+
+def _headline_metric(experiment) -> str:
+    if experiment.is_pairwise:
+        return f"{pairwise_experiment_stats(experiment).total_pairs_shown} pairs"
+    rating_rows = per_stimulus_mean_ratings(experiment)
+    total_n = sum(r["n"] for r in rating_rows)
+    if not total_n:
+        return "—"
+    weighted = sum(r["mean"] * r["n"] for r in rating_rows) / total_n
+    return f"mean {weighted:.1f}"
+
+
+@login_required
+def compare(request):
+    """Key metrics for all the user's studies, side by side."""
+    rows = []
+    for exp in _visible_experiments(request.user):
+        counts = experiment_counts(exp)
+        rows.append(
+            {
+                "experiment": exp,
+                "counts": counts,
+                "responses": Response.objects.filter(
+                    session__experiment=exp,
+                    session__submitted_at__isnull=False,
+                    session__is_preview=False,
+                ).count(),
+                "headline": _headline_metric(exp),
+            }
+        )
+    return render(request, "studio/compare.html", {"rows": rows})
 
 
 @login_required
@@ -335,6 +369,71 @@ def study_build_save(request, slug):
     )
 
 
+def _float(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _pilot_power_rows(experiment, alpha, power):
+    """Observed effect size + implied sample size from pilot data, per rating /
+    numeric / likert per-stimulus question (its two best-attested conditions)."""
+    rows = []
+    numeric_types = (
+        Question.Type.RATING, Question.Type.NUMERIC, Question.Type.LIKERT,
+    )
+    qs = experiment.questions.filter(
+        section=Question.Section.STIMULUS, type__in=numeric_types
+    )
+    for q in qs:
+        numeric = {}
+        for cond, values in _grouped_answers(experiment, q).items():
+            nums = []
+            for v in values:
+                try:
+                    nums.append(float(v))
+                except (TypeError, ValueError):
+                    continue
+            if len(nums) >= 2:
+                numeric[cond] = nums
+        if len(numeric) < 2:
+            continue
+        top = sorted(numeric.values(), key=len, reverse=True)[:2]
+        d = cohens_d(top[0], top[1])
+        if d is None or d == 0:
+            continue
+        rows.append({
+            "prompt": q.prompt,
+            "effect_size": abs(d),
+            "observed_n": min(len(top[0]), len(top[1])),
+            "required_n": required_n_per_group(abs(d), alpha, power),
+            "achieved_power": achieved_power(abs(d), min(len(top[0]), len(top[1])), alpha),
+        })
+    return rows
+
+
+@login_required
+def power_analysis(request, slug):
+    experiment = _experiment_or_404(request, slug)
+    d = _float(request.GET.get("d"), 0.5)
+    alpha = _float(request.GET.get("alpha"), 0.05)
+    target = _float(request.GET.get("power"), 0.8)
+    manual = {
+        "d": d, "alpha": alpha, "power": target,
+        "required_n": required_n_per_group(d, alpha, target),
+    }
+    return render(
+        request,
+        "studio/power.html",
+        {
+            "experiment": experiment,
+            "manual": manual,
+            "pilot": _pilot_power_rows(experiment, alpha, target),
+        },
+    )
+
+
 def _access_context(request, experiment, invite_form):
     memberships = (
         Membership.objects.filter(experiment=experiment)
@@ -505,6 +604,11 @@ def demographics_csv(request, slug):
 @login_required
 def completion_codes_csv(request, slug):
     return completion_codes_csv_response(_experiment_or_404(request, slug))
+
+
+@login_required
+def events_csv(request, slug):
+    return events_csv_response(_experiment_or_404(request, slug))
 
 
 @login_required

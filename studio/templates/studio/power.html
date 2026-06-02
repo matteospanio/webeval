@@ -1,0 +1,52 @@
+{% extends "studio/base.html" %}
+{% block title %}Power analysis · {{ experiment.name }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb"><ul>
+  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
+  <li><a href="{% url 'studio:study_overview' slug=experiment.slug %}">{{ experiment.name }}</a></li>
+  <li>Power</li>
+</ul></nav>
+
+<hgroup>
+  <h1>Power &amp; sample size</h1>
+  <p>Two-sample comparison (Cohen's <em>d</em>), two-sided test, normal approximation.</p>
+</hgroup>
+
+<h2>Calculator</h2>
+<form method="get">
+  <div class="grid">
+    <label>Effect size (d)<input type="number" name="d" step="0.05" min="0.01" value="{{ manual.d }}"></label>
+    <label>Alpha<input type="number" name="alpha" step="0.01" min="0.001" max="0.5" value="{{ manual.alpha }}"></label>
+    <label>Target power<input type="number" name="power" step="0.05" min="0.05" max="0.99" value="{{ manual.power }}"></label>
+  </div>
+  <button type="submit">Calculate</button>
+</form>
+{% if manual.required_n %}
+<p><strong>Required sample size: {{ manual.required_n }} per group</strong>
+   ({{ manual.required_n|add:manual.required_n }} total) to detect d = {{ manual.d }}
+   at &alpha; = {{ manual.alpha }} with power {{ manual.power }}.</p>
+{% else %}
+<p>Enter a positive effect size and valid alpha/power.</p>
+{% endif %}
+
+<h2>From your pilot data</h2>
+{% if pilot %}
+<p>Observed effect between the two best-attested conditions, per per-stimulus rating/numeric question:</p>
+<figure><table>
+  <thead><tr><th>Question</th><th>Observed d</th><th>n/group so far</th><th>Power so far</th><th>n/group for {{ manual.power }} power</th></tr></thead>
+  <tbody>
+    {% for row in pilot %}
+    <tr>
+      <th scope="row">{{ row.prompt }}</th>
+      <td>{{ row.effect_size|floatformat:2 }}</td>
+      <td>{{ row.observed_n }}</td>
+      <td>{{ row.achieved_power|floatformat:2 }}</td>
+      <td>{{ row.required_n }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table></figure>
+{% else %}
+<p>No pilot data yet — collect some responses on a rating/numeric per-stimulus question across two or more conditions, then return here.</p>
+{% endif %}
+{% endblock %}
