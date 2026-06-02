@@ -18,7 +18,7 @@ import csv
 from django.http import HttpResponse
 
 from experiments.models import Experiment, Question
-from survey.models import PairAssignment, ParticipantSession, Response
+from survey.models import ParticipantSession, Response
 
 
 ANSWER_FIELDNAMES = [

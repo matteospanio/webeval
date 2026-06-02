@@ -3,7 +3,6 @@ question config validation, and Stimulus-on-save auto-fields."""
 from __future__ import annotations
 
 import hashlib
-import io
 import struct
 
 import pytest
@@ -12,7 +11,6 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 
 from experiments.models import Experiment, Prompt, Question, Stimulus
 from experiments.tests.factories import (
-    ChoiceQuestionFactory,
     ConditionFactory,
     ExperimentFactory,
     ImageStimulusFactory,
@@ -20,7 +18,6 @@ from experiments.tests.factories import (
     PromptFactory,
     RatingQuestionFactory,
     StimulusFactory,
-    TextQuestionFactory,
     TextStimulusFactory,
 )
 from survey.flow import paginate_questions
@@ -77,7 +74,7 @@ class TestStructuralEditGuard:
 
     def test_cannot_add_stimulus_to_active_experiment(self):
         active = ExperimentFactory(state=Experiment.State.ACTIVE)
-        condition = ConditionFactory.build(experiment=active, name="c1")
+        ConditionFactory.build(experiment=active, name="c1")
         # Condition itself is blocked, but assuming it existed pre-activation,
         # we simulate by activating after the condition is created.
         draft = ExperimentFactory()

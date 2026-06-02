@@ -5,7 +5,6 @@ only holds cross-cutting fixtures.
 """
 from __future__ import annotations
 
-import tempfile
 
 import pytest
 

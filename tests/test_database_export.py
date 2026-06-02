@@ -8,7 +8,6 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-from experiments.models import Experiment
 from experiments.tests.factories import ExperimentFactory
 
 pytestmark = pytest.mark.django_db

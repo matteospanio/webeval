@@ -70,7 +70,7 @@ def test_stimulus_page_retains_choice_after_validation_error():
     cond = ConditionFactory(experiment=exp)
     StimulusFactory(condition=cond, title="clip", sort_order=0)
     # Optional rating so the only missing-required is a *different* rating we add below.
-    rating = RatingQuestionFactory(
+    RatingQuestionFactory(
         experiment=exp, prompt="Optional?", sort_order=0, required=False,
         config={"min": 0, "max": 100, "step": 1},
     )
@@ -80,7 +80,7 @@ def test_stimulus_page_retains_choice_after_validation_error():
         required=True,
         config={"choices": ["rock", "jazz"], "multi": False},
     )
-    missing = RatingQuestionFactory(
+    RatingQuestionFactory(
         experiment=exp, prompt="Required rating?", sort_order=2, required=True,
         config={"min": 0, "max": 10, "step": 1},
     )
@@ -118,7 +118,7 @@ def test_demographics_page_retains_text_after_validation_error():
         experiment=exp, prompt="City?", sort_order=1,
         section=Question.Section.DEMOGRAPHIC, required=True,
     )
-    demo_b = TextQuestionFactory(
+    TextQuestionFactory(
         experiment=exp, prompt="Country?", sort_order=2,
         section=Question.Section.DEMOGRAPHIC, required=True,
     )
