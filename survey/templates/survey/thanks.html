@@ -21,9 +21,24 @@
       <small>Copy this code back into the platform you came from to confirm your participation.</small>
     </p>
     {% endif %}
+    {% if next_phase %}
+    <section class="next-phase">
+      <h2>Next phase: {{ next_phase.name }}</h2>
+      {% if next_phase.opens_at %}
+      <p>This study continues. The next phase opens around
+         <strong>{{ next_phase.opens_at|date:"D j M Y, H:i" }}</strong>.</p>
+      {% else %}
+      <p>This study continues with a further phase.</p>
+      {% endif %}
+      <p>When it's time, return using this link and the <em>same</em> participant code:</p>
+      <p><input type="text" value="{{ next_phase.url }}" readonly onclick="this.select()" style="width:100%"></p>
+      {% if next_phase.code %}<p>Your participant code: <strong>{{ next_phase.code }}</strong></p>{% endif %}
+    </section>
+    {% else %}
     <p>
       If you would like to take the study again with a new set of items, you can
       <a href="{% url 'survey:consent' slug=experiment.slug %}">start a fresh session</a>.
     </p>
+    {% endif %}
   </article>
 {% endblock %}

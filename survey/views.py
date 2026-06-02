@@ -16,6 +16,7 @@ import json
 import random
 import secrets
 import uuid
+from datetime import timedelta
 from typing import Any
 
 from django.contrib import messages
@@ -579,6 +580,9 @@ def consent(request, slug: str):
                         _base_context(experiment, None),
                     )
                 )
+            longitudinal = _longitudinal_block(request, experiment, code)
+            if longitudinal is not None:
+                return _with_pid(longitudinal)
             effective_uid = code
         if session is None:
             session = _create_session(
@@ -622,6 +626,41 @@ def _already_completed(experiment: Experiment, pid: str) -> bool:
     return ParticipantSession.objects.filter(
         experiment=experiment, participant_uid=pid, submitted_at__isnull=False
     ).exists()
+
+
+def _longitudinal_block(request, experiment: Experiment, code: str):
+    """For a follow-up phase, return an explanatory page (or None) until the
+    participant has completed the predecessor phase and the spacing gap has
+    elapsed — or if they have already completed this phase."""
+    if experiment.follows_id is None:
+        return None
+    base = {**_base_context(experiment, None), "progress_percent": None}
+    if ParticipantSession.objects.filter(
+        experiment=experiment, participant_uid=code, submitted_at__isnull=False
+    ).exists():
+        return render(request, "survey/already_completed.html", base)
+    predecessor = experiment.follows
+    prior = (
+        ParticipantSession.objects.filter(
+            experiment=predecessor, participant_uid=code, submitted_at__isnull=False
+        )
+        .order_by("-submitted_at")
+        .first()
+    )
+    ctx = {**base, "predecessor": predecessor}
+    if prior is None:
+        return render(
+            request, "survey/phase_locked.html", {**ctx, "reason": "predecessor"}
+        )
+    if experiment.phase_gap_hours:
+        opens_at = prior.submitted_at + timedelta(hours=experiment.phase_gap_hours)
+        if timezone.now() < opens_at:
+            return render(
+                request,
+                "survey/phase_locked.html",
+                {**ctx, "reason": "too_early", "opens_at": opens_at},
+            )
+    return None
 
 
 def _create_session(
@@ -1417,6 +1456,8 @@ def _finish_session(request, session: ParticipantSession, slug: str):
         request.session[f"webeval:code:{slug}"] = session.completion_code
     if session.resume_token:
         request.session[f"webeval:token:{slug}"] = session.resume_token
+    if session.participant_uid:
+        request.session[f"webeval:uid:{slug}"] = session.participant_uid
     request.session.pop(_session_key(slug), None)
     return redirect("survey:thanks", slug=slug)
 
@@ -1521,6 +1562,24 @@ def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
     completion_code = request.session.pop(f"webeval:code:{slug}", "")
     token = request.session.pop(f"webeval:token:{slug}", "")
+    participant_code = request.session.pop(f"webeval:uid:{slug}", "")
+
+    next_phase = experiment.next_phases.order_by("created_at").first()
+    next_phase_info = None
+    if next_phase is not None:
+        next_phase_info = {
+            "name": next_phase.name,
+            "url": request.build_absolute_uri(
+                reverse("survey:consent", kwargs={"slug": next_phase.slug})
+            ),
+            "code": participant_code,
+            "opens_at": (
+                timezone.now() + timedelta(hours=next_phase.phase_gap_hours)
+                if next_phase.phase_gap_hours
+                else None
+            ),
+        }
+
     return render(
         request,
         "survey/thanks.html",
@@ -1531,5 +1590,6 @@ def thanks(request, slug: str):
             "is_test_mode": experiment.state == Experiment.State.TEST,
             "completion_code": completion_code,
             "withdraw_url": _withdraw_url(request, slug, token),
+            "next_phase": next_phase_info,
         },
     )
