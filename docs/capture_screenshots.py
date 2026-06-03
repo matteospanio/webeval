@@ -33,6 +33,9 @@ HOST, PORT = "127.0.0.1", "8077"
 BASE = f"http://{HOST}:{PORT}"
 USERNAME, PASSWORD = "demo", "demo-pass-12345"
 
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
 PAGES = [
     ("01-studio-dashboard.png", "/studio/"),
     ("02-question-builder.png", "/studio/demo-evaluation/build/"),
