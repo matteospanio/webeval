@@ -2,110 +2,96 @@
 // and render one reference button per detected key that plays the matching root
 // triad via the Web Audio API. Gives evaluators an auditory reference so they
 // can check whether the sample is in the requested key.
-(function () {
-  "use strict";
 
-  var promptEl = document.querySelector(".stimulus-prompt p");
-  if (!promptEl) {
-    return;
+const SEMITONE_BY_LETTER = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+
+// The root letter must be uppercase in the source text — a case-insensitive
+// match would turn the English article in "a minor adjustment" into the key
+// of A minor. The quality word stays case-tolerant.
+const KEY_RE = /\b([A-G])([#♯b♭]?)\s+([Mm]ajor|[Mm]inor|[Mm]aj|[Mm]in)\b/g;
+
+const detectKeys = (text) => {
+  const keys = new Map();
+  for (const [, letter, accidentalRaw, qualityRaw] of text.matchAll(KEY_RE)) {
+    const accidental =
+      accidentalRaw === "#" || accidentalRaw === "♯" ? "#"
+      : accidentalRaw === "b" || accidentalRaw === "♭" ? "b"
+      : "";
+    const quality = qualityRaw.toLowerCase().startsWith("min") ? "minor" : "major";
+    const offset = accidental === "#" ? 1 : accidental === "b" ? -1 : 0;
+    const rootLabel = letter + accidental;
+    const label = `${rootLabel} ${quality}`;
+    if (!keys.has(label)) {
+      keys.set(label, { rootLabel, rootMidi: 60 + SEMITONE_BY_LETTER[letter] + offset, quality });
+    }
   }
+  return [...keys.values()];
+};
 
-  var text = promptEl.textContent || "";
-  var re = /\b([A-G])([#♯b♭]?)\s+(major|minor|maj|min)\b/gi;
-  var semitoneByLetter = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-
-  var keys = [];
-  var seen = {};
-  var m;
-  while ((m = re.exec(text)) !== null) {
-    var rootLetter = m[1].toUpperCase();
-    var accidentalRaw = (m[2] || "").toLowerCase();
-    var accidental = "";
-    if (accidentalRaw === "#" || accidentalRaw === "♯") accidental = "#";
-    else if (accidentalRaw === "b" || accidentalRaw === "♭") accidental = "b";
-
-    var qualityRaw = m[3].toLowerCase();
-    var quality = (qualityRaw === "min" || qualityRaw === "minor") ? "minor" : "major";
-
-    var rootSemitone = semitoneByLetter[rootLetter];
-    if (accidental === "#") rootSemitone += 1;
-    else if (accidental === "b") rootSemitone -= 1;
-
-    var rootLabel = rootLetter + accidental;
-    var key = rootLabel + " " + quality;
-    if (seen[key]) continue;
-    seen[key] = true;
-    keys.push({ rootLabel: rootLabel, rootMidi: 60 + rootSemitone, quality: quality });
-  }
-
-  if (keys.length === 0) {
-    return;
-  }
-
-  var audioCtx = null;
-  function getCtx() {
-    if (audioCtx) return audioCtx;
+let audioCtx = null;
+const getCtx = () => {
+  if (!audioCtx) {
+    const Ctor = window.AudioContext ?? window.webkitAudioContext;
+    if (!Ctor) return null;
     try {
-      var Ctor = window.AudioContext || window.webkitAudioContext;
-      if (!Ctor) return null;
       audioCtx = new Ctor();
-    } catch (e) {
+    } catch {
       return null;
     }
-    return audioCtx;
   }
+  return audioCtx;
+};
 
-  function midiToFreq(midi) {
-    return 440 * Math.pow(2, (midi - 69) / 12);
-  }
+const midiToFreq = (midi) => 440 * 2 ** ((midi - 69) / 12);
 
-  function playChord(rootMidi, quality) {
-    var ctx = getCtx();
-    if (!ctx) return;
-    if (ctx.state === "suspended" && typeof ctx.resume === "function") {
-      ctx.resume();
+const playChord = async (rootMidi, quality) => {
+  const ctx = getCtx();
+  if (!ctx) return;
+  if (ctx.state !== "running") {
+    try {
+      await ctx.resume();
+    } catch {
+      return;
     }
-
-    var thirdInterval = quality === "minor" ? 3 : 4;
-    var intervals = [0, thirdInterval, 7];
-    var now = ctx.currentTime;
-    var attack = 0.015;
-    var release = 1.2;
-    var peak = 1 / 3;
-
-    intervals.forEach(function (semi) {
-      var osc = ctx.createOscillator();
-      var gain = ctx.createGain();
-      osc.type = "triangle";
-      osc.frequency.value = midiToFreq(rootMidi + semi);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(peak, now + attack);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + release);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + attack + release + 0.05);
-    });
   }
 
-  function makeButton(key) {
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = "♪ Reference " + key.rootLabel + " " + key.quality;
-    btn.style.marginRight = "0.4rem";
-    btn.style.padding = "0.1rem 0.5rem";
-    btn.style.fontSize = "0.85rem";
-    btn.addEventListener("click", function () {
-      playChord(key.rootMidi, key.quality);
-    });
-    return btn;
-  }
+  const intervals = [0, quality === "minor" ? 3 : 4, 7];
+  const now = ctx.currentTime;
+  const attack = 0.015;
+  const release = 1.2;
+  const peak = 1 / intervals.length;
 
-  var wrap = document.createElement("div");
-  wrap.className = "chord-buttons";
-  wrap.style.marginTop = "0.4rem";
-  keys.forEach(function (key) {
-    wrap.appendChild(makeButton(key));
-  });
-  promptEl.parentNode.insertBefore(wrap, promptEl.nextSibling);
-})();
+  for (const semi of intervals) {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = midiToFreq(rootMidi + semi);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(peak, now + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + attack + release);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + attack + release + 0.05);
+  }
+};
+
+const makeButton = ({ rootLabel, rootMidi, quality }) => {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = `♪ Reference ${rootLabel} ${quality}`;
+  Object.assign(btn.style, { marginRight: "0.4rem", padding: "0.1rem 0.5rem", fontSize: "0.85rem" });
+  btn.addEventListener("click", () => playChord(rootMidi, quality));
+  return btn;
+};
+
+const promptEl = document.querySelector(".stimulus-prompt p");
+if (promptEl) {
+  const keys = detectKeys(promptEl.textContent ?? "");
+  if (keys.length) {
+    const wrap = document.createElement("div");
+    wrap.className = "chord-buttons";
+    wrap.style.marginTop = "0.4rem";
+    wrap.append(...keys.map(makeButton));
+    promptEl.after(wrap);
+  }
+}

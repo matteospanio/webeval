@@ -16,7 +16,21 @@ imported lazily from :meth:`experiments.models.Experiment.clean` to keep
 """
 from __future__ import annotations
 
+from experiments.assignment import (
+    available_pairwise_strategies,
+    available_strategies,
+)
+from experiments.components import BUILTIN_TYPES, is_question_component
 from experiments.models import Experiment, Question, Stimulus
+
+
+def unrenderable_question_types(experiment: Experiment) -> list[str]:
+    """Stored question types that are neither built-in nor a currently
+    registered component — e.g. a plugin app was removed after authoring."""
+    stored = experiment.questions.values_list("type", flat=True).distinct()
+    return sorted(
+        t for t in stored if t not in BUILTIN_TYPES and not is_question_component(t)
+    )
 
 
 def _active_stimuli(experiment: Experiment) -> list[Stimulus]:
@@ -72,6 +86,33 @@ def readiness_problems(experiment: Experiment) -> list[str]:
     ).exists():
         problems.append(
             "An eligibility rule is set but the study has no screening questions."
+        )
+
+    strategies = (
+        available_pairwise_strategies()
+        if experiment.is_pairwise
+        else available_strategies()
+    )
+    strategy = experiment.assignment_strategy
+    # Pairwise studies routinely keep the model default ("balanced_random",
+    # a standard-mode name): the runtime maps it to the pairwise default, so
+    # it is not a misconfiguration — only a genuinely unknown/cross-mode
+    # *choice* is.
+    default_on_pairwise = experiment.is_pairwise and strategy == "balanced_random"
+    if strategy and strategy not in strategies and not default_on_pairwise:
+        mode = "pairwise" if experiment.is_pairwise else "standard"
+        problems.append(
+            f"Assignment strategy '{strategy}' is not a registered {mode} "
+            f"strategy on this server — participants would silently fall "
+            f"back to the default."
+        )
+
+    missing_types = unrenderable_question_types(experiment)
+    if missing_types:
+        problems.append(
+            "These question types are not installed on this server: "
+            f"{', '.join(missing_types)}. Install the plugin that provides "
+            "them or replace the questions."
         )
 
     return problems

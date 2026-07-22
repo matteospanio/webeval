@@ -239,3 +239,33 @@ def test_plain_pairwise_still_renders_show_prompt():
     body = resp.content.decode()
     assert "Visible prompt" in body
     assert "stimulus-prompt" in body
+
+
+def test_record_listen_pair_beacon_without_csrf_token_is_accepted():
+    # navigator.sendBeacon cannot set X-CSRFToken — the pairwise listen
+    # endpoint must accept a bare JSON POST (csrf-exempt) or every beacon
+    # report 403s and the a/b/prompt durations silently stay 0.
+    exp = _build_pairwise_audio_experiment()
+    client = Client()
+    client.post(
+        reverse("survey:consent", kwargs={"slug": exp.slug}),
+        data={"agree": "on"},
+    )
+    client.post(reverse("survey:instructions", kwargs={"slug": exp.slug}))
+
+    session = ParticipantSession.objects.get()
+    pair = session.pair_assignments.first()
+
+    beacon = Client(enforce_csrf_checks=True)
+    beacon.cookies = client.cookies
+    resp = beacon.post(
+        reverse(
+            "survey:record_listen_pair",
+            kwargs={"slug": exp.slug, "pair_id": pair.pk},
+        ),
+        data=json.dumps({"duration_ms": 2222, "side": "a"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    pair.refresh_from_db()
+    assert pair.listen_duration_a_ms == 2222

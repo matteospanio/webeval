@@ -106,3 +106,35 @@ def test_bank_view_hides_other_users_templates(admin_user):
     body = client.get(url).content.decode()
     assert "Shared" in body
     assert "Private" not in body
+
+
+def test_plugin_type_template_round_trips_and_validates():
+    # Regression: QuestionTemplate.clean_fields must vouch for registered
+    # component types like Question.clean_fields does — "Save to my question
+    # bank" already stores them (bulk_create skips validation), so editing or
+    # re-validating such a template used to fail with "not a valid choice".
+    exp = ExperimentFactory()
+    q = Question.objects.create(
+        experiment=exp,
+        section=Question.Section.STIMULUS,
+        type="constant_sum",
+        prompt="Allocate importance",
+        config={"items": ["Melody", "Rhythm"], "total": 100},
+    )
+    tpl = QuestionTemplate.from_question(q, owner=None)
+    tpl.full_clean()  # must not raise
+    tpl.save()
+
+    exp2 = ExperimentFactory()
+    rebuilt = tpl.build_question(exp2, sort_order=0)
+    rebuilt.full_clean()
+    rebuilt.save()
+    assert rebuilt.type == "constant_sum"
+    assert rebuilt.config == {"items": ["Melody", "Rhythm"], "total": 100}
+
+
+def test_template_admin_form_offers_plugin_types():
+    from experiments.forms import QuestionTemplateAdminForm
+
+    form = QuestionTemplateAdminForm()
+    assert "constant_sum" in dict(form.fields["type"].choices)

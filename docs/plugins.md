@@ -1,36 +1,55 @@
 # Writing plugins & extending webeval
 
-webeval is built to be extended **without forking the core**. Two registries let you drop in new behaviour, both modelled on the same Pythonic pattern (a base class + a registry + a decorator), and both auto-discovered at startup:
+webeval is built to be extended **without forking the core**. One decorator — `@plugin` — registers your extension with the app; today three plugin *kinds* exist, all served by the same unified surface in [experiments/plugins.py](../experiments/plugins.py):
 
-1. **Question-type components** — brand-new question widgets ([experiments/components.py](../experiments/components.py)).
-2. **Assignment strategies** — how stimuli are selected/ordered per participant ([experiments/assignment.py](../experiments/assignment.py)).
+| Kind | Base class | What it adds |
+|---|---|---|
+| `question` | `QuestionComponent` | A brand-new question widget (rendered, validated, parsed end-to-end). |
+| `strategy` | `StrategyBase` | How stimuli are selected/ordered per participant. |
+| `pairwise_strategy` | `PairwiseStrategyBase` | How A/B comparison pairs are built. |
 
-Plus an **integration** point: outbound webhooks your own services consume.
+Plus an **integration** point: outbound webhooks and the REST API (see below).
+
+Everything a plugin author needs comes from one import:
+
+```python
+from experiments.plugins import plugin, QuestionComponent, StrategyBase
+```
 
 ## Where plugin code lives
 
-Anything imported at startup works, but the convention is:
+Drop a **`webeval_plugins.py`** module in any installed Django app — it is auto-imported at startup (`experiments/apps.py` calls `autodiscover_modules("webeval_plugins")` in `ready()`), so registrations are picked up with **no core edits**. One module may register plugins of every kind.
 
-- For a quick in-tree addition, drop it in an existing app's `question_components.py` (it is auto-imported — see below).
-- For something reusable, make it a tiny Django app and add it to `INSTALLED_APPS`; put your components in `<yourapp>/question_components.py`.
+- Quick in-tree addition: `<yourapp>/webeval_plugins.py`.
+- Reusable extension: make a tiny Django app, put your plugins in its `webeval_plugins.py`, and add the app to `INSTALLED_APPS`.
 
-`experiments/apps.py` calls `autodiscover_modules("question_components")` in `ready()`, so **any installed app** that defines a `question_components` module has its registrations picked up automatically — no core edits.
+List what's installed at any time:
+
+```console
+$ uv run ./manage.py plugins
+KIND               KEY               LABEL                          IMPL                                          ORIGIN
+question           constant_sum      Constant sum (allocate points) experiments.components.ConstantSumComponent  built-in
+strategy           balanced_random   ...                            experiments.assignment.BalancedRandomStrategy built-in
+...
+```
+
+`@plugin` fails **loudly at import time** (a `PluginError`) on a bad registration: a missing or over-long key, a key that shadows a built-in, or a collision with a different already-registered class (pass `replace=True` to `register()` to overwrite deliberately). Re-importing the same class is a harmless no-op.
 
 ---
 
 ## 1. A custom question type
 
-A *component* bundles everything a question type needs: a config schema, a server-side renderer, and an answer parser. Subclass `QuestionComponent` and register it.
+A *component* bundles everything a question type needs: a config schema, a server-side renderer, and an answer parser. Subclass `QuestionComponent` and decorate it.
 
 ```python
-# yourapp/question_components.py
+# yourapp/webeval_plugins.py
 from django.core.exceptions import ValidationError
-from django.utils.html import format_html
+from django.utils.html import format_html_join
 
-from experiments.components import QuestionComponent, question_component
+from experiments.plugins import plugin, QuestionComponent
 
 
-@question_component                      # registers an instance at import time
+@plugin                                  # registers an instance at import time
 class StarRatingComponent(QuestionComponent):
     type = "star_rating"                 # stored in Question.type (<= 16 chars, unique)
     label = "Star rating"                # shown in the admin + builder palette
@@ -50,13 +69,14 @@ class StarRatingComponent(QuestionComponent):
         # repopulate; None on first display. ALWAYS return a safe string.
         current = (post or {}).get(f"q_{question.pk}", "")
         n = (question.config or {}).get("max", 5)
-        buttons = format_html("")
-        for value in range(1, n + 1):
-            buttons += format_html(
-                '<label><input type="radio" name="q_{}" value="{}" {}> {}★</label> ',
-                question.pk, value, "checked" if str(value) == current else "", value,
-            )
-        return buttons
+        return format_html_join(
+            " ",
+            '<label><input type="radio" name="q_{}" value="{}" {}> {}★</label>',
+            (
+                (question.pk, value, "checked" if str(value) == current else "", value)
+                for value in range(1, n + 1)
+            ),
+        )
 
     def read_answer(self, post, question):
         # Return (answered, json_value, error) — the same contract as built-ins.
@@ -75,7 +95,7 @@ class StarRatingComponent(QuestionComponent):
 
 That's it — the new type now works **end to end** with no other changes:
 
-- it appears in the **admin** question-type dropdown (with a raw-JSON `plugin_config` field) and in the **studio drag-&-drop builder** palette;
+- it appears in the **admin** question-type dropdown (with a raw-JSON `plugin_config` field), in the **question bank**, and in the **studio drag-&-drop builder** palette;
 - it **renders** inside the participant flow and **repopulates** on validation errors;
 - answers are validated and stored like any built-in;
 - they flow into **stats, exports, and the API** automatically (a numeric component is summarised like a rating; others get a response count).
@@ -93,12 +113,9 @@ That's it — the new type now works **end to end** with no other changes:
 
 webeval ships a worked example, `ConstantSumComponent` (`constant_sum`: distribute N points across items), in [experiments/components.py](../experiments/components.py).
 
-### Registering without the decorator
+### Removing a plugin later
 
-```python
-from experiments.components import register_question_component
-register_question_component(StarRatingComponent())
-```
+If studies were authored with your type and the plugin app is removed, those questions can no longer render. webeval fails safe: activation is blocked (`readiness_problems`), a Django system check warns on `manage.py check --database default` / `migrate` (`experiments.W001`), and the participant page shows a visible "question type not installed" notice instead of a silent gap. Re-install the plugin or migrate the affected questions.
 
 ---
 
@@ -107,11 +124,13 @@ register_question_component(StarRatingComponent())
 A *strategy* decides which stimuli a participant sees and in what order. It only queries stimuli/conditions — it never touches participant models — so it stays pure and testable.
 
 ```python
-# yourapp/apps.py  (call this from AppConfig.ready), or any module imported at startup
+# yourapp/webeval_plugins.py
 import random
-from experiments.assignment import StrategyBase, register_strategy
+
+from experiments.plugins import plugin, StrategyBase
 
 
+@plugin
 class FirstNStrategy(StrategyBase):
     name = "first_n"      # selected via Experiment.assignment_strategy
 
@@ -123,12 +142,21 @@ class FirstNStrategy(StrategyBase):
             .order_by("sort_order", "id")
         )
         return pool[: n or len(pool)]
-
-
-register_strategy(FirstNStrategy())
 ```
 
-The strategy then appears in the admin's strategy dropdown and is used whenever a study's `assignment_strategy` is set to `first_n`. Built-ins to learn from: `balanced_random`, `block_random`, `counterbalanced`, `between_subject`.
+The strategy then appears in the admin's strategy dropdown and is used whenever a study's `assignment_strategy` is set to `first_n`. Activation is blocked when a study names a strategy that is not registered on the server (and the standard/pairwise registries are checked against the study's mode). Built-ins to learn from: `balanced_random`, `block_random`, `counterbalanced`, `between_subject`; for `pairwise_strategy` subclass `PairwiseStrategyBase` (see `pairwise_balanced`).
+
+### Registering without the decorator
+
+For instances that need constructor arguments:
+
+```python
+from experiments.plugins import register
+
+register(FirstNStrategy())                       # kind inferred from the base class
+register(FirstNStrategy(), kind="strategy")      # or explicit
+register(other, replace=True)                    # deliberate overwrite
+```
 
 ---
 
@@ -168,4 +196,33 @@ See the API key + scope table in the [README](../README.md#api-keys).
 
 ## Testing your plugin
 
-Treat components/strategies as ordinary Python — unit-test `read_answer` / `validate_config` / `select` directly, and write one participant-flow test that submits an answer. The bundled tests are good templates: `tests/test_components.py`, `tests/test_component_flow.py`, and `experiments/tests/` for strategies.
+Four tiers, smallest first — the bundled tests are good templates:
+
+1. **Pure unit tests** — `read_answer` / `validate_config` / `select` are ordinary Python (`tests/test_components.py`, `experiments/tests/test_assignment.py`).
+2. **DB-backed strategy tests** — `@pytest.mark.django_db` plus the factories in `experiments/tests/factories.py`.
+3. **Registration tests** — use the `temporary_plugin` context manager so the registry is restored afterwards:
+
+   ```python
+   from experiments.plugins import temporary_plugin, get_plugin
+
+   def test_my_strategy_registers():
+       with temporary_plugin(FirstNStrategy()):
+           assert get_plugin("strategy", "first_n")
+   ```
+
+4. **End-to-end flow test** — one participant submits an answer through your widget (`tests/test_component_flow.py` is the template).
+
+---
+
+## Appendix: legacy registration paths (supported forever)
+
+The per-kind APIs predate `@plugin` and keep working:
+
+- `@question_component` / `register_question_component` in `experiments/components.py`, auto-discovered from a `question_components` module in any installed app.
+- `register_strategy` / `register_pairwise_strategy` in `experiments/assignment.py`, called from e.g. `AppConfig.ready`.
+
+Two behavioural notes when migrating to `@plugin`:
+
+- The unified path is **stricter**: it rejects duplicate keys registered by different classes (the legacy strategy helpers silently overwrite). If you relied on overwriting, pass `replace=True`.
+- Keep exactly one registration per key: an app that keeps its old `question_components` registration *and* re-registers the same key from a different class in `webeval_plugins` now fails loudly at startup — delete the old one when you migrate.
+- A dual-role class (subclassing two bases) must be registered twice with explicit `@plugin(kind=...)` calls.

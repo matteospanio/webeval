@@ -138,10 +138,11 @@ class ConstantSumComponent(QuestionComponent):
 
     def validate_config(self, config: dict) -> None:
         items = config.get("items")
-        clean = [i for i in items if isinstance(i, str) and i.strip()] if isinstance(
-            items, list
-        ) else []
-        if len(clean) < 2:
+        if (
+            not isinstance(items, list)
+            or len(items) < 2
+            or not all(isinstance(i, str) and i.strip() for i in items)
+        ):
             raise ValidationError(
                 {"config": "constant_sum needs an 'items' list of ≥2 non-empty strings."}
             )

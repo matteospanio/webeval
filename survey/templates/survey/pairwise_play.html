@@ -131,7 +131,7 @@
       </div>
     </form>
   </article>
-  <script src="{% static 'survey/js/pairwise-audio-tracker.js' %}" defer></script>
-  <script src="{% static 'survey/js/key-chord-player.js' %}" defer></script>
-  <script src="{% static 'survey/js/branching.js' %}" defer></script>
+  <script type="module" src="{% static 'survey/js/audio-tracker.js' %}"></script>
+  <script type="module" src="{% static 'survey/js/key-chord-player.js' %}"></script>
+  <script type="module" src="{% static 'survey/js/branching.js' %}"></script>
 {% endblock %}

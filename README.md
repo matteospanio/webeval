@@ -234,20 +234,20 @@ upgrading is non-breaking.
 Platform admins manage users, groups and the access/audit changelists from the
 Django admin under **Users & access**.
 
-## Extending webeval: custom question types (plugins)
+## Extending webeval: plugins
 
 > Full guide with worked examples (custom question types, assignment strategies, consuming webhooks): **[docs/plugins.md](docs/plugins.md)**.
 
-New question widgets are **plugins** — you can add one without touching the core. A *component* bundles the four things a question type needs (config validation, participant-facing rendering, answer parsing, and a label), mirroring the existing pluggable assignment strategies.
+New question widgets, assignment strategies, and pairwise strategies are **plugins** — you add them without touching the core. One decorator covers every kind: drop a `webeval_plugins.py` module in any installed app, subclass the matching base class, and decorate it with `@plugin` (the kind is inferred from the base class). `uv run ./manage.py plugins` lists everything installed.
 
-Drop a `question_components.py` module in any installed app and register a component:
+A question *component* bundles the four things a question type needs (config validation, participant-facing rendering, answer parsing, and a label):
 
 ```python
 from django.utils.html import format_html
-from experiments.components import QuestionComponent, question_component
+from experiments.plugins import plugin, QuestionComponent
 
 
-@question_component
+@plugin
 class YesNoComponent(QuestionComponent):
     type = "yes_no"            # the stored Question.type value (≤16 chars)
     label = "Yes / No"
@@ -274,7 +274,7 @@ class YesNoComponent(QuestionComponent):
         return True, raw, None
 ```
 
-`ExperimentsConfig.ready()` auto-discovers the module at startup. The new type then works **end-to-end** with no other changes: it appears in the admin question-type dropdown (with a raw-JSON `plugin_config` field), renders inside the standard survey page, validates and stores answers like any built-in type, and flows into stats/exports. Built-in types are untouched. webeval ships one worked example — `constant_sum` (allocate a fixed number of points across items) in [experiments/components.py](experiments/components.py).
+`ExperimentsConfig.ready()` auto-discovers the module at startup. The new type then works **end-to-end** with no other changes: it appears in the admin question-type dropdown (with a raw-JSON `plugin_config` field), in the question bank, and in the studio drag-&-drop builder palette; renders inside the standard survey page; validates and stores answers like any built-in type; and flows into stats/exports. Built-in types are untouched, and a bad registration fails loudly at startup with a clear `PluginError`. webeval ships one worked example — `constant_sum` (allocate a fixed number of points across items) in [experiments/components.py](experiments/components.py). (The older `question_components.py` + `@question_component` / `register_strategy` paths keep working — see the appendix in [docs/plugins.md](docs/plugins.md).)
 
 ## Project Layout
 

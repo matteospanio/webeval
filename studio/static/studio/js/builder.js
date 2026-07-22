@@ -1,300 +1,434 @@
-/* Drag-&-drop question builder — vanilla, server-authoritative.
+/* Drag-&-drop question builder — vanilla ES module, server-authoritative.
  *
  * The DOM is the source of truth: each .q-card carries its question state in
- * its inputs (+ dataset.id once saved). "Save" reads the cards in document
- * order and POSTs them as JSON to the studio save endpoint, which validates
- * and persists (create / update / delete + reorder). This is the only
- * hand-written JS outside the participant audio tracker, and it lives solely
- * in the researcher studio.
+ * its inputs (+ dataset.id once saved); a WeakMap links a card element to its
+ * controller (read()/setError()). "Save" reads the cards in document order and
+ * POSTs them as JSON to the studio save endpoint, which validates and persists
+ * (create / update / delete + reorder). This is the only hand-written JS
+ * outside the participant survey modules, and it lives solely in the
+ * researcher studio.
  */
-(function () {
-  "use strict";
 
-  var root = document.querySelector(".builder");
-  if (!root) return;
-  var canEdit = root.dataset.canEdit === "1";
-  var saveUrl = root.dataset.saveUrl;
-  var csrf = root.dataset.csrf;
-
-  var palette = JSON.parse(document.getElementById("builder-palette").textContent);
-  var initial = JSON.parse(document.getElementById("builder-questions").textContent);
-  var paletteByType = {};
-  palette.forEach(function (p) { paletteByType[p.type] = p; });
-
-  var canvas = document.getElementById("canvas");
-  var emptyMsg = document.getElementById("canvas-empty");
-  var statusEl = document.getElementById("save-status");
-  var saveBtn = document.getElementById("save-btn");
-
-  // --- tiny DOM helper -------------------------------------------------
-  function h(tag, attrs, children) {
-    var e = document.createElement(tag);
-    attrs = attrs || {};
-    Object.keys(attrs).forEach(function (k) {
-      if (k === "class") e.className = attrs[k];
-      else if (k.slice(0, 2) === "on") e.addEventListener(k.slice(2), attrs[k]);
-      else if (attrs[k] === true) e.setAttribute(k, "");
-      else if (attrs[k] !== false && attrs[k] != null) e.setAttribute(k, attrs[k]);
-    });
-    (children || []).forEach(function (c) {
-      if (c == null) return;
-      e.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
-    });
-    return e;
+// --- tiny DOM helper ---------------------------------------------------
+const h = (tag, attrs = {}, children = []) => {
+  const el = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value == null || value === false) continue;
+    if (key === "class") el.className = value;
+    else if (key.startsWith("on")) el.addEventListener(key.slice(2), value);
+    else if (typeof value === "boolean") el[key] = value; // reflected props: draggable, disabled, …
+    else el.setAttribute(key, value);
   }
-  function joinLines(a) { return (a || []).join("\n"); }
-  function splitLines(s) {
-    return (s || "").split("\n").map(function (x) { return x.trim(); }).filter(Boolean);
-  }
-  function clone(o) { return JSON.parse(JSON.stringify(o || {})); }
+  el.append(...children.filter((c) => c != null));
+  return el;
+};
 
-  // --- per-type config editors (friendly for common types, JSON else) --
-  function field(labelText, input) { return h("label", {}, [labelText, input]); }
-  function num(value) { var i = h("input", { type: "number" }); if (value != null) i.value = value; return i; }
-  function txt(value) { var i = h("input", { type: "text" }); i.value = value || ""; return i; }
-  function area(value, rows) { var t = h("textarea", { rows: rows || 3 }); t.value = value || ""; return t; }
-  function check(labelText, checked) {
-    var i = h("input", { type: "checkbox" }); i.checked = !!checked;
-    return { node: h("label", {}, [i, " " + labelText]), input: i };
-  }
+const joinLines = (lines) => (lines ?? []).join("\n");
+const splitLines = (s) =>
+  (s ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-  var EDITORS = {
-    rating: function (c) {
-      var mn = num(c.min != null ? c.min : 0), mx = num(c.max != null ? c.max : 100),
-          st = num(c.step != null ? c.step : 1), lo = txt(c.min_label), hi = txt(c.max_label);
-      var node = h("div", { class: "q-field-row" }, [
+// --- per-type config editors (friendly for common types, JSON else) ----
+const field = (labelText, input) => h("label", {}, [labelText, input]);
+const num = (value) => {
+  const input = h("input", { type: "number" });
+  if (value != null) input.value = value;
+  return input;
+};
+const txt = (value) => h("input", { type: "text", value: value ?? "" });
+const area = (value, rows = 3) => {
+  const textarea = h("textarea", { rows });
+  textarea.value = value ?? "";
+  return textarea;
+};
+const check = (labelText, checked) => {
+  const input = h("input", { type: "checkbox", checked: Boolean(checked) });
+  return { node: h("label", {}, [input, ` ${labelText}`]), input };
+};
+
+const EDITORS = {
+  rating(c) {
+    const mn = num(c.min ?? 0);
+    const mx = num(c.max ?? 100);
+    const st = num(c.step ?? 1);
+    const lo = txt(c.min_label);
+    const hi = txt(c.max_label);
+    return {
+      node: h("div", { class: "q-field-row" }, [
         field("Min", mn), field("Max", mx), field("Step", st),
-        field("Low label", lo), field("High label", hi)]);
-      return { node: node, read: function () {
-        var cfg = { min: Number(mn.value || 0), max: Number(mx.value || 0), step: Number(st.value || 1) };
+        field("Low label", lo), field("High label", hi),
+      ]),
+      read() {
+        const cfg = { min: Number(mn.value || 0), max: Number(mx.value || 0), step: Number(st.value || 1) };
         if (lo.value.trim()) cfg.min_label = lo.value.trim();
         if (hi.value.trim()) cfg.max_label = hi.value.trim();
         return cfg;
-      } };
+      },
+    };
+  },
+  choice(c) {
+    const opts = area(joinLines(c.choices), 4);
+    const multi = check("Allow multiple", c.multi);
+    return {
+      node: h("div", {}, [field("Options (one per line)", opts), multi.node]),
+      read: () => ({ choices: splitLines(opts.value), multi: multi.input.checked }),
+    };
+  },
+  text(c) {
+    const ml = num(c.max_length ?? 500);
+    return {
+      node: field("Max length", ml),
+      read: () => ({ max_length: Number(ml.value || 500) }),
+    };
+  },
+  likert(c) {
+    const steps = num(c.steps ?? 5);
+    const labels = area(joinLines(c.labels), 5);
+    return {
+      node: h("div", {}, [field("Steps", steps), field("Labels (one per line)", labels)]),
+      read: () => ({ steps: Number(steps.value || 0), labels: splitLines(labels.value) }),
+    };
+  },
+  numeric(c) {
+    const mn = num(c.min);
+    const mx = num(c.max);
+    const integer = check("Whole numbers only", c.integer);
+    const unit = txt(c.unit);
+    return {
+      node: h("div", { class: "q-field-row" }, [
+        field("Min (optional)", mn), field("Max (optional)", mx), integer.node, field("Unit (optional)", unit),
+      ]),
+      read() {
+        const cfg = {};
+        if (mn.value !== "") cfg.min = Number(mn.value);
+        if (mx.value !== "") cfg.max = Number(mx.value);
+        if (integer.input.checked) cfg.integer = true;
+        if (unit.value.trim()) cfg.unit = unit.value.trim();
+        return cfg;
+      },
+    };
+  },
+};
+
+// Raw-JSON fallback editor (matrix / ranking / plugin types). read() returns
+// null on malformed JSON so the save handler can refuse to overwrite the
+// stored config with an empty object.
+const rawEditor = (c) => {
+  const ta = area(JSON.stringify(c ?? {}, null, 2), 4);
+  ta.setAttribute("spellcheck", "false");
+  const err = h("div", { class: "q-card-error" });
+  return {
+    node: h("div", {}, [field("Config (JSON)", ta), err]),
+    read() {
+      err.textContent = "";
+      try {
+        return JSON.parse(ta.value || "{}");
+      } catch {
+        err.textContent = "Invalid JSON";
+        return null;
+      }
     },
-    choice: function (c) {
-      var opts = area(joinLines(c.choices), 4), multi = check("Allow multiple", c.multi);
-      return { node: h("div", {}, [field("Options (one per line)", opts), multi.node]),
-        read: function () { return { choices: splitLines(opts.value), multi: multi.input.checked }; } };
-    },
-    text: function (c) {
-      var ml = num(c.max_length != null ? c.max_length : 500);
-      return { node: field("Max length", ml), read: function () { return { max_length: Number(ml.value || 500) }; } };
-    },
-    likert: function (c) {
-      var steps = num(c.steps != null ? c.steps : 5), labels = area(joinLines(c.labels), 5);
-      return { node: h("div", {}, [field("Steps", steps), field("Labels (one per line)", labels)]),
-        read: function () { return { steps: Number(steps.value || 0), labels: splitLines(labels.value) }; } };
-    },
-    numeric: function (c) {
-      var mn = num(c.min), mx = num(c.max), integer = check("Whole numbers only", c.integer), unit = txt(c.unit);
-      return { node: h("div", { class: "q-field-row" }, [field("Min (optional)", mn), field("Max (optional)", mx), integer.node, field("Unit (optional)", unit)]),
-        read: function () {
-          var cfg = {};
-          if (mn.value !== "") cfg.min = Number(mn.value);
-          if (mx.value !== "") cfg.max = Number(mx.value);
-          if (integer.input.checked) cfg.integer = true;
-          if (unit.value.trim()) cfg.unit = unit.value.trim();
-          return cfg;
-        } };
-    }
+  };
+};
+
+const makeEditor = (type, config) => (EDITORS[type] ?? rawEditor)(config ?? {});
+
+const option = (value, label, current) =>
+  h("option", { value, selected: value === current }, [label]);
+
+// --- builder ------------------------------------------------------------
+const cookie = (name) =>
+  document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${name}=`))
+    ?.slice(name.length + 1);
+
+const root = document.querySelector(".builder");
+if (root) {
+  const canEdit = root.dataset.canEdit === "1";
+  const { saveUrl, csrf } = root.dataset;
+  // Prefer the live cookie: Django rotates the CSRF secret on (re-)login, so
+  // after a session expires and the researcher logs in from another tab, the
+  // token embedded at render time is stale but the cookie is fresh — reading
+  // it per-save makes the "log in in another tab, then save again" recovery
+  // actually work.
+  const csrfToken = () => cookie("csrftoken") ?? csrf;
+
+  const palette = JSON.parse(document.getElementById("builder-palette").textContent);
+  const initial = JSON.parse(document.getElementById("builder-questions").textContent);
+  const paletteByType = new Map(palette.map((p) => [p.type, p]));
+
+  const canvas = document.getElementById("canvas");
+  const emptyMsg = document.getElementById("canvas-empty");
+  const statusEl = document.getElementById("save-status");
+  const saveBtn = document.getElementById("save-btn");
+
+  // element → { read(), setError(msg) } for every rendered .q-card
+  const controllers = new WeakMap();
+
+  const setStatus = (msg) => { statusEl.textContent = msg; };
+  const refreshEmpty = () => {
+    emptyMsg.style.display = canvas.querySelector(".q-card") ? "none" : "";
   };
 
-  function rawEditor(c) {
-    var ta = area(JSON.stringify(c || {}, null, 2), 4);
-    ta.setAttribute("spellcheck", "false");
-    var err = h("div", { class: "q-card-error" });
-    return { node: h("div", {}, [field("Config (JSON)", ta), err]), read: function () {
-      err.textContent = "";
-      try { return JSON.parse(ta.value || "{}"); } catch (e) { err.textContent = "Invalid JSON"; return {}; }
-    } };
-  }
+  const newQuestion = (type) => ({
+    type,
+    section: "stimulus",
+    prompt: "",
+    required: true,
+    page_break_before: false,
+    show_prompt: false,
+    config: structuredClone(paletteByType.get(type)?.default_config ?? {}),
+  });
 
-  function makeEditor(type, config) {
-    return (EDITORS[type] || rawEditor)(config || {});
-  }
+  // --- drag to reorder (cards) + drag from palette (add) ----------------
+  let draggedCard = null;
+  let paletteType = null;
 
-  // --- cards -----------------------------------------------------------
-  function option(value, label, current) {
-    var o = h("option", { value: value }, [label]); if (value === current) o.selected = true; return o;
-  }
+  const clearDragoverHighlight = () => canvas.classList.remove("dragover");
 
-  function newQuestion(type) {
-    var meta = paletteByType[type] || {};
-    return { type: type, section: "stimulus", prompt: "", required: true,
-      page_break_before: false, show_prompt: false, config: clone(meta.default_config) };
-  }
+  // Cards drag only from their header: the card becomes draggable on
+  // pointerdown over the head and reverts afterwards, so a mouse-drag inside
+  // a prompt/config editor selects text instead of reordering the question.
+  const attachReorder = (card, handle) => {
+    handle.addEventListener("pointerdown", () => {
+      card.draggable = true;
+    });
+    card.addEventListener("pointerup", () => {
+      card.draggable = false;
+    });
+    card.addEventListener("dragstart", (e) => {
+      draggedCard = card;
+      card.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", card.dataset.type);
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      card.draggable = false;
+      draggedCard = null;
+      clearDragoverHighlight();
+    });
+  };
 
-  function renderCard(q) {
-    var meta = paletteByType[q.type] || { label: q.type };
-    var card = h("div", { class: "q-card", draggable: canEdit });
+  const lockCard = (card) => {
+    card.draggable = false;
+    card.querySelectorAll("input, textarea, select, button").forEach((el) => {
+      el.disabled = true;
+    });
+  };
+
+  const renderCard = (q) => {
+    const meta = paletteByType.get(q.type) ?? { label: q.type };
+    const card = h("div", { class: "q-card" });
     if (q.id) card.dataset.id = q.id;
     card.dataset.type = q.type;
 
-    var prompt = area(q.prompt, 2);
+    const prompt = area(q.prompt, 2);
     prompt.setAttribute("placeholder", "Question prompt (Markdown)");
-    var section = h("select", {}, [
+    const section = h("select", {}, [
       option("stimulus", "Per stimulus", q.section),
       option("demographic", "Demographic (end)", q.section),
-      option("screening", "Screening (start)", q.section)]);
-    var required = check("Required", q.required !== false);
-    var pageBreak = check("Page break before", q.page_break_before);
-    var showPrompt = check("Show stimulus prompt", q.show_prompt);
-    var editor = makeEditor(q.type, q.config);
-    var err = h("div", { class: "q-card-error" });
+      option("screening", "Screening (start)", q.section),
+    ]);
+    const required = check("Required", q.required !== false);
+    const pageBreak = check("Page break before", q.page_break_before);
+    const showPrompt = check("Show stimulus prompt", q.show_prompt);
+    const editor = makeEditor(q.type, q.config);
+    const err = h("div", { class: "q-card-error" });
 
-    var del = h("button", { type: "button", class: "secondary outline",
-      onclick: function () { card.remove(); refreshEmpty(); } }, ["Delete"]);
-    var up = h("button", { type: "button", class: "secondary outline", title: "Move up",
-      onclick: function () { var p = card.previousElementSibling; if (p) canvas.insertBefore(card, p); } }, ["↑"]);
-    var down = h("button", { type: "button", class: "secondary outline", title: "Move down",
-      onclick: function () { var n = card.nextElementSibling; if (n) canvas.insertBefore(n, card); } }, ["↓"]);
+    const del = h(
+      "button",
+      { type: "button", class: "secondary outline", onclick: () => { card.remove(); refreshEmpty(); } },
+      ["Delete"],
+    );
+    const up = h(
+      "button",
+      {
+        type: "button", class: "secondary outline", title: "Move up", "aria-label": "Move up",
+        onclick: () => card.previousElementSibling && canvas.insertBefore(card, card.previousElementSibling),
+      },
+      ["↑"],
+    );
+    const down = h(
+      "button",
+      {
+        type: "button", class: "secondary outline", title: "Move down", "aria-label": "Move down",
+        onclick: () => card.nextElementSibling && canvas.insertBefore(card.nextElementSibling, card),
+      },
+      ["↓"],
+    );
 
-    card.appendChild(h("div", { class: "q-card-head" }, [
-      h("span", { class: "q-card-type" }, [(meta.label || q.type) + (meta.plugin ? " (plugin)" : "")]),
-      h("span", { class: "q-card-actions" }, [up, down, del])]));
-    card.appendChild(field("Prompt", prompt));
-    card.appendChild(h("div", { class: "q-field-row" }, [field("Section", section), required.node, pageBreak.node, showPrompt.node]));
-    card.appendChild(editor.node);
-    card.appendChild(err);
+    const head = h("div", { class: "q-card-head" }, [
+      h("span", { class: "q-card-type" }, [`${meta.label ?? q.type}${meta.plugin ? " (plugin)" : ""}`]),
+      h("span", { class: "q-card-actions" }, [up, down, del]),
+    ]);
+    card.append(
+      head,
+      field("Prompt", prompt),
+      h("div", { class: "q-field-row" }, [field("Section", section), required.node, pageBreak.node, showPrompt.node]),
+      editor.node,
+      err,
+    );
 
-    card._err = err;
-    card._read = function () {
-      var data = {
-        type: card.dataset.type,
-        section: section.value,
-        prompt: prompt.value,
-        required: required.input.checked,
-        page_break_before: pageBreak.input.checked,
-        show_prompt: showPrompt.input.checked,
-        config: editor.read()
-      };
-      if (card.dataset.id) data.id = Number(card.dataset.id);
-      return data;
-    };
+    controllers.set(card, {
+      read() {
+        const data = {
+          type: card.dataset.type,
+          section: section.value,
+          prompt: prompt.value,
+          required: required.input.checked,
+          page_break_before: pageBreak.input.checked,
+          show_prompt: showPrompt.input.checked,
+          config: editor.read(),
+        };
+        if (card.dataset.id) data.id = Number(card.dataset.id);
+        return data;
+      },
+      setError(msg) { err.textContent = msg; },
+    });
 
-    if (canEdit) attachReorder(card); else lockCard(card);
+    if (canEdit) attachReorder(card, head);
+    else lockCard(card);
     return card;
-  }
+  };
 
-  function lockCard(card) {
-    card.setAttribute("draggable", "false");
-    [].forEach.call(card.querySelectorAll("input, textarea, select, button"), function (el) { el.disabled = true; });
-  }
-
-  function addCard(q) { canvas.appendChild(renderCard(q)); refreshEmpty(); }
-
-  function refreshEmpty() {
-    emptyMsg.style.display = canvas.querySelector(".q-card") ? "none" : "";
-  }
-
-  // --- drag to reorder (cards) + drag from palette (add) ---------------
-  var draggedCard = null;
-  var paletteType = null;
-
-  function attachReorder(card) {
-    card.addEventListener("dragstart", function (e) {
-      draggedCard = card; card.classList.add("dragging");
-      e.dataTransfer.effectAllowed = "move";
+  // Safety net: a header press whose pointerup lands outside the card would
+  // otherwise leave that card draggable.
+  document.addEventListener("pointerup", () => {
+    canvas.querySelectorAll('.q-card[draggable="true"]').forEach((el) => {
+      el.draggable = false;
     });
-    card.addEventListener("dragend", function () { card.classList.remove("dragging"); draggedCard = null; });
-  }
+  });
 
-  function afterElement(y) {
-    var els = [].slice.call(canvas.querySelectorAll(".q-card:not(.dragging)"));
-    var best = { offset: -Infinity, el: null };
-    els.forEach(function (child) {
-      var box = child.getBoundingClientRect();
-      var offset = y - box.top - box.height / 2;
-      if (offset < 0 && offset > best.offset) best = { offset: offset, el: child };
-    });
-    return best.el;
-  }
+  const addCard = (q) => {
+    canvas.append(renderCard(q));
+    refreshEmpty();
+  };
 
-  canvas.addEventListener("dragover", function (e) {
+  const afterElement = (y) =>
+    [...canvas.querySelectorAll(".q-card:not(.dragging)")].reduce(
+      (best, el) => {
+        const { top, height } = el.getBoundingClientRect();
+        const offset = y - top - height / 2;
+        return offset < 0 && offset > best.offset ? { offset, el } : best;
+      },
+      { offset: -Infinity, el: null },
+    ).el;
+
+  canvas.addEventListener("dragover", (e) => {
     if (!canEdit) return;
     e.preventDefault();
     canvas.classList.add("dragover");
     if (draggedCard) {
-      var after = afterElement(e.clientY);
-      if (after == null) canvas.appendChild(draggedCard);
+      const after = afterElement(e.clientY);
+      if (after == null) canvas.append(draggedCard);
       else canvas.insertBefore(draggedCard, after);
     }
   });
-  canvas.addEventListener("dragleave", function (e) {
-    if (e.target === canvas) canvas.classList.remove("dragover");
+  canvas.addEventListener("dragleave", (e) => {
+    if (e.target === canvas && !canvas.contains(e.relatedTarget)) clearDragoverHighlight();
   });
-  canvas.addEventListener("drop", function (e) {
+  canvas.addEventListener("drop", (e) => {
     if (!canEdit) return;
     e.preventDefault();
-    canvas.classList.remove("dragover");
+    clearDragoverHighlight();
     if (paletteType) {
-      var card = renderCard(newQuestion(paletteType));
-      var after = afterElement(e.clientY);
-      if (after == null) canvas.appendChild(card); else canvas.insertBefore(card, after);
+      const card = renderCard(newQuestion(paletteType));
+      const after = afterElement(e.clientY);
+      if (after == null) canvas.append(card);
+      else canvas.insertBefore(card, after);
       paletteType = null;
       refreshEmpty();
     }
   });
 
-  [].forEach.call(document.querySelectorAll(".palette-item"), function (item) {
-    item.addEventListener("dragstart", function (e) {
+  document.querySelectorAll(".palette-item").forEach((item) => {
+    item.addEventListener("dragstart", (e) => {
       paletteType = item.dataset.type;
       e.dataTransfer.effectAllowed = "copy";
       e.dataTransfer.setData("text/plain", item.dataset.type);
     });
-    item.addEventListener("dragend", function () { paletteType = null; });
-    function add() { if (canEdit) addCard(newQuestion(item.dataset.type)); }
+    item.addEventListener("dragend", () => {
+      paletteType = null;
+      clearDragoverHighlight();
+    });
+    const add = () => canEdit && addCard(newQuestion(item.dataset.type));
     item.addEventListener("click", add);
-    item.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); add(); }
+    item.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        add();
+      }
     });
   });
 
-  // --- save ------------------------------------------------------------
-  function setStatus(msg) { statusEl.textContent = msg; }
-  function clearErrors(cards) { cards.forEach(function (c) { c._err.textContent = ""; }); }
-  function showErrors(cards, errors) {
-    Object.keys(errors || {}).forEach(function (idx) {
-      var card = cards[Number(idx)];
-      if (!card) return;
-      var fieldErrs = errors[idx];
-      var parts = [];
-      Object.keys(fieldErrs).forEach(function (f) { parts.push((f === "__all__" ? "" : f + ": ") + [].concat(fieldErrs[f]).join(" ")); });
-      card._err.textContent = parts.join(" · ");
-    });
-  }
+  // --- save --------------------------------------------------------------
+  const cardsInOrder = () =>
+    [...canvas.querySelectorAll(".q-card")].map((el) => ({ el, ...controllers.get(el) }));
+
+  const showErrors = (cards, errors) => {
+    for (const [idx, fieldErrs] of Object.entries(errors ?? {})) {
+      const parts = Object.entries(fieldErrs).map(
+        ([f, msgs]) => `${f === "__all__" ? "" : `${f}: `}${[].concat(msgs).join(" ")}`,
+      );
+      cards[Number(idx)]?.setError(parts.join(" · "));
+    }
+  };
+
+  const save = async () => {
+    const cards = cardsInOrder();
+    cards.forEach((c) => c.setError(""));
+    const questions = cards.map((c) => c.read());
+    if (questions.some((q) => q.config === null)) {
+      setStatus("Couldn't save — fix the invalid JSON config first.");
+      return;
+    }
+    setStatus("Saving…");
+    saveBtn.disabled = true;
+    try {
+      const r = await fetch(saveUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken() },
+        body: JSON.stringify({ questions }),
+      });
+      if (r.redirected || !(r.headers.get("Content-Type") ?? "").includes("application/json")) {
+        // @login_required redirect or an HTML error page (CSRF / 500) — the
+        // question set only lives in this DOM, so never suggest reloading.
+        setStatus(
+          r.redirected || r.status === 403
+            ? "Your session expired — log in to the studio in another tab, then save again."
+            : `Server error (${r.status}) — your questions are still here, try saving again.`,
+        );
+        return;
+      }
+      const data = await r.json();
+      if (data.ok) {
+        (data.ids ?? []).forEach((id, i) => {
+          if (cards[i]) cards[i].el.dataset.id = id;
+        });
+        setStatus(`Saved ${data.count} question(s).`);
+      } else if (data.errors) {
+        showErrors(cards, data.errors);
+        setStatus("Couldn't save — fix the highlighted questions.");
+      } else {
+        setStatus(data.error ?? "Couldn't save.");
+      }
+    } catch {
+      setStatus("Network error — try again.");
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
 
   if (saveBtn) {
-    if (!canEdit) { saveBtn.disabled = true; }
-    saveBtn.addEventListener("click", function () {
-      if (!canEdit) return;
-      var cards = [].slice.call(canvas.querySelectorAll(".q-card"));
-      clearErrors(cards);
-      var questions = cards.map(function (c) { return c._read(); });
-      setStatus("Saving…");
-      saveBtn.disabled = true;
-      fetch(saveUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
-        body: JSON.stringify({ questions: questions })
-      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          saveBtn.disabled = false;
-          if (res.data.ok) {
-            (res.data.ids || []).forEach(function (id, i) { if (cards[i]) cards[i].dataset.id = id; });
-            setStatus("Saved " + res.data.count + " question(s).");
-          } else if (res.data.errors) {
-            showErrors(cards, res.data.errors);
-            setStatus("Couldn't save — fix the highlighted questions.");
-          } else {
-            setStatus(res.data.error || "Couldn't save.");
-          }
-        }).catch(function () { saveBtn.disabled = false; setStatus("Network error — try again."); });
-    });
+    saveBtn.disabled = !canEdit;
+    if (canEdit) saveBtn.addEventListener("click", save);
   }
 
-  // --- init ------------------------------------------------------------
-  initial.forEach(function (q) { addCard(q); });
+  // --- init --------------------------------------------------------------
+  initial.forEach(addCard);
   refreshEmpty();
-})();
+}

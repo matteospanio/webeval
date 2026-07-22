@@ -129,3 +129,89 @@ def test_reject_unknown_operator():
     )
     with pytest.raises(ValidationError):
         dep.full_clean()
+
+
+# --- loose comparison parity with survey/js/branching.js --------------------
+# The JS mirror reads DOM strings, so both engines compare numbers numerically
+# whenever both sides parse and fall back to string equality. These tests pin
+# the Python half of that contract.
+
+
+def test_eq_is_type_tolerant():
+    # A rating stored as int 3 matches a rule authored with the string "3".
+    assert evaluate_condition({"question": 1, "op": "eq", "value": "3"}, {1: 3})
+    assert evaluate_condition({"question": 1, "op": "eq", "value": 3}, {1: "3"})
+    assert evaluate_condition({"question": 1, "op": "eq", "value": 3.0}, {1: 3})
+    assert not evaluate_condition({"question": 1, "op": "eq", "value": "4"}, {1: 3})
+
+
+def test_ne_is_type_tolerant():
+    # Regression: with typed equality, {op:"ne", value:"3"} against int 3 was
+    # True server-side but False in JS — the dependent could deadlock (JS
+    # hides+disables it, server keeps requiring it).
+    assert not evaluate_condition({"question": 1, "op": "ne", "value": "3"}, {1: 3})
+    assert evaluate_condition({"question": 1, "op": "ne", "value": "3"}, {1: 4})
+
+
+def test_in_nin_loose_membership():
+    assert evaluate_condition({"question": 1, "op": "in", "value": ["3", "5"]}, {1: 3})
+    assert not evaluate_condition({"question": 1, "op": "nin", "value": [3]}, {1: "3"})
+
+
+def test_in_with_string_target_is_substring():
+    assert evaluate_condition({"question": 1, "op": "in", "value": "abc"}, {1: "b"})
+    assert not evaluate_condition({"question": 1, "op": "in", "value": "abc"}, {1: "z"})
+
+
+def test_nin_with_null_target_is_true():
+    assert evaluate_condition({"question": 1, "op": "nin", "value": None}, {1: "x"})
+    assert not evaluate_condition({"question": 1, "op": "in", "value": None}, {1: "x"})
+
+
+def test_contains_is_loose_for_list_answers():
+    # Multi-choice answers are lists of strings; a numeric rule value matches.
+    assert evaluate_condition({"question": 1, "op": "contains", "value": 3}, {1: ["3", "5"]})
+    assert evaluate_condition({"question": 1, "op": "contains", "value": "b"}, {1: "abc"})
+    assert not evaluate_condition({"question": 1, "op": "contains", "value": "z"}, {1: ["a"]})
+
+
+def test_strings_that_do_not_parse_compare_as_strings():
+    assert evaluate_condition({"question": 1, "op": "eq", "value": "Yes"}, {1: "Yes"})
+    assert not evaluate_condition({"question": 1, "op": "eq", "value": "Yes"}, {1: "No"})
+
+
+def test_contains_coerces_scalar_answers():
+    # A rating stored as int 35 "contains" the digit "5" — the JS mirror can
+    # only see the DOM string, so the server coerces scalars the same way.
+    assert evaluate_condition({"question": 1, "op": "contains", "value": "5"}, {1: 35})
+    assert evaluate_condition({"question": 1, "op": "contains", "value": 3}, {1: 3.5})
+    assert not evaluate_condition({"question": 1, "op": "contains", "value": "9"}, {1: 35})
+
+
+def test_list_answers_compare_elementwise_loose():
+    # Checkbox answers are strings in the DOM but a rule may be authored with
+    # numbers — element-wise loose equality keeps the engines in lockstep.
+    assert evaluate_condition({"question": 1, "op": "eq", "value": [3]}, {1: ["3"]})
+    assert not evaluate_condition({"question": 1, "op": "ne", "value": [3]}, {1: ["3"]})
+    assert not evaluate_condition({"question": 1, "op": "eq", "value": [3, 4]}, {1: ["3"]})
+
+
+def test_array_answer_never_in_string_target():
+    # JS String([]) === "" would vacuously match any string target; both
+    # engines therefore refuse membership for non-scalar answers.
+    assert not evaluate_condition({"question": 1, "op": "in", "value": "abc"}, {1: []})
+    assert evaluate_condition({"question": 1, "op": "nin", "value": "abc"}, {1: ["a"]})
+
+
+def test_shared_numeric_grammar_excludes_python_only_literals():
+    # float() accepts "1_0"/"inf"/"nan" but JS Number() does not — the shared
+    # grammar treats them all as plain strings on both sides.
+    assert not evaluate_condition({"question": 1, "op": "eq", "value": 10}, {1: "1_0"})
+    assert not evaluate_condition({"question": 1, "op": "gt", "value": 3}, {1: "inf"})
+    assert evaluate_condition({"question": 1, "op": "eq", "value": "nan"}, {1: "nan"})
+    assert evaluate_condition({"question": 1, "op": "eq", "value": "3e1"}, {1: 30})
+
+
+def test_boolean_values_stringify_like_js():
+    assert evaluate_condition({"question": 1, "op": "eq", "value": True}, {1: "true"})
+    assert not evaluate_condition({"question": 1, "op": "ne", "value": True}, {1: "true"})

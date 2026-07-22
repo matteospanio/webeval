@@ -288,6 +288,33 @@ class TestListenDuration:
         assignment.refresh_from_db()
         assert assignment.listen_duration_ms == 5000
 
+    def test_beacon_post_without_csrf_token_is_accepted(self, active_experiment):
+        # The audio tracker's primary transport is navigator.sendBeacon, which
+        # cannot set the X-CSRFToken header: with CSRF enforced every beacon
+        # report would 403 and listen durations would silently stay 0. The
+        # endpoint is csrf-exempt (session-scoped, idempotent max) — this
+        # regression test posts exactly what a beacon sends.
+        client = Client()
+        client.post(
+            reverse("survey:consent", kwargs={"slug": active_experiment.slug}),
+            data={"agree": "on"},
+        )
+        client.post(reverse("survey:instructions", kwargs={"slug": active_experiment.slug}))
+        assignment = StimulusAssignment.objects.order_by("sort_order").first()
+        beacon = Client(enforce_csrf_checks=True)
+        beacon.cookies = client.cookies  # same participant session, no CSRF token
+        response = beacon.post(
+            reverse(
+                "survey:record_listen",
+                kwargs={"slug": active_experiment.slug, "assignment_id": assignment.pk},
+            ),
+            data=json.dumps({"duration_ms": 1234}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assignment.refresh_from_db()
+        assert assignment.listen_duration_ms == 1234
+
 
 # --- question randomization ------------------------------------------------
 

@@ -11,6 +11,10 @@ class ExperimentsConfig(AppConfig):
 
         # Import the registry module (registers the shipped example component),
         # then let any installed app contribute its own components by defining
-        # a ``question_components`` module.
+        # a ``question_components`` module (legacy hook, supported forever).
         from . import components  # noqa: F401
         autodiscover_modules("question_components")
+        # The unified plugin surface (@plugin): any installed app may define a
+        # ``webeval_plugins`` module registering plugins of every kind.
+        from . import checks, plugins  # noqa: F401
+        autodiscover_modules("webeval_plugins")

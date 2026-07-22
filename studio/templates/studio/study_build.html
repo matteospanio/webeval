@@ -27,13 +27,12 @@
 
 <div class="builder" data-save-url="{{ save_url }}"
      data-can-edit="{% if is_draft %}1{% else %}0{% endif %}"
-     data-csrf="{{ csrf_token }}"
-     data-overview-url="{% url 'studio:study_overview' slug=experiment.slug %}">
+     data-csrf="{{ csrf_token }}">
   <aside class="builder-palette">
     <h3>Add a question</h3>
     <ul id="palette-list">
       {% for item in palette %}
-      <li class="palette-item" draggable="true" data-type="{{ item.type }}" tabindex="0"
+      <li class="palette-item" role="button" draggable="true" data-type="{{ item.type }}" tabindex="0"
           title="Drag onto the canvas, or click to add">
         {{ item.label }}{% if item.plugin %} <span class="badge">plugin</span>{% endif %}
       </li>
@@ -54,4 +53,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}<script src="{% static 'studio/js/builder.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script type="module" src="{% static 'studio/js/builder.js' %}"></script>{% endblock %}

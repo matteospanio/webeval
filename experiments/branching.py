@@ -20,6 +20,7 @@ not_answered``. This module is pure (no Django/model imports) so both
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Iterable
 
 OPERATORS = {
@@ -44,6 +45,67 @@ def _is_answered(value: Any) -> bool:
     return value is not None and value != "" and value != [] and value != {}
 
 
+# The numeric-literal grammar BOTH engines share: plain decimal / scientific
+# notation only. Python's float() additionally accepts "inf"/"nan"/"1_0" and
+# JS's Number() accepts "0x10" — restricting both to this regex keeps their
+# comparisons identical by construction.
+_NUMERIC_RE = re.compile(r"^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$")
+
+
+def _to_number(x: Any) -> float | None:
+    """Parse ``x`` under the shared numeric grammar (None = not numeric)."""
+    if isinstance(x, bool):
+        return None
+    if isinstance(x, (int, float)):
+        return float(x)
+    if isinstance(x, str) and _NUMERIC_RE.match(x.strip()):
+        return float(x)
+    return None
+
+
+def _to_str(x: Any) -> str:
+    # Mirror JS String(): booleans stringify lowercase.
+    if isinstance(x, bool):
+        return "true" if x else "false"
+    return str(x)
+
+
+def _loose_eq(a: Any, b: Any) -> bool:
+    """Type-tolerant equality shared with the client-side mirror.
+
+    A rating stored as the int ``3`` matches a rule value authored as ``"3"``
+    (and vice versa): numbers compare numerically whenever both sides parse
+    under the shared grammar, everything else falls back to string equality.
+    Lists compare element-wise loose (checkbox answers are strings in the DOM
+    but may be typed in an authored rule). The same semantics live in
+    ``survey/js/branching.js`` (looseEq) — change the two together.
+    """
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_loose_eq(x, y) for x, y in zip(a, b))
+    if isinstance(a, (list, dict)) or isinstance(b, (list, dict)):
+        return a == b
+    if a is None or b is None:
+        return a == b
+    na, nb = _to_number(a), _to_number(b)
+    if na is not None and nb is not None:
+        return na == nb
+    return _to_str(a) == _to_str(b)
+
+
+def _membership(ans: Any, target: Any) -> bool:
+    """``in``/``nin`` membership: lists test loose element equality, a string
+    target tests substring membership of a *scalar* answer (an array answer is
+    never "in" a string — mirrors the JS guard), anything else is an empty
+    collection."""
+    if isinstance(target, list):
+        return any(_loose_eq(ans, item) for item in target)
+    if isinstance(target, str):
+        if isinstance(ans, (list, dict)):
+            return False
+        return _to_str(ans) in target
+    return False
+
+
 def _eval_clause(clause: dict, answers: dict[int, Any]) -> bool:
     qid = clause.get("question")
     op = clause.get("op")
@@ -60,19 +122,25 @@ def _eval_clause(clause: dict, answers: dict[int, Any]) -> bool:
 
     try:
         if op == "eq":
-            return ans == target
+            return _loose_eq(ans, target)
         if op == "ne":
-            return ans != target
+            return not _loose_eq(ans, target)
         if op == "in":
-            return ans in (target or [])
+            return _membership(ans, target)
         if op == "nin":
-            return ans not in (target or [])
+            return not _membership(ans, target)
         if op == "contains":
-            if isinstance(ans, (list, str, dict)):
+            if isinstance(ans, list):
+                return any(_loose_eq(item, target) for item in ans)
+            if isinstance(ans, dict):
                 return target in ans
-            return False
+            # Scalar answers coerce to string on both sides, so a rating
+            # stored as int 35 still "contains" the value "5".
+            return _to_str(target) in _to_str(ans)
         if op in {"gt", "lt", "gte", "lte"}:
-            a, b = float(ans), float(target)
+            a, b = _to_number(ans), _to_number(target)
+            if a is None or b is None:
+                return False
             return {
                 "gt": a > b,
                 "lt": a < b,

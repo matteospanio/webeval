@@ -25,7 +25,7 @@ from .components import (
     get_question_component,
     is_question_component,
 )
-from .models import Question
+from .models import Question, QuestionTemplate
 
 
 class QuestionAdminForm(forms.ModelForm):
@@ -353,3 +353,25 @@ class QuestionAdminForm(forms.ModelForm):
             self.instance.validate_unique()
         except ValidationError as e:
             self._update_errors(e)
+
+
+class QuestionTemplateAdminForm(forms.ModelForm):
+    """Question-bank template form: same type dropdown as questions.
+
+    The stock ModelForm only offers ``Question.Type.choices``, so a template
+    saved from a plugin-type question (via "Save to my question bank") would
+    render unselected and refuse to save. Mirror ``QuestionAdminForm`` by
+    appending every registered component to the choices.
+    """
+
+    class Meta:
+        model = QuestionTemplate
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        extra = [
+            (c.type, f"{c.label} (plugin)") for c in available_question_components()
+        ]
+        if extra and "type" in self.fields:
+            self.fields["type"].choices = list(self.fields["type"].choices) + extra

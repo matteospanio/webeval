@@ -67,3 +67,44 @@ def test_clean_blocks_preview_when_not_walkable():
     exp.state = Experiment.State.TEST
     with pytest.raises(ValidationError):
         exp.full_clean()
+
+
+def test_unregistered_strategy_blocks_activation():
+    exp = _complete_draft(assignment_strategy="does_not_exist")
+    assert any("not a registered standard strategy" in p for p in readiness_problems(exp))
+
+
+def test_pairwise_strategy_on_standard_study_blocks_activation():
+    # The admin dropdown offers both registries' names for the one field; a
+    # cross-mode pick must not silently fall back to balanced_random.
+    exp = _complete_draft(assignment_strategy="pairwise_balanced")
+    assert any("not a registered standard strategy" in p for p in readiness_problems(exp))
+
+
+def test_registered_strategy_is_fine():
+    exp = _complete_draft(assignment_strategy="counterbalanced")
+    assert readiness_problems(exp) == []
+
+
+def test_unrenderable_question_type_blocks_activation():
+    from experiments.models import Question
+
+    exp = _complete_draft()
+    Question.objects.create(
+        experiment=exp,
+        section=Question.Section.STIMULUS,
+        type="gone_plugin",
+        prompt="Orphaned plugin question",
+        config={},
+    )
+    assert any("not installed on this server" in p for p in readiness_problems(exp))
+
+
+def test_pairwise_study_on_model_default_strategy_is_fine():
+    # The model default is the standard-mode name "balanced_random"; on a
+    # pairwise study the runtime maps it to the pairwise default, so leaving
+    # it untouched must not block activation.
+    exp = _complete_draft(mode=Experiment.Mode.PAIRWISE)
+    TextStimulusFactory(condition=exp.conditions.first())  # pairwise needs >= 2
+    assert exp.assignment_strategy == "balanced_random"
+    assert not any("strategy" in p.lower() for p in readiness_problems(exp))

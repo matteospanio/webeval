@@ -1328,6 +1328,19 @@ class QuestionTemplate(models.Model):
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
 
+    def clean_fields(self, exclude=None):
+        # Accept a registered plugin component's type alongside the built-in
+        # Type.choices (mirrors Question.clean_fields) — the bank receives
+        # plugin questions via "Save to my question bank", so it must be able
+        # to validate and re-edit them too.
+        from experiments.components import is_question_component
+
+        exclude = set(exclude or ())
+        valid = {value for value, _ in Question.Type.choices}
+        if self.type and (self.type in valid or is_question_component(self.type)):
+            exclude.add("type")
+        super().clean_fields(exclude=exclude)
+
     def clean(self):
         super().clean()
         _validate_question_config(self.type, self.config or {})

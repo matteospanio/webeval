@@ -1,82 +1,75 @@
-// Track how long the participant actually listened to a stimulus and POST
-// the cumulative duration back to the server. We post on `pause` / `ended`
-// and again on `beforeunload` so refreshing or closing the tab doesn't
-// lose the data.
-(function () {
-  "use strict";
+// Track how long the participant actually played each tracked media element
+// and report the cumulative total back to the server. One module covers both
+// flows: the single-stimulus page (one <audio> or <video> tagged with
+// data-listen-endpoint) and the pairwise page (left/right/prompt players,
+// each additionally tagged with data-listen-side). The HTMLMediaElement API
+// is identical for <audio> and <video>, so the same accumulation works for
+// both. The server stores max(stored, reported), so repeatedly flushing the
+// running total is idempotent.
 
-  // Track the first media element (audio or video) that opts in via a
-  // data-listen-endpoint attribute. The HTMLMediaElement API is identical for
-  // <audio> and <video>, so the same accumulation logic works for both.
-  const audio = document.querySelector("[data-listen-endpoint]");
-  if (!audio) {
-    return;
-  }
-  const endpoint = audio.dataset.listenEndpoint;
-  const csrf = audio.dataset.csrfToken;
-  if (!endpoint) {
-    return;
-  }
+const trackMedia = (media) => {
+  const { listenEndpoint: endpoint, listenSide: side, csrfToken: csrf } = media.dataset;
+  if (!endpoint) return;
 
   let totalMs = 0;
   let lastTime = 0;
   let playing = false;
 
-  audio.addEventListener("play", function () {
+  media.addEventListener("play", () => {
     playing = true;
-    lastTime = audio.currentTime;
+    lastTime = media.currentTime;
   });
 
-  audio.addEventListener("timeupdate", function () {
-    if (!playing) {
-      return;
-    }
-    const now = audio.currentTime;
-    const delta = now - lastTime;
+  media.addEventListener("timeupdate", () => {
+    if (!playing) return;
+    const delta = media.currentTime - lastTime;
     // Guard against seeks producing negative or huge deltas.
-    if (delta > 0 && delta < 1.5) {
-      totalMs += delta * 1000;
-    }
-    lastTime = now;
+    if (delta > 0 && delta < 1.5) totalMs += delta * 1000;
+    lastTime = media.currentTime;
   });
 
-  audio.addEventListener("pause", function () {
-    playing = false;
-    report();
-  });
-
-  audio.addEventListener("ended", function () {
-    playing = false;
-    report();
-  });
-
-  window.addEventListener("beforeunload", report);
-
-  function report() {
-    if (totalMs <= 0) {
-      return;
-    }
-    const payload = JSON.stringify({ duration_ms: Math.round(totalMs) });
+  const report = () => {
+    if (totalMs <= 0) return;
+    const body = { duration_ms: Math.round(totalMs) };
+    if (side) body.side = side;
+    const payload = JSON.stringify(body);
+    // sendBeacon is the transport that survives page unload (the endpoint is
+    // csrf-exempt: it is scoped to the participant's session cookie and only
+    // ever raises the stored maximum). Fall back to a keepalive fetch when
+    // the beacon is unavailable or refuses to queue.
     try {
-      if (navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(endpoint, blob);
+      if (navigator.sendBeacon?.(endpoint, new Blob([payload], { type: "application/json" }))) {
         return;
       }
-    } catch (e) {
+    } catch {
       /* fall through to fetch */
     }
     fetch(endpoint, {
       method: "POST",
       credentials: "same-origin",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": csrf,
-      },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
       body: payload,
       keepalive: true,
-    }).catch(function () {
+    }).catch(() => {
       /* swallow — best-effort */
     });
-  }
-})();
+  };
+
+  const stop = () => {
+    playing = false;
+    report();
+  };
+  media.addEventListener("pause", stop);
+  media.addEventListener("ended", stop);
+
+  // beforeunload alone is unreliable on mobile (iOS Safari may never fire it,
+  // and backgrounded tabs are killed without it); visibilitychange → hidden
+  // and pagehide are the dependable page-lifecycle signals.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") report();
+  });
+  window.addEventListener("pagehide", report);
+  window.addEventListener("beforeunload", report);
+};
+
+document.querySelectorAll("[data-listen-endpoint]").forEach(trackMedia);

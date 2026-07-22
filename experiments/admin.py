@@ -39,7 +39,7 @@ from .csv_exports import (
 )
 from .data_ops import purge_participant_data
 from .exports import build_experiment_archive
-from .forms import QuestionAdminForm
+from .forms import QuestionAdminForm, QuestionTemplateAdminForm
 from .imports import import_experiment_archive
 from .models import (
     Condition,
@@ -1031,6 +1031,7 @@ class QuestionTemplateAdmin(UnfoldModelAdmin):
     """The reusable question bank. Each user sees their own templates plus any
     shared (owner-less) ones; superusers see everything."""
 
+    form = QuestionTemplateAdminForm
     list_display = ("name", "owner", "section", "type", "required", "created_at")
     list_filter = ("section", "type")
     search_fields = ("name", "prompt")

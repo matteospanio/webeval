@@ -13,6 +13,7 @@ only the answers on the current page.
 from __future__ import annotations
 
 import json
+import logging
 import random
 import secrets
 import uuid
@@ -31,6 +32,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods, require_POST
 
 from experiments.assignment import (
@@ -38,7 +40,11 @@ from experiments.assignment import (
     get_pairwise_strategy,
     get_strategy,
 )
-from experiments.branching import evaluate_condition, is_visible
+from experiments.branching import (
+    evaluate_condition,
+    is_visible,
+    referenced_question_ids,
+)
 from experiments.components import get_question_component, is_question_component
 from experiments.models import (
     Experiment,
@@ -63,6 +69,8 @@ from .models import (
     StimulusAssignment,
     SurveyEvent,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # --- helpers ---------------------------------------------------------------
@@ -271,6 +279,36 @@ def _visible_with_submitted(request, page_questions, stored):
         if answered and error is None:
             eval_answers[q.pk] = value
     return [q for q in page_questions if is_visible(q, eval_answers)]
+
+
+def _renderable_questions(page_questions, stored):
+    """Page questions to render on a GET: the currently-visible ones plus
+    *latent* dependents — questions whose ``visible_if`` fails right now but
+    references only controllers on THIS page, so answering the controller can
+    reveal them without a round-trip. Latent questions are annotated with
+    ``q.latent = True`` and rendered ``hidden disabled`` (a disabled fieldset
+    is skipped by browser validation and never submits), which
+    ``survey/js/branching.js`` toggles live; without JS the POST-side
+    ``_visible_with_submitted`` recheck stays authoritative and reveals the
+    dependent on the error re-render."""
+    renderable = []
+    # Controllers always precede their dependents (validated: same section,
+    # strictly lower sort_order), so accumulating rendered ids in order lets a
+    # latent question depend on another latent one (chained reveal). A
+    # dependent whose controller is NOT rendered stays dropped — otherwise
+    # branching.js would see an off-page controller and force-show it.
+    rendered_ids = set()
+    for q in page_questions:
+        if is_visible(q, stored):
+            q.latent = False
+        else:
+            refs = referenced_question_ids(q.visible_if or {})
+            if not refs or not all(ref in rendered_ids for ref in refs):
+                continue
+            q.latent = True
+        renderable.append(q)
+        rendered_ids.add(q.pk)
+    return renderable
 
 
 def _next_renderable_stimulus_page(session, assignments, pages) -> str:
@@ -787,7 +825,7 @@ def screening(request, slug: str):
     session.save(update_fields=["screening_page_index"])
     page_questions = pages[session.screening_page_index]
     stored = _answers_for_section(session, Question.Section.SCREENING)
-    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    visible_questions = _renderable_questions(page_questions, stored)
     is_last_page = session.screening_page_index == len(pages) - 1
     ctx = _base_context(experiment, session)
     ctx.update(
@@ -878,6 +916,14 @@ def _build_assignments(session: ParticipantSession) -> None:
     try:
         strategy = get_strategy(experiment.assignment_strategy)
     except UnknownStrategyError:
+        # Never block a live participant, but leave a trace: falling back
+        # silently would swap the study design without anyone noticing.
+        logger.warning(
+            "Experiment %s: unknown assignment strategy %r — falling back "
+            "to balanced_random.",
+            experiment.slug,
+            experiment.assignment_strategy,
+        )
         strategy = get_strategy("balanced_random")
     counts = _fetch_counts(experiment)
     # Ordinal of this participant among those already assigned — lets the
@@ -1029,7 +1075,7 @@ def play(request, slug: str):
     assignment = assignments[session.current_assignment_index]
     page_questions = pages[session.current_page_index]
     stored = _answers_for_stimulus(session, assignment.stimulus)
-    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    visible_questions = _renderable_questions(page_questions, stored)
     is_last_page = (
         session.current_assignment_index == len(assignments) - 1
         and session.current_page_index == len(pages) - 1
@@ -1045,6 +1091,8 @@ def play(request, slug: str):
             "has_more_after_stimuli": _ordered_section_questions(
                 experiment, Question.Section.DEMOGRAPHIC
             ),
+            # Latent questions count too: if branching.js reveals one that
+            # wants the stimulus prompt, the prompt block must already exist.
             "show_prompt": any(q.show_prompt for q in visible_questions),
             "resume_url": _resume_url(request, experiment, session),
             "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
@@ -1171,6 +1219,16 @@ def _build_pair_assignments(session: ParticipantSession) -> None:
     try:
         strategy = get_pairwise_strategy(session.experiment.assignment_strategy)
     except UnknownStrategyError:
+        # "balanced_random" is the untouched model default on a pairwise
+        # study — mapping it to the pairwise default is expected, not a
+        # misconfiguration worth logging on every session.
+        if session.experiment.assignment_strategy != "balanced_random":
+            logger.warning(
+                "Experiment %s: unknown pairwise strategy %r — falling back "
+                "to pairwise_balanced.",
+                session.experiment.slug,
+                session.experiment.assignment_strategy,
+            )
         strategy = get_pairwise_strategy("pairwise_balanced")
     pair_counts = _fetch_pair_counts(session.experiment)
     stimulus_counts = _fetch_stimulus_counts(session.experiment)
@@ -1366,6 +1424,12 @@ def _collect_pairwise_answers(
 # --- listen duration endpoint ----------------------------------------------
 
 
+# csrf_exempt: the audio tracker's primary transport is navigator.sendBeacon,
+# which cannot carry the X-CSRFToken header (with CSRF enforced every beacon
+# would 403 and listen durations would silently stay 0). Exempting is safe
+# here: the endpoint is scoped to the participant's own session cookie, takes
+# no sensitive action, and only ever raises the stored maximum.
+@csrf_exempt
 @require_POST
 def record_listen(request, slug: str, assignment_id: int):
     experiment, session = _load_session(request, slug)
@@ -1388,6 +1452,8 @@ def record_listen(request, slug: str, assignment_id: int):
     return JsonResponse({"ok": True, "listen_duration_ms": assignment.listen_duration_ms})
 
 
+# csrf_exempt for the same reason as record_listen (sendBeacon transport).
+@csrf_exempt
 @require_POST
 def record_listen_pair(request, slug: str, pair_id: int):
     experiment, session = _load_session(request, slug)
@@ -1475,7 +1541,7 @@ def demographics(request, slug: str):
     session.save(update_fields=["demographic_page_index"])
     page_questions = pages[session.demographic_page_index]
     stored = _answers_for_demographics(session)
-    visible_questions = [q for q in page_questions if is_visible(q, stored)]
+    visible_questions = _renderable_questions(page_questions, stored)
     is_last_page = session.demographic_page_index == len(pages) - 1
     ctx = _base_context(experiment, session)
     ctx.update(
