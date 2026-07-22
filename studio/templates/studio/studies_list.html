@@ -5,13 +5,19 @@
   <h1>My studies</h1>
   <p>Studies you own or collaborate on.</p>
 </hgroup>
-<p>
-  <a href="{% url 'studio:study_create' %}" role="button">+ New study</a>
-  {% if rows %}<a href="{% url 'studio:compare' %}" role="button" class="secondary outline">Compare studies</a>
-  <a href="{% url 'studio:dsr' %}" role="button" class="secondary outline">Data-subject request</a>{% endif %}
-</p>
+
+<div class="page-actions">
+  <a href="{% url 'studio:study_create' %}" class="we-btn we-btn-primary">+ New study</a>
+  <span class="spacer"></span>
+  <form method="get" class="search-form" role="search">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search studies…" aria-label="Search studies">
+    <button type="submit" class="we-btn">Search</button>
+  </form>
+</div>
+
 {% if rows %}
-<table>
+<div class="we-table-scroll">
+<table class="we-table">
   <thead>
     <tr><th>Name</th><th>State</th><th>Mode</th><th>Your role</th><th>Owner</th></tr>
   </thead>
@@ -19,15 +25,24 @@
     {% for row in rows %}
     <tr>
       <td><a href="{% url 'studio:study_overview' slug=row.experiment.slug %}">{{ row.experiment.name }}</a></td>
-      <td>{{ row.experiment.get_state_display }}</td>
+      <td><span class="we-badge we-badge-{{ row.experiment.state }}">{{ row.experiment.get_state_display }}</span></td>
       <td>{{ row.experiment.get_mode_display }}</td>
-      <td><span class="badge">{{ row.role }}</span></td>
+      <td><span class="we-badge we-badge-accent">{{ row.role|capfirst }}</span></td>
       <td>{{ row.experiment.owner.get_username|default:"—" }}</td>
     </tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
+{% elif query %}
+<div class="we-empty">
+  <p>No studies match “{{ query }}”.</p>
+  <a href="{% url 'studio:studies' %}" class="we-btn">Clear search</a>
+</div>
 {% else %}
-<p>You don't have any studies yet. Create one to get started.</p>
+<div class="we-empty">
+  <p>You don't have any studies yet.</p>
+  <a href="{% url 'studio:study_create' %}" class="we-btn we-btn-primary">Create your first study</a>
+</div>
 {% endif %}
 {% endblock %}

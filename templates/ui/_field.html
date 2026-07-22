@@ -1,0 +1,12 @@
+{% comment %}
+  The single form-field pattern. Usage:
+    {% include "ui/_field.html" with field=form.name %}
+  Renders label, widget, help text, and errors with consistent markup —
+  replaces every hand-built label and {{ form.as_p }} dump.
+{% endcomment %}
+<div class="we-field{% if field.errors %} we-field-error{% endif %}">
+  <label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %}{% else %} <small class="we-muted">(optional)</small>{% endif %}</label>
+  {{ field }}
+  {% if field.help_text %}<p class="we-help" id="{{ field.auto_id }}_help">{{ field.help_text|safe }}</p>{% endif %}
+  {% for error in field.errors %}<p class="we-error" role="alert">{{ error }}</p>{% endfor %}
+</div>

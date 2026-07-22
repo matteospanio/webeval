@@ -4,36 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}webeval studio{% endblock %}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-  <style>
-    .logout-form { display: inline; margin: 0; }
-    .logout-form button { padding: 0.25rem 0.75rem; margin: 0; }
-    .inline-form { display: inline; margin: 0; }
-    .inline-form button, .inline-form select { margin: 0; padding: 0.25rem 0.6rem; }
-    .messages { margin-bottom: 1rem; }
-    .message { padding: 0.5rem 1rem; margin-bottom: 0.5rem; }
-    .message.error { border-left: 4px solid var(--pico-del-color, #b3261e); }
-    .message.success { border-left: 4px solid var(--pico-ins-color, #1a7f37); }
-    .badge { font-size: 0.72rem; padding: 0.1rem 0.5rem; border-radius: 1rem;
-             background: var(--pico-secondary-background); vertical-align: middle; }
-  </style>
+  <link rel="stylesheet" href="{% static 'ui/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/base.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/components.css' %}">
+  <link rel="stylesheet" href="{% static 'studio/css/studio.css' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
-  <header class="container">
-    <nav>
-      <ul>
-        <li><strong><a href="{% url 'studio:studies' %}">webeval studio</a></strong></li>
-      </ul>
-      <ul>
+  <a class="skip-link we-visually-hidden-focusable" href="#main">Skip to main content</a>
+  <header class="we-topnav">
+    <nav class="we-topnav-inner" aria-label="Main">
+      <a class="we-topnav-brand" href="{% url 'studio:studies' %}">webeval studio</a>
+      <ul class="we-topnav-links">
         {% if user.is_authenticated %}
-        <li><a href="{% url 'studio:studies' %}">My studies</a></li>
-        <li><a href="{% url 'accounts:profile' %}">{{ user.get_username }}</a></li>
+        <li><a href="{% url 'studio:studies' %}"{% if request.resolver_match.url_name == 'studies' %} aria-current="page"{% endif %}>My studies</a></li>
+        <li><a href="{% url 'studio:compare' %}"{% if request.resolver_match.url_name == 'compare' %} aria-current="page"{% endif %}>Compare</a></li>
+        <li><a href="{% url 'studio:dsr' %}"{% if request.resolver_match.url_name == 'dsr' %} aria-current="page"{% endif %}>Data requests</a></li>
+        <li><a href="{% url 'accounts:profile' %}"{% if request.resolver_match.url_name == 'profile' %} aria-current="page"{% endif %}>{{ user.get_username }}</a></li>
         {% if user.is_staff %}<li><a href="{% url 'admin:index' %}">Admin</a></li>{% endif %}
         <li>
           <form method="post" action="{% url 'accounts:logout' %}" class="logout-form">
             {% csrf_token %}
-            <button type="submit" class="secondary outline">Log out</button>
+            <button type="submit" class="we-btn we-btn-ghost we-btn-sm">Log out</button>
           </form>
         </li>
         {% else %}
@@ -42,19 +34,15 @@
       </ul>
     </nav>
   </header>
-  <main class="container">
-    {% if messages %}
-    <div class="messages">
-      {% for message in messages %}
-      <article class="message {{ message.tags }}">{{ message }}</article>
-      {% endfor %}
-    </div>
-    {% endif %}
+  {% block subnav %}{% endblock %}
+  <main id="main" class="studio-main">
+    {% include "ui/_messages.html" %}
     {% block content %}{% endblock %}
   </main>
-  <footer class="container">
+  <footer class="studio-footer">
     <small>webeval — open-source human-evaluation platform</small>
   </footer>
+  <script type="module" src="{% static 'ui/ui.js' %}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

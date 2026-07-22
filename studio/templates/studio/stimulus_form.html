@@ -1,0 +1,56 @@
+{% extends "studio/base.html" %}
+{% block title %}{% if is_new %}Add stimulus{% else %}Edit stimulus{% endif %} · {{ experiment.name }}{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="stimuli" %}{% endblock %}
+{% block content %}
+<div class="we-card we-narrow">
+  <hgroup>
+    <h1>{% if is_new %}Add a stimulus{% else %}Edit stimulus{% endif %}</h1>
+    <p>Pick the kind first — only the matching content field is used.</p>
+  </hgroup>
+  {% if not is_draft %}
+  <div class="we-alert we-alert-warning" role="alert">This study is no longer a draft — changes cannot be saved.</div>
+  {% endif %}
+  {% if form.non_field_errors %}
+  <div class="we-alert we-alert-error" role="alert">{{ form.non_field_errors }}</div>
+  {% endif %}
+  <form method="post" enctype="multipart/form-data" id="stimulus-form">
+    {% csrf_token %}
+    {% include "ui/_field.html" with field=form.condition %}
+    {% include "ui/_field.html" with field=form.kind %}
+    <div data-kind-field="audio">{% include "ui/_field.html" with field=form.audio %}</div>
+    <div data-kind-field="image">{% include "ui/_field.html" with field=form.image %}</div>
+    <div data-kind-field="video">{% include "ui/_field.html" with field=form.video %}</div>
+    <div data-kind-field="text html">{% include "ui/_field.html" with field=form.text_body %}</div>
+    <div data-kind-field="embed">{% include "ui/_field.html" with field=form.embed_url %}</div>
+    {% include "ui/_field.html" with field=form.title %}
+    {% include "ui/_field.html" with field=form.description %}
+    {% include "ui/_field.html" with field=form.prompt_group %}
+    <div class="overview-grid">
+      {% include "ui/_field.html" with field=form.sort_order %}
+      <div class="we-field">
+        <label>{{ form.is_active }} Active (shown to participants)</label>
+      </div>
+    </div>
+    <div class="we-actions">
+      <button type="submit" class="we-btn we-btn-primary" {% if not is_draft %}disabled{% endif %}>
+        {% if is_new %}Create stimulus{% else %}Save changes{% endif %}
+      </button>
+      <a href="{% url 'studio:stimuli' slug=experiment.slug %}" class="we-btn we-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+<script type="module">
+  // Progressive enhancement: show only the content field matching the chosen
+  // kind. Without JS every field stays visible (the server validates anyway).
+  const form = document.getElementById("stimulus-form");
+  const kind = form.querySelector('select[name="kind"]');
+  const rows = form.querySelectorAll("[data-kind-field]");
+  const apply = () => {
+    rows.forEach((row) => {
+      row.hidden = !row.dataset.kindField.split(" ").includes(kind.value);
+    });
+  };
+  kind.addEventListener("change", apply);
+  apply();
+</script>
+{% endblock %}

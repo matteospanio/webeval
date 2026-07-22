@@ -1,0 +1,27 @@
+{% comment %}
+  Study sub-navigation. Include from every per-study page with:
+  experiment, nav_can_edit, nav_can_manage in context (via _study_nav_context)
+  and active_tab set to one of: overview, build, stimuli, access, webhooks, power.
+{% endcomment %}
+<nav class="we-subnav" aria-label="Study sections">
+  <span class="we-subnav-title">
+    {{ experiment.name }}
+    <span class="we-badge we-badge-{{ experiment.state }}">{{ experiment.get_state_display }}</span>
+  </span>
+  <a class="we-subnav-tab" {% if active_tab == "overview" %}aria-current="page"{% endif %}
+     href="{% url 'studio:study_overview' slug=experiment.slug %}">Overview</a>
+  {% if nav_can_edit %}
+  <a class="we-subnav-tab" {% if active_tab == "build" %}aria-current="page"{% endif %}
+     href="{% url 'studio:study_build' slug=experiment.slug %}">Questions</a>
+  <a class="we-subnav-tab" {% if active_tab == "stimuli" %}aria-current="page"{% endif %}
+     href="{% url 'studio:stimuli' slug=experiment.slug %}">Stimuli</a>
+  {% endif %}
+  {% if nav_can_manage %}
+  <a class="we-subnav-tab" {% if active_tab == "access" %}aria-current="page"{% endif %}
+     href="{% url 'studio:study_access' slug=experiment.slug %}">Access</a>
+  <a class="we-subnav-tab" {% if active_tab == "webhooks" %}aria-current="page"{% endif %}
+     href="{% url 'studio:study_webhooks' slug=experiment.slug %}">Webhooks</a>
+  {% endif %}
+  <a class="we-subnav-tab" {% if active_tab == "power" %}aria-current="page"{% endif %}
+     href="{% url 'studio:power_analysis' slug=experiment.slug %}">Power</a>
+</nav>

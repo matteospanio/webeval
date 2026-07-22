@@ -2,12 +2,11 @@
 
 Server-rendered, permission-gated views for studies a user owns or
 collaborates on. The heavy lifting (stats, charts, CSV, ZIP) is delegated to
-the existing ``experiments`` modules — this app only adds discovery, creation,
-access management and a non-admin home for results.
-
-Structural authoring of conditions/stimuli/questions still happens in the
-(ownership-gated) Django admin and is linked out from the study overview for
-staff users; a native studio editor is a later epic.
+the existing ``experiments`` modules — this app adds discovery, creation,
+authoring (questions via the drag-&-drop builder, conditions & stimuli via
+the stimuli pages), the study lifecycle (test/activate/close), access
+management, and a non-admin home for results. The Django admin remains a
+staff-only power surface; researchers never need it.
 """
 from __future__ import annotations
 
@@ -60,7 +59,7 @@ from experiments.stats import (
 from survey.models import ParticipantSession, Response
 from survey.views import _withdraw_data
 
-from .forms import StudyCreateForm
+from .forms import ConditionForm, StimulusForm, StudyCreateForm
 
 User = get_user_model()
 
@@ -72,6 +71,16 @@ def _experiment_or_404(request, slug):
     if not can_view(request.user, experiment):
         raise Http404
     return experiment
+
+
+def _study_nav_context(request, experiment) -> dict:
+    """Context every per-study page needs for the study sub-navigation
+    (``studio/_study_nav.html``): which tabs the user may see."""
+    return {
+        "experiment": experiment,
+        "nav_can_edit": can_edit(request.user, experiment),
+        "nav_can_manage": can_manage(request.user, experiment),
+    }
 
 
 def _unique_slug(name: str) -> str:
@@ -100,11 +109,17 @@ def _visible_experiments(user):
 
 @login_required
 def studies(request):
+    experiments = _visible_experiments(request.user)
+    query = (request.GET.get("q") or "").strip()
+    if query:
+        experiments = experiments.filter(name__icontains=query)
     rows = [
         {"experiment": exp, "role": role_for(request.user, exp)}
-        for exp in _visible_experiments(request.user)
+        for exp in experiments
     ]
-    return render(request, "studio/studies_list.html", {"rows": rows})
+    return render(
+        request, "studio/studies_list.html", {"rows": rows, "query": query}
+    )
 
 
 def _dsr_export(request, identifier, sessions):
@@ -250,7 +265,7 @@ def study_overview(request, slug):
     role = role_for(request.user, experiment)
     can_edit = role in (Role.OWNER, Role.EDITOR)
     context = {
-        "experiment": experiment,
+        **_study_nav_context(request, experiment),
         "role": role,
         "can_manage": can_manage(request.user, experiment),
         "can_edit": can_edit,
@@ -297,6 +312,306 @@ def study_clone(request, slug):
         "Edit it, then activate when ready.",
     )
     return redirect("studio:study_overview", slug=clone.slug)
+
+
+# --- study lifecycle ---------------------------------------------------------
+
+# action name → (allowed current states, target state)
+_STATE_ACTIONS = {
+    "test": ({Experiment.State.DRAFT}, Experiment.State.TEST),
+    "activate": (
+        {Experiment.State.DRAFT, Experiment.State.TEST},
+        Experiment.State.ACTIVE,
+    ),
+    "close": (
+        {Experiment.State.TEST, Experiment.State.ACTIVE},
+        Experiment.State.CLOSED,
+    ),
+    "reopen": ({Experiment.State.CLOSED}, Experiment.State.ACTIVE),
+    "draft": ({Experiment.State.TEST}, Experiment.State.DRAFT),
+}
+
+
+def _activate_from_test(request, experiment):
+    """TEST→ACTIVE with the purge-or-promote choice, mirroring the admin
+    activate view: preview data is either purged or promoted into the real
+    dataset, and both the purge and the activation are audited."""
+    from experiments.data_ops import purge_participant_data
+
+    purge = request.POST.get("test_data") == "purge"
+    if purge:
+        purged = purge_participant_data(experiment)
+        services.record_audit(
+            experiment, AuditEvent.Action.PURGE, actor=request.user,
+            target="test-phase data", request=request, sessions=purged.sessions,
+        )
+    else:
+        ParticipantSession.objects.filter(
+            experiment=experiment, is_preview=True
+        ).update(is_preview=False)
+    experiment.state = Experiment.State.ACTIVE
+    # The confirm page the user just submitted IS the confirmation the model
+    # guard asks for (same bypass the admin activate view uses).
+    experiment._activate_confirmed = True
+    experiment.save(update_fields=["state"])
+    services.record_audit(
+        experiment, AuditEvent.Action.ACTIVATE, actor=request.user,
+        target=experiment.slug, request=request,
+    )
+    if purge:
+        messages.success(
+            request,
+            f"Activated '{experiment.name}' and removed the test-phase data "
+            f"({purged.sessions} session(s)).",
+        )
+    else:
+        messages.success(
+            request, f"Activated '{experiment.name}' — test-phase data was kept."
+        )
+
+
+@login_required
+def study_state_change(request, slug, action):
+    """Confirm + apply a lifecycle transition (test/activate/close/reopen/
+    draft) right in the studio — no Django admin required."""
+    experiment = _experiment_or_404(request, slug)
+    if not can_manage(request.user, experiment):
+        raise PermissionDenied
+    if action not in _STATE_ACTIONS:
+        raise Http404
+    allowed_states, target = _STATE_ACTIONS[action]
+    if experiment.state not in allowed_states:
+        messages.warning(
+            request,
+            f"'{experiment.name}' is {experiment.get_state_display().lower()} — "
+            f"the '{action}' action does not apply.",
+        )
+        return redirect("studio:study_overview", slug=slug)
+
+    problems = (
+        readiness_problems(experiment)
+        if target in (Experiment.State.TEST, Experiment.State.ACTIVE)
+        else []
+    )
+    from_test = experiment.state == Experiment.State.TEST
+
+    if request.method == "POST":
+        if target == Experiment.State.ACTIVE and problems:
+            messages.error(
+                request, "Cannot activate yet — " + " ".join(problems)
+            )
+            return redirect(request.path)
+        if action == "activate" and from_test:
+            _activate_from_test(request, experiment)
+            return redirect("studio:study_overview", slug=slug)
+        old_state = experiment.state
+        experiment.state = target
+        try:
+            # The model gates (walkable for →TEST, readiness for →ACTIVE,
+            # allowed transitions) stay the enforcement of record.
+            experiment.full_clean()
+        except ValidationError as exc:
+            experiment.state = old_state
+            for msgs in exc.message_dict.values():
+                for msg in msgs:
+                    messages.error(request, msg)
+            return redirect(request.path)
+        experiment.save(update_fields=["state"])
+        services.record_audit(
+            experiment, AuditEvent.Action.EDIT, actor=request.user,
+            target="state", request=request,
+            from_state=old_state, to_state=target,
+        )
+        messages.success(
+            request,
+            f"'{experiment.name}' is now {experiment.get_state_display().lower()}.",
+        )
+        return redirect("studio:study_overview", slug=slug)
+
+    return render(
+        request,
+        "studio/state_confirm.html",
+        {
+            **_study_nav_context(request, experiment),
+            "action": action,
+            "target_state": target,
+            "target_display": Experiment.State(target).label,
+            "readiness_problems": problems,
+            "counts": experiment_counts(experiment),
+            "offer_test_data_choice": action == "activate" and from_test,
+        },
+    )
+
+
+# --- conditions & stimuli authoring ------------------------------------------
+
+
+def _editable_study_or_404(request, slug):
+    experiment = _experiment_or_404(request, slug)
+    if not can_edit(request.user, experiment):
+        raise PermissionDenied
+    return experiment
+
+
+def _require_draft(request, experiment) -> bool:
+    """Structural edits are draft-only (same lock as the question builder);
+    returns False (with a message) when the study has left draft."""
+    if experiment.state == Experiment.State.DRAFT:
+        return True
+    messages.error(
+        request,
+        "Conditions and stimuli can only be edited while the study is a draft.",
+    )
+    return False
+
+
+@login_required
+def stimuli_overview(request, slug):
+    experiment = _editable_study_or_404(request, slug)
+    conditions = [
+        {"condition": cond, "stimuli": list(cond.stimuli.order_by("sort_order", "id"))}
+        for cond in experiment.conditions.order_by("name")
+    ]
+    return render(
+        request,
+        "studio/stimuli_overview.html",
+        {
+            **_study_nav_context(request, experiment),
+            "conditions": conditions,
+            "is_draft": experiment.state == Experiment.State.DRAFT,
+            "readiness_problems": readiness_problems(experiment),
+        },
+    )
+
+
+@login_required
+def condition_edit(request, slug, pk=None):
+    from experiments.models import Condition
+
+    experiment = _editable_study_or_404(request, slug)
+    instance = (
+        get_object_or_404(Condition, pk=pk, experiment=experiment)
+        if pk
+        else Condition(experiment=experiment)
+    )
+    if request.method == "POST":
+        if not _require_draft(request, experiment):
+            return redirect("studio:stimuli", slug=slug)
+        form = ConditionForm(request.POST, instance=instance)
+        if form.is_valid():
+            form.save()
+            services.record_audit(
+                experiment, AuditEvent.Action.EDIT, actor=request.user,
+                target="condition", request=request,
+                name=form.instance.name, created=pk is None,
+            )
+            messages.success(
+                request,
+                f"Condition '{form.instance.name}' "
+                f"{'created' if pk is None else 'updated'}.",
+            )
+            return redirect("studio:stimuli", slug=slug)
+    else:
+        form = ConditionForm(instance=instance)
+    return render(
+        request,
+        "studio/condition_form.html",
+        {
+            **_study_nav_context(request, experiment),
+            "form": form,
+            "is_new": pk is None,
+            "is_draft": experiment.state == Experiment.State.DRAFT,
+        },
+    )
+
+
+@login_required
+def condition_delete(request, slug, pk):
+    from experiments.models import Condition
+
+    experiment = _editable_study_or_404(request, slug)
+    if request.method != "POST":
+        return redirect("studio:stimuli", slug=slug)
+    if not _require_draft(request, experiment):
+        return redirect("studio:stimuli", slug=slug)
+    condition = get_object_or_404(Condition, pk=pk, experiment=experiment)
+    name = condition.name
+    condition.delete()
+    services.record_audit(
+        experiment, AuditEvent.Action.EDIT, actor=request.user,
+        target="condition", request=request, name=name, deleted=True,
+    )
+    messages.success(request, f"Condition '{name}' and its stimuli were deleted.")
+    return redirect("studio:stimuli", slug=slug)
+
+
+@login_required
+def stimulus_edit(request, slug, pk=None):
+    from experiments.models import Stimulus
+
+    experiment = _editable_study_or_404(request, slug)
+    instance = (
+        get_object_or_404(Stimulus, pk=pk, condition__experiment=experiment)
+        if pk
+        else None
+    )
+    if request.method == "POST":
+        if not _require_draft(request, experiment):
+            return redirect("studio:stimuli", slug=slug)
+        form = StimulusForm(
+            request.POST, request.FILES, instance=instance, experiment=experiment
+        )
+        if form.is_valid():
+            form.save()
+            services.record_audit(
+                experiment, AuditEvent.Action.EDIT, actor=request.user,
+                target="stimulus", request=request,
+                title=form.instance.title or str(form.instance.pk),
+                kind=form.instance.kind, created=pk is None,
+            )
+            messages.success(
+                request,
+                f"Stimulus {'created' if pk is None else 'updated'}.",
+            )
+            return redirect("studio:stimuli", slug=slug)
+    else:
+        initial = {}
+        if pk is None:
+            if request.GET.get("condition"):
+                initial["condition"] = request.GET["condition"]
+            if request.GET.get("kind"):
+                initial["kind"] = request.GET["kind"]
+        form = StimulusForm(instance=instance, experiment=experiment, initial=initial)
+    return render(
+        request,
+        "studio/stimulus_form.html",
+        {
+            **_study_nav_context(request, experiment),
+            "form": form,
+            "is_new": pk is None,
+            "is_draft": experiment.state == Experiment.State.DRAFT,
+        },
+    )
+
+
+@login_required
+def stimulus_delete(request, slug, pk):
+    from experiments.models import Stimulus
+
+    experiment = _editable_study_or_404(request, slug)
+    if request.method != "POST":
+        return redirect("studio:stimuli", slug=slug)
+    if not _require_draft(request, experiment):
+        return redirect("studio:stimuli", slug=slug)
+    stimulus = get_object_or_404(Stimulus, pk=pk, condition__experiment=experiment)
+    title = stimulus.title or str(stimulus.pk)
+    stimulus.delete()
+    services.record_audit(
+        experiment, AuditEvent.Action.EDIT, actor=request.user,
+        target="stimulus", request=request, title=title, deleted=True,
+    )
+    messages.success(request, f"Stimulus '{title}' was deleted.")
+    return redirect("studio:stimuli", slug=slug)
 
 
 # --- drag-&-drop question builder ------------------------------------------
@@ -366,7 +681,7 @@ def study_build(request, slug):
         request,
         "studio/study_build.html",
         {
-            "experiment": experiment,
+            **_study_nav_context(request, experiment),
             "is_draft": experiment.state == Experiment.State.DRAFT,
             "questions": questions,
             "palette": _palette(),
@@ -505,7 +820,7 @@ def power_analysis(request, slug):
         request,
         "studio/power.html",
         {
-            "experiment": experiment,
+            **_study_nav_context(request, experiment),
             "manual": manual,
             "pilot": _pilot_power_rows(experiment, alpha, target),
         },
@@ -542,7 +857,7 @@ def study_webhooks(request, slug):
         request,
         "studio/study_webhooks.html",
         {
-            "experiment": experiment,
+            **_study_nav_context(request, experiment),
             "webhooks": list(experiment.webhooks.all()),
             "events": Webhook.Event.choices,
         },

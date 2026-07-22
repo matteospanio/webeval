@@ -3,7 +3,7 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
+  <article class="we-card we-narrow">
     <h1>Your data has been removed</h1>
     {% if already %}
     <p>This link is no longer active — your data may already have been removed.</p>
@@ -11,5 +11,6 @@
     <p>Your responses for <strong>{{ experiment.name }}</strong> have been deleted.
        Thank you for letting us know.</p>
     {% endif %}
+    <p class="we-muted"><small>You can close this tab now.</small></p>
   </article>
 {% endblock %}

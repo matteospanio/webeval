@@ -1,0 +1,269 @@
+/* webeval base: element defaults on top of tokens.css.
+ * Styles bare HTML so markdown-rendered researcher content (consent,
+ * instructions, prompts) looks right with no classes. Components live in
+ * components.css. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--we-font-sans);
+  font-size: var(--we-text-base);
+  line-height: var(--we-leading);
+  color: var(--we-text);
+  background: var(--we-bg);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  font-weight: 650;
+  margin: 0 0 var(--we-space-3);
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--we-text-2xl); }
+h2 { font-size: var(--we-text-xl); }
+h3 { font-size: var(--we-text-lg); }
+h4 { font-size: var(--we-text-base); }
+
+p {
+  margin: 0 0 var(--we-space-4);
+}
+
+hgroup {
+  margin-bottom: var(--we-space-5);
+}
+hgroup > :last-child {
+  color: var(--we-text-muted);
+  margin: 0;
+}
+hgroup h1,
+hgroup h2 {
+  margin-bottom: var(--we-space-1);
+}
+
+a {
+  color: var(--we-primary);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--we-primary) 40%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+small {
+  font-size: var(--we-text-sm);
+}
+
+ul,
+ol {
+  margin: 0 0 var(--we-space-4);
+  padding-left: 1.4em;
+}
+
+blockquote {
+  margin: 0 0 var(--we-space-4);
+  padding: var(--we-space-2) var(--we-space-4);
+  border-left: 3px solid var(--we-border-strong);
+  color: var(--we-text-muted);
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--we-font-mono);
+  font-size: 0.9em;
+}
+code {
+  background: var(--we-surface-2);
+  border: 1px solid var(--we-border);
+  border-radius: var(--we-radius-sm);
+  padding: 0.1em 0.35em;
+  overflow-wrap: anywhere;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--we-border);
+  margin: var(--we-space-5) 0;
+}
+
+img,
+video {
+  max-width: 100%;
+  height: auto;
+}
+
+figure {
+  margin: 0 0 var(--we-space-4);
+}
+
+/* --- forms ------------------------------------------------------------- */
+
+label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: var(--we-space-1);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="url"],
+input[type="search"],
+select,
+textarea {
+  width: 100%;
+  font: inherit;
+  color: var(--we-text);
+  background: var(--we-surface);
+  border: 1px solid var(--we-border-strong);
+  border-radius: var(--we-radius-sm);
+  padding: 0.5rem 0.7rem;
+  margin: 0;
+  transition: border-color 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  border-color: var(--we-primary);
+  box-shadow: var(--we-focus-ring);
+}
+input::placeholder,
+textarea::placeholder {
+  color: var(--we-text-faint);
+}
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin: 0 0.45rem 0 0;
+  accent-color: var(--we-primary);
+  vertical-align: -0.15rem;
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--we-primary);
+  margin: 0;
+}
+
+input[type="file"] {
+  font: inherit;
+  color: var(--we-text-muted);
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 var(--we-space-5);
+  min-width: 0;
+}
+
+legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--we-space-2);
+  max-width: 100%;
+}
+
+/* Neutral button look for every button (variants in components.css). */
+button,
+input[type="submit"] {
+  font: inherit;
+  font-weight: 500;
+  color: var(--we-text);
+  background: var(--we-surface);
+  border: 1px solid var(--we-border-strong);
+  border-radius: var(--we-radius-sm);
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.12s ease-out, border-color 0.12s ease-out;
+}
+button:hover:not(:disabled),
+input[type="submit"]:hover:not(:disabled) {
+  background: var(--we-surface-2);
+  border-color: var(--we-border-strong);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--we-focus-ring);
+  border-radius: var(--we-radius-sm);
+}
+
+/* --- tables ------------------------------------------------------------ */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--we-text-sm);
+}
+th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--we-text-muted);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 2px solid var(--we-border);
+  white-space: nowrap;
+}
+td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--we-border);
+  vertical-align: middle;
+}
+
+/* --- details / dialog --------------------------------------------------- */
+
+details {
+  margin-bottom: var(--we-space-4);
+}
+summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+summary:hover {
+  color: var(--we-primary);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--we-space-1) var(--we-space-4);
+  margin: 0 0 var(--we-space-4);
+}
+dl dt {
+  font-weight: 500;
+  color: var(--we-text-muted);
+}
+dl dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--we-primary) 25%, transparent);
+}

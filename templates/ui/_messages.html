@@ -1,0 +1,8 @@
+{% if messages %}
+<div class="messages">
+  {% for message in messages %}
+  <div class="we-alert{% if 'error' in message.tags %} we-alert-error{% elif 'success' in message.tags %} we-alert-success{% elif 'warning' in message.tags %} we-alert-warning{% else %} we-alert-info{% endif %}"
+       role="{% if 'error' in message.tags %}alert{% else %}status{% endif %}">{{ message }}</div>
+  {% endfor %}
+</div>
+{% endif %}

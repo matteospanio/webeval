@@ -476,6 +476,18 @@ def _page_elapsed_ms(request) -> int | None:
     return delta
 
 
+# Participant-facing name for each flow step, shown in the survey header so
+# people always know where they are (the flow stays forward-only).
+_STEP_LABELS = {
+    ParticipantSession.Step.CONSENT: "Consent",
+    ParticipantSession.Step.SCREENING: "Screening",
+    ParticipantSession.Step.INSTRUCTIONS: "Instructions",
+    ParticipantSession.Step.AUDIO_CHECK: "Audio check",
+    ParticipantSession.Step.STIMULI: "Questions",
+    ParticipantSession.Step.DEMOGRAPHICS: "About you",
+}
+
+
 def _base_context(experiment: Experiment, session: ParticipantSession | None) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "experiment": experiment,
@@ -486,8 +498,10 @@ def _base_context(experiment: Experiment, session: ParticipantSession | None) ->
     if session is not None:
         ctx["session"] = session
         ctx["progress_percent"] = _progress(experiment, session)
+        ctx["step_label"] = _STEP_LABELS.get(session.last_step)
     else:
         ctx["progress_percent"] = 0
+        ctx["step_label"] = _STEP_LABELS[ParticipantSession.Step.CONSENT]
     return ctx
 
 
@@ -808,7 +822,12 @@ def screening(request, slug: str):
             _annotate_submitted(request, visible_questions)
             ctx = _base_context(experiment, session)
             ctx.update(
-                {"page_questions": visible_questions, "is_last_page": is_last_page}
+                {
+                    "page_questions": visible_questions,
+                    "is_last_page": is_last_page,
+                    "page_number": session.screening_page_index + 1,
+                    "page_total": len(pages),
+                }
             )
             return render(request, "survey/screening.html", ctx, status=400)
         with transaction.atomic():
@@ -832,6 +851,8 @@ def screening(request, slug: str):
         {
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
+            "page_number": session.screening_page_index + 1,
+            "page_total": len(pages),
             "resume_url": _resume_url(request, experiment, session),
             "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
@@ -1094,6 +1115,10 @@ def play(request, slug: str):
             # Latent questions count too: if branching.js reveals one that
             # wants the stimulus prompt, the prompt block must already exist.
             "show_prompt": any(q.show_prompt for q in visible_questions),
+            "page_number": session.current_assignment_index * len(pages)
+            + session.current_page_index
+            + 1,
+            "page_total": len(assignments) * len(pages),
             "resume_url": _resume_url(request, experiment, session),
             "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }
@@ -1131,6 +1156,10 @@ def _save_page_answers(
                     and session.current_page_index == len(pages) - 1
                 ),
                 "show_prompt": any(q.show_prompt for q in visible_questions),
+                "page_number": session.current_assignment_index * len(pages)
+                + session.current_page_index
+                + 1,
+                "page_total": len(assignments) * len(pages),
             }
         )
         return render(request, "survey/play.html", ctx, status=400)
@@ -1338,6 +1367,9 @@ def pairwise_play(request, slug: str):
                 "has_demographics": has_demographics,
                 "pair_number": session.current_pair_index + 1,
                 "pairs_total": len(pairs),
+                "page_number": session.current_pair_index + 1,
+                "page_total": len(pairs),
+                "page_noun": "Comparison",
                 "show_prompt": any(q.show_prompt for q in questions),
             })
             return render(request, "survey/pairwise_play.html", ctx, status=400)
@@ -1368,6 +1400,9 @@ def pairwise_play(request, slug: str):
         "has_demographics": has_demographics,
         "pair_number": session.current_pair_index + 1,
         "pairs_total": len(pairs),
+        "page_number": session.current_pair_index + 1,
+        "page_total": len(pairs),
+        "page_noun": "Comparison",
         "show_prompt": any(q.show_prompt for q in questions),
     })
     return render(request, "survey/pairwise_play.html", ctx)
@@ -1520,7 +1555,12 @@ def demographics(request, slug: str):
             _annotate_submitted(request, visible_questions)
             ctx = _base_context(experiment, session)
             ctx.update(
-                {"page_questions": visible_questions, "is_last_page": is_last_page}
+                {
+                    "page_questions": visible_questions,
+                    "is_last_page": is_last_page,
+                    "page_number": session.demographic_page_index + 1,
+                    "page_total": len(pages),
+                }
             )
             return render(request, "survey/demographics.html", ctx, status=400)
         with transaction.atomic():
@@ -1548,6 +1588,8 @@ def demographics(request, slug: str):
         {
             "page_questions": visible_questions,
             "is_last_page": is_last_page,
+            "page_number": session.demographic_page_index + 1,
+            "page_total": len(pages),
             "resume_url": _resume_url(request, experiment, session),
             "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
         }

@@ -3,7 +3,7 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article style="max-width:32rem;margin:2rem auto;">
+  <article class="we-card we-narrow">
     {% if reason == "predecessor" %}
     <h1>Earlier phase required</h1>
     <p>This is a later phase of a multi-part study. Please complete
@@ -17,5 +17,6 @@
     {% else %}
     <h1>This phase isn't available</h1>
     {% endif %}
+    <p class="we-muted"><small>Keep your participant code — you'll need it to continue.</small></p>
   </article>
 {% endblock %}

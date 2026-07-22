@@ -1,0 +1,106 @@
+/* webeval design tokens. Single source of truth for both surfaces
+ * (participant survey + researcher studio) in light and dark.
+ *
+ * Per-study branding overrides exactly one variable: --we-primary
+ * (injected by templates/base.html). Every accent tint derives from it
+ * via color-mix, so a one-line override restyles the whole page.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* color — light */
+  --we-bg: #fafafa;
+  --we-surface: #ffffff;
+  --we-surface-2: #f4f4f5;
+  --we-border: #e4e4e7;
+  --we-border-strong: #d4d4d8;
+  --we-text: #18181b;
+  --we-text-muted: #52525b;
+  --we-text-faint: #a1a1aa;
+
+  --we-primary: #4f46e5;
+  --we-primary-contrast: #ffffff;
+  --we-primary-hover: color-mix(in srgb, var(--we-primary) 85%, black);
+  --we-primary-soft: color-mix(in srgb, var(--we-primary) 9%, var(--we-surface));
+  --we-primary-border: color-mix(in srgb, var(--we-primary) 35%, var(--we-border));
+
+  --we-danger: #dc2626;
+  --we-danger-soft: #fef2f2;
+  --we-success: #16a34a;
+  --we-success-soft: #f0fdf4;
+  --we-warning: #b45309;
+  --we-warning-soft: #fffbeb;
+
+  /* type */
+  --we-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --we-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --we-text-xs: 0.75rem;
+  --we-text-sm: 0.875rem;
+  --we-text-base: 1rem;
+  --we-text-lg: 1.125rem;
+  --we-text-xl: 1.375rem;
+  --we-text-2xl: 1.75rem;
+  --we-leading: 1.6;
+
+  /* space (4px grid) */
+  --we-space-1: 0.25rem;
+  --we-space-2: 0.5rem;
+  --we-space-3: 0.75rem;
+  --we-space-4: 1rem;
+  --we-space-5: 1.5rem;
+  --we-space-6: 2rem;
+  --we-space-7: 3rem;
+  --we-space-8: 4rem;
+
+  /* radius / shadow / z */
+  --we-radius-sm: 4px;
+  --we-radius-md: 8px;
+  --we-radius-lg: 12px;
+  --we-radius-full: 999px;
+  --we-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
+  --we-shadow-md: 0 2px 8px rgb(0 0 0 / 0.08);
+  --we-focus-ring: 0 0 0 3px color-mix(in srgb, var(--we-primary) 35%, transparent);
+  --we-z-nav: 100;
+  --we-z-tooltip: 200;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --we-bg: #111113;
+    --we-surface: #1a1a1e;
+    --we-surface-2: #232329;
+    --we-border: #2e2e35;
+    --we-border-strong: #3f3f46;
+    --we-text: #ededef;
+    --we-text-muted: #a1a1aa;
+    --we-text-faint: #6e6e76;
+
+    --we-primary: #818cf8;
+    --we-primary-contrast: #15151a;
+    --we-primary-hover: color-mix(in srgb, var(--we-primary) 85%, white);
+    --we-primary-soft: color-mix(in srgb, var(--we-primary) 14%, var(--we-surface));
+    --we-primary-border: color-mix(in srgb, var(--we-primary) 40%, var(--we-border));
+
+    --we-danger: #f87171;
+    --we-danger-soft: #2a1616;
+    --we-success: #4ade80;
+    --we-success-soft: #14261a;
+    --we-warning: #fbbf24;
+    --we-warning-soft: #2a2210;
+
+    --we-shadow-sm: none;
+    --we-shadow-md: 0 2px 8px rgb(0 0 0 / 0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

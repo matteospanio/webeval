@@ -1,0 +1,87 @@
+{% extends "studio/base.html" %}
+{% block title %}Stimuli · {{ experiment.name }}{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="stimuli" %}{% endblock %}
+{% block content %}
+<hgroup>
+  <h1>Conditions &amp; stimuli</h1>
+  <p>Each condition groups the stimuli of one model / system / treatment being compared.</p>
+</hgroup>
+
+{% if not is_draft %}
+<div class="we-alert we-alert-warning" role="status">
+  This study is <strong>{{ experiment.get_state_display|lower }}</strong> — conditions and
+  stimuli are read-only. Structural edits are only possible while a study is a draft.
+</div>
+{% endif %}
+
+{% if is_draft %}
+<div class="page-actions">
+  <a href="{% url 'studio:condition_add' slug=experiment.slug %}" class="we-btn we-btn-primary">+ Add condition</a>
+  {% if conditions %}<a href="{% url 'studio:stimulus_add' slug=experiment.slug %}" class="we-btn">+ Add stimulus</a>{% endif %}
+</div>
+{% endif %}
+
+{% for row in conditions %}
+<div class="we-card">
+  <div class="we-card-header">
+    <h2>{{ row.condition.name }}</h2>
+    <span class="we-actions" style="margin:0">
+      <span class="we-badge">{{ row.stimuli|length }} stimul{{ row.stimuli|length|pluralize:"us,i" }}</span>
+      {% if is_draft %}
+      <a href="{% url 'studio:stimulus_add' slug=experiment.slug %}?condition={{ row.condition.pk }}" class="we-btn we-btn-sm">+ Stimulus</a>
+      <a href="{% url 'studio:condition_edit' slug=experiment.slug pk=row.condition.pk %}" class="we-btn we-btn-sm">Edit</a>
+      <form method="post" class="inline-form"
+            action="{% url 'studio:condition_delete' slug=experiment.slug pk=row.condition.pk %}"
+            data-confirm="Delete condition '{{ row.condition.name }}' AND all of its stimuli?">
+        {% csrf_token %}
+        <button type="submit" class="we-btn we-btn-sm we-btn-danger">Delete</button>
+      </form>
+      {% endif %}
+    </span>
+  </div>
+  {% if row.condition.description %}<p class="we-muted">{{ row.condition.description }}</p>{% endif %}
+  {% if row.stimuli %}
+  <div class="we-table-scroll">
+  <table class="we-table">
+    <thead><tr><th>Title</th><th>Kind</th><th>Content</th><th>Prompt group</th><th>Active</th><th>Sort</th>{% if is_draft %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+      {% for stim in row.stimuli %}
+      <tr>
+        <td>{% if is_draft %}<a href="{% url 'studio:stimulus_edit' slug=experiment.slug pk=stim.pk %}">{{ stim.title|default:"(untitled)" }}</a>{% else %}{{ stim.title|default:"(untitled)" }}{% endif %}</td>
+        <td><span class="we-badge">{{ stim.get_kind_display }}</span></td>
+        <td><small class="we-muted">
+          {% if stim.kind == "audio" %}{{ stim.audio.name|default:"—" }}{% if stim.duration_seconds %} · {{ stim.duration_seconds|floatformat:1 }}s{% endif %}
+          {% elif stim.kind == "image" %}{{ stim.image.name|default:"—" }}
+          {% elif stim.kind == "video" %}{{ stim.video.name|default:"—" }}{% if stim.duration_seconds %} · {{ stim.duration_seconds|floatformat:1 }}s{% endif %}
+          {% elif stim.kind == "embed" %}{{ stim.embed_url|truncatechars:40 }}
+          {% else %}{{ stim.text_body|truncatechars:60 }}{% endif %}
+        </small></td>
+        <td>{{ stim.prompt_group|default:"—" }}</td>
+        <td>{% if stim.is_active %}✓{% else %}<span class="we-muted">off</span>{% endif %}</td>
+        <td>{{ stim.sort_order }}</td>
+        {% if is_draft %}
+        <td>
+          <form method="post" class="inline-form"
+                action="{% url 'studio:stimulus_delete' slug=experiment.slug pk=stim.pk %}"
+                data-confirm="Delete this stimulus?">
+            {% csrf_token %}
+            <button type="submit" class="we-btn we-btn-sm we-btn-danger">Delete</button>
+          </form>
+        </td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="we-muted">No stimuli in this condition yet.</p>
+  {% endif %}
+</div>
+{% empty %}
+<div class="we-empty">
+  <p>No conditions yet. A study needs at least one condition with at least one stimulus.</p>
+  {% if is_draft %}<a href="{% url 'studio:condition_add' slug=experiment.slug %}" class="we-btn we-btn-primary">Add the first condition</a>{% endif %}
+</div>
+{% endfor %}
+{% endblock %}

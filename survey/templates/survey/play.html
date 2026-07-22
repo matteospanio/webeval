@@ -36,7 +36,6 @@
             playsinline
             data-listen-endpoint="{% url 'survey:record_listen' slug=experiment.slug assignment_id=assignment.id %}"
             data-csrf-token="{{ csrf_token }}"
-            style="max-width:100%;"
           >
             <source src="{{ stimulus.video.url }}">
             Your browser does not support the video element.
@@ -55,7 +54,6 @@
             referrerpolicy="no-referrer"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-            style="width:100%;min-height:24rem;border:0;"
           ></iframe>
         </div>
       {% endif %}
@@ -67,9 +65,7 @@
       </div>
     {% endif %}
 
-    {% if messages %}
-      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
-    {% endif %}
+    {% include "ui/_messages.html" %}
 
     <form method="post" novalidate>
       {% csrf_token %}
@@ -79,7 +75,7 @@
       {% endfor %}
 
       <div class="form-actions">
-        <button type="submit">{% if is_last_page and not has_more_after_stimuli %}Finish{% else %}Next{% endif %}</button>
+        <button type="submit" class="we-btn we-btn-primary we-btn-lg">{% if is_last_page and not has_more_after_stimuli %}Finish{% else %}Next{% endif %}</button>
       </div>
     </form>
   </article>

@@ -3,9 +3,9 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
+  <article class="we-card we-narrow">
     <h1>This resume link isn't valid</h1>
     <p>The link may be mistyped, or the session may no longer be available.</p>
-    <p><a href="{% url 'survey:consent' slug=experiment.slug %}">Start the survey again</a>.</p>
+    <p><a class="we-btn" href="{% url 'survey:consent' slug=experiment.slug %}">Start the study again</a></p>
   </article>
 {% endblock %}

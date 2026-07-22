@@ -9,8 +9,8 @@ What it does:
   3. drives a headless browser via Selenium to log in and screenshot each page
      into docs/screenshots/.
 
-Run it from the repo root, in an environment that has a browser and outbound
-network (the participant/studio pages load Pico.css from a CDN):
+Run it from the repo root, in an environment that has a browser (all CSS/JS
+is vendored — no network needed beyond localhost):
 
     uv run python docs/capture_screenshots.py
 
@@ -42,6 +42,7 @@ PAGES = [
     ("03-study-overview.png", "/studio/demo-evaluation/"),
     ("04-participant-survey.png", "/s/demo-evaluation/"),
     ("05-results-analysis.png", "/studio/demo-evaluation/"),
+    ("06-stimuli-authoring.png", "/studio/demo-evaluation/stimuli/"),
 ]
 
 

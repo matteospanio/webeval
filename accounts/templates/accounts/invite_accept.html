@@ -1,16 +1,18 @@
 {% extends "studio/base.html" %}
 {% block title %}Accept invitation · webeval{% endblock %}
 {% block content %}
-<article style="max-width:32rem;margin:2rem auto;">
+<div class="we-card we-narrow">
   <hgroup>
     <h1>Collaboration invitation</h1>
     <p>You've been invited as <strong>{{ invitation.role }}</strong> on
        <strong>{{ invitation.experiment.name }}</strong>.</p>
   </hgroup>
-  <form method="post">
-    {% csrf_token %}
-    <button type="submit">Accept invitation</button>
-    <a href="{% url 'studio:studies' %}" role="button" class="secondary">Not now</a>
-  </form>
-</article>
+  <div class="we-actions">
+    <form method="post" class="inline-form">
+      {% csrf_token %}
+      <button type="submit" class="we-btn we-btn-primary">Accept invitation</button>
+    </form>
+    <a href="{% url 'studio:studies' %}" class="we-btn we-btn-ghost">Not now</a>
+  </div>
+</div>
 {% endblock %}

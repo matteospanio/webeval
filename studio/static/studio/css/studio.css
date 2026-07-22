@@ -1,0 +1,206 @@
+/* Researcher studio + accounts surface. Requires ui/tokens.css + ui/base.css +
+ * ui/components.css. Denser than the participant surface. */
+
+body {
+  font-size: 15.5px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.studio-main {
+  width: 100%;
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--we-space-5) var(--we-space-4);
+  flex: 1;
+}
+
+/* --- top navigation -------------------------------------------------------- */
+
+.we-topnav {
+  background: var(--we-surface);
+  border-bottom: 1px solid var(--we-border);
+  position: sticky;
+  top: 0;
+  z-index: var(--we-z-nav);
+}
+.we-topnav-inner {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0 var(--we-space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--we-space-3);
+  min-height: 3.25rem;
+  flex-wrap: wrap;
+}
+.we-topnav-brand {
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--we-text);
+}
+.we-topnav-brand:hover {
+  color: var(--we-primary);
+}
+.we-topnav-links {
+  display: flex;
+  align-items: center;
+  gap: var(--we-space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex-wrap: wrap;
+}
+.we-topnav-links a {
+  display: inline-block;
+  padding: var(--we-space-2) var(--we-space-3);
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+  text-decoration: none;
+  border-radius: var(--we-radius-sm);
+}
+.we-topnav-links a:hover {
+  color: var(--we-text);
+  background: var(--we-surface-2);
+}
+.we-topnav-links a[aria-current="page"] {
+  color: var(--we-primary);
+  font-weight: 600;
+}
+.logout-form {
+  display: inline;
+  margin: 0;
+}
+
+.studio-footer {
+  border-top: 1px solid var(--we-border);
+  padding: var(--we-space-4);
+  text-align: center;
+  color: var(--we-text-faint);
+  font-size: var(--we-text-sm);
+}
+
+/* --- misc studio patterns --------------------------------------------------- */
+
+.inline-form {
+  display: inline;
+  margin: 0;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--we-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--we-space-5);
+}
+.page-actions .spacer {
+  flex: 1;
+}
+
+.search-form {
+  display: flex;
+  gap: var(--we-space-2);
+  align-items: center;
+}
+.search-form input[type="search"] {
+  width: 14rem;
+}
+
+/* Results / stats blocks (moved out of study_overview's inline styles). */
+.qresult {
+  background: var(--we-surface);
+  border: 1px solid var(--we-border);
+  border-radius: var(--we-radius-md);
+  padding: var(--we-space-4);
+  margin-bottom: var(--we-space-4);
+}
+.qresult h4 {
+  margin-bottom: var(--we-space-2);
+}
+table.dist {
+  font-size: var(--we-text-sm);
+}
+table.dist td {
+  border-bottom: none;
+  padding: 0.25rem 0.5rem;
+}
+.dist-bar {
+  width: 55%;
+}
+.dist-bar span {
+  display: block;
+  height: 0.9rem;
+  min-width: 2px;
+  background: var(--we-primary);
+  border-radius: 2px;
+  opacity: 0.85;
+}
+.dist-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.numeric-stats {
+  display: flex;
+  gap: var(--we-space-4);
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--we-text-muted);
+  font-size: var(--we-text-sm);
+}
+.numeric-stats strong {
+  color: var(--we-text);
+}
+.qcompare {
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+  margin-top: var(--we-space-2);
+}
+.qcompare mark {
+  background: var(--we-success-soft);
+  color: var(--we-success);
+  padding: 0.05em 0.4em;
+  border-radius: var(--we-radius-sm);
+}
+.segment-nav {
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+  margin-bottom: var(--we-space-3);
+}
+.segment-label {
+  font-weight: 600;
+}
+
+.chart-card img,
+.chart-card svg {
+  width: 100%;
+  height: auto;
+  background: var(--we-surface);
+  border-radius: var(--we-radius-sm);
+}
+
+/* Readiness checklist */
+.readiness ul {
+  margin-bottom: 0;
+}
+.readiness li {
+  color: var(--we-warning);
+}
+
+/* Overview section layout */
+.overview-section {
+  margin-bottom: var(--we-space-5);
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--we-space-4);
+}
+@media (max-width: 52rem) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

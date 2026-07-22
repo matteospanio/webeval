@@ -4,13 +4,12 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
+  {% include "ui/_messages.html" %}
   <article>
     {% if experiment.instructions_content %}
       {{ experiment.instructions_content|markdown|safe }}
     {% else %}
-      <header>
-        <h1>How the study works</h1>
-      </header>
+      <h1>How the study works</h1>
       <p>
         You will be shown a short sequence of stimuli — they may be audio
         excerpts, images, or passages of text. After each one you will be
@@ -27,7 +26,7 @@
     <form method="post">
       {% csrf_token %}
       <div class="form-actions">
-        <button type="submit">Start</button>
+        <button type="submit" class="we-btn we-btn-primary we-btn-lg">Start</button>
       </div>
     </form>
   </article>

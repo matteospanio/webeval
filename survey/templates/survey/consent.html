@@ -5,14 +5,12 @@
 
 {% block content %}
   <article>
-    <header>
-      <p><small>Informed consent</small></p>
-    </header>
+    <p class="we-muted"><small>Informed consent</small></p>
 
     <section class="consent-text">
       <div>{{ consent_first|markdown|safe }}</div>
       {% if consent_rest %}
-        <details class="consent-more">
+        <details class="consent-more we-disclosure">
           <summary>Read more</summary>
           <div>{{ consent_rest|markdown|safe }}</div>
         </details>
@@ -27,25 +25,25 @@
       </section>
     {% endif %}
 
+    {% include "ui/_messages.html" %}
+
     <form method="post" novalidate>
       {% csrf_token %}
-      <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+      <div class="we-visually-hidden" aria-hidden="true">
         <label>Leave this field empty <input type="text" name="hp_url" tabindex="-1" autocomplete="off"></label>
       </div>
-      {% if messages %}
-        {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
-      {% endif %}
       {% if experiment.collect_participant_code %}
-      <label>{{ experiment.participant_code_label }}
-        <input type="text" name="participant_code" autocomplete="off" required>
-      </label>
+      <div class="we-field">
+        <label for="participant-code">{{ experiment.participant_code_label }}</label>
+        <input type="text" id="participant-code" name="participant_code" autocomplete="off" required>
+      </div>
       {% endif %}
       <label>
         <input type="checkbox" name="agree" required>
         I have read and understood the information above, and I agree to take part.
       </label>
       <div class="form-actions">
-        <button type="submit">Begin the study</button>
+        <button type="submit" class="we-btn we-btn-primary we-btn-lg">Begin the study</button>
       </div>
     </form>
   </article>

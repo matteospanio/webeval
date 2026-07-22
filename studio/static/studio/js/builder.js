@@ -173,6 +173,16 @@ if (root) {
     emptyMsg.style.display = canvas.querySelector(".q-card") ? "none" : "";
   };
 
+  // Unsaved-changes guard: the question set lives only in this DOM until
+  // "Save questions" succeeds, so warn before the page is abandoned dirty.
+  let dirty = false;
+  const markDirty = () => { dirty = true; };
+  window.addEventListener("beforeunload", (e) => {
+    if (dirty && canEdit) e.preventDefault();
+  });
+  canvas.addEventListener("input", markDirty);
+  canvas.addEventListener("change", markDirty);
+
   const newQuestion = (type) => ({
     type,
     section: "stimulus",
@@ -209,6 +219,7 @@ if (root) {
       card.classList.remove("dragging");
       card.draggable = false;
       draggedCard = null;
+      markDirty();
       clearDragoverHighlight();
     });
   };
@@ -241,22 +252,40 @@ if (root) {
 
     const del = h(
       "button",
-      { type: "button", class: "secondary outline", onclick: () => { card.remove(); refreshEmpty(); } },
+      {
+        type: "button", class: "we-btn we-btn-sm we-btn-danger",
+        onclick: () => {
+          if (!window.confirm("Delete this question? It is removed when you next save.")) return;
+          card.remove();
+          markDirty();
+          refreshEmpty();
+        },
+      },
       ["Delete"],
     );
     const up = h(
       "button",
       {
-        type: "button", class: "secondary outline", title: "Move up", "aria-label": "Move up",
-        onclick: () => card.previousElementSibling && canvas.insertBefore(card, card.previousElementSibling),
+        type: "button", class: "we-btn we-btn-sm", title: "Move up", "aria-label": "Move up",
+        onclick: () => {
+          if (card.previousElementSibling) {
+            canvas.insertBefore(card, card.previousElementSibling);
+            markDirty();
+          }
+        },
       },
       ["↑"],
     );
     const down = h(
       "button",
       {
-        type: "button", class: "secondary outline", title: "Move down", "aria-label": "Move down",
-        onclick: () => card.nextElementSibling && canvas.insertBefore(card.nextElementSibling, card),
+        type: "button", class: "we-btn we-btn-sm", title: "Move down", "aria-label": "Move down",
+        onclick: () => {
+          if (card.nextElementSibling) {
+            canvas.insertBefore(card.nextElementSibling, card);
+            markDirty();
+          }
+        },
       },
       ["↓"],
     );
@@ -341,6 +370,7 @@ if (root) {
       if (after == null) canvas.append(card);
       else canvas.insertBefore(card, after);
       paletteType = null;
+      markDirty();
       refreshEmpty();
     }
   });
@@ -355,7 +385,11 @@ if (root) {
       paletteType = null;
       clearDragoverHighlight();
     });
-    const add = () => canEdit && addCard(newQuestion(item.dataset.type));
+    const add = () => {
+      if (!canEdit) return;
+      addCard(newQuestion(item.dataset.type));
+      markDirty();
+    };
     item.addEventListener("click", add);
     item.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -409,6 +443,7 @@ if (root) {
         (data.ids ?? []).forEach((id, i) => {
           if (cards[i]) cards[i].el.dataset.id = id;
         });
+        dirty = false;
         setStatus(`Saved ${data.count} question(s).`);
       } else if (data.errors) {
         showErrors(cards, data.errors);

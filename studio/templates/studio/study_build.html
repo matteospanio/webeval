@@ -2,14 +2,9 @@
 {% load static %}
 {% block title %}Build · {{ experiment.name }}{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'studio/css/builder.css' %}">{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="build" %}{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb"><ul>
-  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
-  <li><a href="{% url 'studio:study_overview' slug=experiment.slug %}">{{ experiment.name }}</a></li>
-  <li>Build</li>
-</ul></nav>
-
 <hgroup>
   <h1>Build questions</h1>
   <p>Drag a question type from the palette onto the canvas, drag cards to reorder, then save.</p>
@@ -45,8 +40,8 @@
     <div id="canvas" class="canvas-dropzone" aria-label="Question canvas"></div>
     <p id="canvas-empty" class="canvas-empty">No questions yet — add some from the palette.</p>
     <div class="builder-actions">
-      <button type="button" id="save-btn">Save questions</button>
-      <a href="{% url 'studio:study_overview' slug=experiment.slug %}" class="secondary" role="button">Back to overview</a>
+      <button type="button" id="save-btn" class="we-btn we-btn-primary">Save questions</button>
+      <a href="{% url 'studio:study_overview' slug=experiment.slug %}" class="we-btn we-btn-ghost">Back to overview</a>
       <span id="save-status" role="status" aria-live="polite"></span>
     </div>
   </section>

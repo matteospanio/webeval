@@ -1,0 +1,26 @@
+{% extends "studio/base.html" %}
+{% block title %}{% if is_new %}Add condition{% else %}Edit condition{% endif %} · {{ experiment.name }}{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="stimuli" %}{% endblock %}
+{% block content %}
+<div class="we-card we-narrow">
+  <hgroup>
+    <h1>{% if is_new %}Add a condition{% else %}Edit condition{% endif %}</h1>
+    <p>A condition groups the stimuli of one model, system, or treatment.</p>
+  </hgroup>
+  {% if not is_draft %}
+  <div class="we-alert we-alert-warning" role="alert">This study is no longer a draft — changes cannot be saved.</div>
+  {% endif %}
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+      {% include "ui/_field.html" %}
+    {% endfor %}
+    <div class="we-actions">
+      <button type="submit" class="we-btn we-btn-primary" {% if not is_draft %}disabled{% endif %}>
+        {% if is_new %}Create condition{% else %}Save changes{% endif %}
+      </button>
+      <a href="{% url 'studio:stimuli' slug=experiment.slug %}" class="we-btn we-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

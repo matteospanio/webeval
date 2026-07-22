@@ -3,13 +3,14 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
-    <header>
-      <h1>{{ experiment.name }}</h1>
-    </header>
+  <article class="we-card we-narrow">
+    <h1>{{ experiment.name }}</h1>
     <p>
-      This survey is not currently accepting responses. If you were expecting
+      This study is not currently accepting responses. If you were expecting
       to take part, please get in touch with whoever shared the link with you.
     </p>
+    {% if experiment.privacy_contact %}
+    <p><small>Study contact: <strong>{{ experiment.privacy_contact }}</strong></small></p>
+    {% endif %}
   </article>
 {% endblock %}

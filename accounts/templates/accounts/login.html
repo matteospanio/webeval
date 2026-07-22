@@ -1,18 +1,18 @@
 {% extends "studio/base.html" %}
 {% block title %}Log in · webeval{% endblock %}
 {% block content %}
-<article style="max-width:28rem;margin:2rem auto;">
+<div class="we-card we-narrow">
   <hgroup><h1>Log in</h1><p>Sign in to your webeval studio.</p></hgroup>
-  {% if form.errors %}<p class="message error">That username and password didn't match. Please try again.</p>{% endif %}
+  {% if form.errors %}<div class="we-alert we-alert-error" role="alert">That username and password didn't match. Please try again.</div>{% endif %}
   <form method="post">
     {% csrf_token %}
-    <label>Username {{ form.username }}</label>
-    <label>Password {{ form.password }}</label>
+    {% include "ui/_field.html" with field=form.username %}
+    {% include "ui/_field.html" with field=form.password %}
     <input type="hidden" name="next" value="{{ next }}">
-    <button type="submit">Log in</button>
+    <button type="submit" class="we-btn we-btn-primary">Log in</button>
   </form>
   {% if registration_enabled %}
-  <p><small>No account? <a href="{% url 'accounts:register' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Register</a></small></p>
+  <p class="we-card-footer"><small>No account? <a href="{% url 'accounts:register' %}{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Register</a></small></p>
   {% endif %}
-</article>
+</div>
 {% endblock %}

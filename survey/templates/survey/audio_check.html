@@ -4,37 +4,43 @@
 {% block title %}Audio check — {{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
-    <header>
-      <h1>Audio check</h1>
-      <p><small>A quick test before the study begins.</small></p>
-    </header>
+  <hgroup>
+    <h1>Audio check</h1>
+    <p>A quick test before the study begins.</p>
+  </hgroup>
 
-    <p>
-      Please put on your headphones (or sit in front of your speakers) and
-      adjust the volume to a comfortable level. Play the short clip below
-      and confirm you can hear it clearly before continuing.
-    </p>
+  <p>
+    Please put on your headphones (or sit in front of your speakers) and
+    adjust the volume to a comfortable level. Play the short clip below
+    and confirm you can hear it clearly before continuing.
+  </p>
 
-    {% if messages %}
-      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
-    {% endif %}
+  {% include "ui/_messages.html" %}
 
-    <form method="post" novalidate>
-      {% csrf_token %}
+  <form method="post" novalidate>
+    {% csrf_token %}
 
-      <section class="audio-check-clip">
-        <audio controls preload="auto" src="{% static 'survey/audio/check-tone.mp3' %}"></audio>
-      </section>
+    <section>
+      <audio class="audio-check-clip" controls preload="auto" src="{% static 'survey/audio/check-tone.mp3' %}"></audio>
+    </section>
 
-      <label>
-        <input type="checkbox" name="can_hear" value="yes" {% if can_hear %}checked{% endif %}>
-        I can hear the audio clearly at a comfortable volume.
-      </label>
+    <details class="we-disclosure">
+      <summary>Can't hear the clip?</summary>
+      <ul>
+        <li>Check your device isn't muted and the volume is turned up.</li>
+        <li>Make sure the right output device (headphones vs. speakers) is selected.</li>
+        <li>Try pressing play again, or reload this page.</li>
+        <li>If it still doesn't play, try another browser or device — this study needs working audio.</li>
+      </ul>
+    </details>
 
-      <div class="form-actions">
-        <button type="submit">Continue</button>
-      </div>
-    </form>
-  </article>
+    <label>
+      <input type="checkbox" name="can_hear" value="yes" {% if can_hear %}checked{% endif %}>
+      I can hear the audio clearly at a comfortable volume.
+    </label>
+
+    <div class="form-actions">
+      <button type="submit" class="we-btn we-btn-primary we-btn-lg">Continue</button>
+    </div>
+  </form>
 {% endblock %}

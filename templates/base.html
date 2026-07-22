@@ -3,25 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ brand|default:"Survey" }}{% endblock %}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.classless.min.css">
-  <link rel="stylesheet" href="{% static 'site.css' %}?v=2">
+  <title>{% block title %}{{ brand|default:"Study" }}{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'ui/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/base.css' %}">
+  <link rel="stylesheet" href="{% static 'ui/components.css' %}">
+  <link rel="stylesheet" href="{% static 'survey.css' %}">
   {% if experiment.brand_primary_color %}
   <style>
-    :root {
-      --pico-primary: {{ experiment.brand_primary_color }};
-      --pico-primary-background: {{ experiment.brand_primary_color }};
-      --pico-primary-hover-background: {{ experiment.brand_primary_color }};
-      --pico-primary-underline: {{ experiment.brand_primary_color }};
-      --pico-primary-border: {{ experiment.brand_primary_color }};
-    }
-    .progress-bar-fill { background: {{ experiment.brand_primary_color }}; }
+    :root { --we-primary: {{ experiment.brand_primary_color }}; }
   </style>
   {% endif %}
   {% if experiment.brand_custom_css %}<style>{{ experiment.brand_custom_css|safe }}</style>{% endif %}
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to main content</a>
+  <a class="skip-link we-visually-hidden-focusable" href="#main">Skip to main content</a>
   {% if is_test_mode %}
   <div class="test-mode-banner" role="status">
     <strong>Test mode</strong> — this study is being rehearsed. Your responses may be discarded when it goes live.
@@ -30,41 +25,51 @@
   <header class="survey-header">
     <div class="survey-header-inner">
       <strong class="survey-brand">
-        {% if experiment.brand_logo %}<img src="{{ experiment.brand_logo.url }}" alt="{{ brand|default:'Survey' }}" class="survey-logo" style="max-height:2.25rem;vertical-align:middle">{% else %}{{ brand|default:"Survey" }}{% endif %}
+        {% if experiment.brand_logo %}<img src="{{ experiment.brand_logo.url }}" alt="{{ brand|default:'Study' }}" class="survey-logo">{% else %}{{ brand|default:"Study" }}{% endif %}
       </strong>
       {% block tagline %}{% endblock %}
+      {% if step_label %}
+      <span class="we-steps">
+        <span>{{ step_label }}</span>
+        {% if page_number and page_total and page_total > 1 %}
+        <span class="we-page-count">{{ page_noun|default:"Page" }} {{ page_number }} of {{ page_total }}</span>
+        {% endif %}
+      </span>
+      {% endif %}
     </div>
     {% block progress %}
       {% if progress_percent is not None %}
-      <div class="progress-bar" role="progressbar"
-           aria-label="Survey progress"
+      <div class="we-progress progress-bar" role="progressbar"
+           aria-label="Study progress"
            aria-valuenow="{{ progress_percent }}"
            aria-valuemin="0" aria-valuemax="100">
-        <div class="progress-bar-fill" style="width: {{ progress_percent }}%"></div>
+        <div class="we-progress-fill progress-bar-fill" style="width: {{ progress_percent }}%"></div>
       </div>
       {% endif %}
     {% endblock %}
   </header>
   <main id="main" class="survey-main">
     {% block content %}{% endblock %}
+  </main>
+  <footer class="survey-footer">
     {% if resume_url %}
-    <details class="resume-box">
+    <details class="resume-box we-disclosure">
       <summary>Save &amp; continue later</summary>
-      <p><small>Bookmark or copy this private link to return to your place in this
-        survey — on this device or another. Anyone with the link can continue your
+      <p><small>Copy this private link to return to your place in this
+        study — on this device or another. Anyone with the link can continue your
         session, so keep it to yourself.</small></p>
-      <input type="text" value="{{ resume_url }}" readonly
-             aria-label="Resume link" onclick="this.select()" style="width:100%">
+      <input type="text" id="resume-link" value="{{ resume_url }}" readonly
+             aria-label="Resume link" onclick="this.select()">
+      <button type="button" class="we-btn we-btn-sm we-copy" data-copy-target="#resume-link">Copy link</button>
     </details>
     {% endif %}
     {% if withdraw_url %}
     <p class="withdraw-link"><small><a href="{{ withdraw_url }}">Withdraw from this study and delete my data</a></small></p>
     {% endif %}
-  </main>
-  <footer class="survey-footer">
     {% block footer %}
-      <small>Anonymous research survey. Responses are stored for research purposes only.</small>
+      <small>Anonymous research study. Responses are stored for research purposes only.</small>
     {% endblock %}
   </footer>
+  <script type="module" src="{% static 'ui/ui.js' %}"></script>
 </body>
 </html>

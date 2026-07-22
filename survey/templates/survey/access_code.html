@@ -3,14 +3,17 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article style="max-width:28rem;margin:2rem auto;">
+  <article class="we-card we-narrow">
     <h1>Access code required</h1>
     <p>This study is private. Enter the access code you were given to continue.</p>
-    {% if error %}<p role="alert"><mark>That code wasn't recognised.</mark></p>{% endif %}
+    {% if error %}<div class="we-alert we-alert-error" role="alert">That code wasn't recognised.</div>{% endif %}
     <form method="post">
       {% csrf_token %}
-      <label>Access code <input type="text" name="access_code" autofocus required></label>
-      <button type="submit">Continue</button>
+      <div class="we-field">
+        <label for="access-code">Access code</label>
+        <input type="text" id="access-code" name="access_code" autofocus required>
+      </div>
+      <button type="submit" class="we-btn we-btn-primary">Continue</button>
     </form>
   </article>
 {% endblock %}

@@ -5,8 +5,6 @@
 
 {% block content %}
   <article>
-    <p class="trial-counter">Comparison {{ pair_number }} of {{ pairs_total }}</p>
-
     {% if prompt %}
       <section class="pairwise-prompt">
         <div class="sample-label">Reference (listen first)</div>
@@ -77,14 +75,12 @@
     </div>
 
     {% if show_prompt and pair.left_stimulus.description and experiment.mode != "pairwise_audio" %}
-      <div class="stimulus-prompt" style="text-align: center;">
+      <div class="stimulus-prompt">
         <p><strong>Prompt:</strong> {{ pair.left_stimulus.description }}</p>
       </div>
     {% endif %}
 
-    {% if messages %}
-      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
-    {% endif %}
+    {% include "ui/_messages.html" %}
 
     <form method="post" novalidate>
       {% csrf_token %}
@@ -95,6 +91,7 @@
         Non-choice questions (if any) fall back to the standard partial.
       {% endcomment %}
       {% load markdown_extras %}
+      <div class="we-table-scroll">
       <table class="comparison-table">
         <thead>
           <tr>
@@ -125,9 +122,10 @@
           {% endfor %}
         </tbody>
       </table>
+      </div>
 
       <div class="form-actions">
-        <button type="submit">{% if is_last_pair and not has_demographics %}Finish{% else %}Next{% endif %}</button>
+        <button type="submit" class="we-btn we-btn-primary we-btn-lg">{% if is_last_pair and not has_demographics %}Finish{% else %}Next{% endif %}</button>
       </div>
     </form>
   </article>

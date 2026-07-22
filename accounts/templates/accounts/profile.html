@@ -1,12 +1,18 @@
 {% extends "studio/base.html" %}
 {% block title %}Account · webeval{% endblock %}
 {% block content %}
-<h1>Your account</h1>
-<p>Signed in as <strong>{{ user.get_username }}</strong>{% if user.email %} ({{ user.email }}){% endif %}.</p>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Save</button>
-</form>
-{% if user.is_staff %}<p><a href="{% url 'apikeys:list' %}">Manage API keys</a></p>{% endif %}
+<div class="we-card we-narrow">
+  <hgroup>
+    <h1>Your account</h1>
+    <p>Signed in as <strong>{{ user.get_username }}</strong>{% if user.email %} ({{ user.email }}){% endif %}.</p>
+  </hgroup>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+      {% include "ui/_field.html" %}
+    {% endfor %}
+    <button type="submit" class="we-btn we-btn-primary">Save</button>
+  </form>
+  {% if user.is_staff %}<p class="we-card-footer"><small><a href="{% url 'apikeys:list' %}">Manage API keys</a></small></p>{% endif %}
+</div>
 {% endblock %}

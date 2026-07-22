@@ -4,27 +4,23 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
-    <header>
-      <h1>Before we begin</h1>
-      <p><small>A few quick questions to check this study is a good fit.</small></p>
-    </header>
+  <hgroup>
+    <h1>Before we begin</h1>
+    <p>A few quick questions to check this study is a good fit.</p>
+  </hgroup>
 
-    {% if messages %}
-      {% for message in messages %}<p role="alert"><mark>{{ message }}</mark></p>{% endfor %}
-    {% endif %}
+  {% include "ui/_messages.html" %}
 
-    <form method="post" novalidate>
-      {% csrf_token %}
-      <input type="hidden" name="_t0" value="{{ page_served_at }}">
-      {% for q in page_questions %}
-        {% include "survey/_question.html" %}
-      {% endfor %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="_t0" value="{{ page_served_at }}">
+    {% for q in page_questions %}
+      {% include "survey/_question.html" %}
+    {% endfor %}
 
-      <div class="form-actions">
-        <button type="submit">{% if is_last_page %}Continue{% else %}Next{% endif %}</button>
-      </div>
-    </form>
-  </article>
+    <div class="form-actions">
+      <button type="submit" class="we-btn we-btn-primary we-btn-lg">{% if is_last_page %}Continue{% else %}Next{% endif %}</button>
+    </div>
+  </form>
   <script type="module" src="{% static 'survey/js/branching.js' %}"></script>
 {% endblock %}

@@ -1,121 +1,100 @@
 {% extends "studio/base.html" %}
 {% block title %}{{ experiment.name }} · webeval studio{% endblock %}
-{% block extra_head %}
-<style>
-  .qresult { margin-bottom: 0.75rem; }
-  .qresult header { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.4rem; }
-  table.dist { width: 100%; margin: 0; }
-  table.dist th[scope="row"] { width: 12rem; font-weight: 500; }
-  .dist-bar { width: 60%; }
-  .dist-bar span { display: inline-block; height: 0.8rem; background: var(--pico-primary); border-radius: 0.2rem; min-width: 1px; }
-  .dist-num { white-space: nowrap; text-align: right; }
-  .numeric-stats { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; list-style: none; padding: 0; }
-  .qcompare { margin-top: 0.4rem; }
-  .qcompare mark { padding: 0 0.3rem; }
-</style>
-{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="overview" %}{% endblock %}
 {% block content %}
-<nav aria-label="breadcrumb"><ul>
-  <li><a href="{% url 'studio:studies' %}">My studies</a></li>
-  <li>{{ experiment.name }}</li>
-</ul></nav>
 <hgroup>
   <h1>{{ experiment.name }}</h1>
-  <p><span class="badge">{{ experiment.get_state_display }}</span>
-     · {{ experiment.get_mode_display }} · your role: {{ role }}</p>
+  <p>{{ experiment.get_mode_display }} · your role: {{ role|capfirst }}</p>
 </hgroup>
 
-{% if not is_live %}
-<article class="readiness">
-  <header><strong>Readiness</strong></header>
-  {% if readiness_problems %}
-    <p>Finish these before this study can go live:</p>
-    <ul>
-      {% for problem in readiness_problems %}<li>⚠️ {{ problem }}</li>{% endfor %}
-    </ul>
-    <p><small>Activation happens in the Django admin once these are resolved.</small></p>
-  {% else %}
-    <p>✓ This study has everything it needs to go live. Activation happens in the Django admin.</p>
-  {% endif %}
-</article>
-{% endif %}
+{% include "studio/_readiness.html" %}
 
-<div class="grid">
-  <article>
-    <header><strong>Participation</strong></header>
-    <ul>
-      <li>Consent page views: {{ counts.consent_page_views }}</li>
-      <li>Started: {{ counts.total_sessions }}</li>
-      <li>Completed: {{ counts.completed_sessions }}</li>
-      <li>Dropped out: {{ counts.abandoned_sessions }}</li>
-      <li>Completion rate: {% widthratio counts.completion_rate 1 100 %}%</li>
-      {% if mean_listen_ms %}<li>Mean listen: {{ mean_listen_ms|floatformat:0 }} ms</li>{% endif %}
-    </ul>
-  </article>
-  <article>
-    <header><strong>Results</strong></header>
-    <img src="{% url 'studio:chart' slug=experiment.slug %}" alt="Results chart" style="max-width:100%">
-  </article>
+<div class="overview-grid">
+  <div class="we-card">
+    <div class="we-card-header"><h2>Participation</h2></div>
+    <dl>
+      <dt>Consent page views</dt><dd>{{ counts.consent_page_views }}</dd>
+      <dt>Started</dt><dd>{{ counts.total_sessions }}</dd>
+      <dt>Completed</dt><dd>{{ counts.completed_sessions }}</dd>
+      <dt>Dropped out</dt><dd>{{ counts.abandoned_sessions }}</dd>
+      <dt>Completion rate</dt><dd>{% widthratio counts.completion_rate 1 100 %}%</dd>
+      {% if mean_listen_ms %}<dt>Mean listen</dt><dd>{{ mean_listen_ms|floatformat:0 }} ms</dd>{% endif %}
+    </dl>
+  </div>
+  <div class="we-card chart-card">
+    <div class="we-card-header"><h2>Results</h2></div>
+    {% if counts.completed_sessions %}
+    <img src="{% url 'studio:chart' slug=experiment.slug %}" alt="Results chart">
+    {% else %}
+    <p class="we-muted">The chart appears once the first session is completed.</p>
+    {% endif %}
+  </div>
 </div>
 
-{% include "studio/_question_results.html" %}
+<section class="overview-section">
+  {% include "studio/_question_results.html" %}
+</section>
 
-<p><a href="{% url 'studio:power_analysis' slug=experiment.slug %}">Power &amp; sample-size analysis →</a></p>
+<div class="we-card">
+  <div class="we-card-header"><h2>Data &amp; exports</h2></div>
+  <ul>
+    <li><a href="{% url 'studio:answers_csv' slug=experiment.slug %}">Answers CSV</a>
+        · <a href="{% url 'studio:answers_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
+    <li><a href="{% url 'studio:demographics_csv' slug=experiment.slug %}">Demographics CSV</a>
+        · <a href="{% url 'studio:demographics_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
+    <li><a href="{% url 'studio:completion_codes_csv' slug=experiment.slug %}">Completion codes &amp; compensation CSV</a></li>
+    <li><a href="{% url 'studio:events_csv' slug=experiment.slug %}">Raw event log CSV</a></li>
+    {% if experiment.is_pairwise %}<li><a href="{% url 'studio:pairwise_csv' slug=experiment.slug %}">Pairwise answers CSV</a></li>{% endif %}
+    <li><a href="{% url 'studio:export_zip' slug=experiment.slug %}">Reproducibility ZIP</a></li>
+  </ul>
+</div>
 
-<h2>Data &amp; exports</h2>
-<ul>
-  <li><a href="{% url 'studio:answers_csv' slug=experiment.slug %}">Answers CSV</a>
-      · <a href="{% url 'studio:answers_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
-  <li><a href="{% url 'studio:demographics_csv' slug=experiment.slug %}">Demographics CSV</a>
-      · <a href="{% url 'studio:demographics_csv' slug=experiment.slug %}?exclude_flagged=1">excluding flagged</a></li>
-  <li><a href="{% url 'studio:completion_codes_csv' slug=experiment.slug %}">Completion codes &amp; compensation CSV</a></li>
-  <li><a href="{% url 'studio:events_csv' slug=experiment.slug %}">Raw event log CSV</a></li>
-  {% if experiment.is_pairwise %}<li><a href="{% url 'studio:pairwise_csv' slug=experiment.slug %}">Pairwise answers CSV</a></li>{% endif %}
-  <li><a href="{% url 'studio:export_zip' slug=experiment.slug %}">Reproducibility ZIP</a></li>
-</ul>
-
-<h2>Share with participants</h2>
-<p>Direct link: <a href="{{ survey_url }}">{{ survey_url }}</a></p>
+<div class="we-card">
+  <div class="we-card-header"><h2>Share with participants</h2></div>
+  <p class="we-actions">
+    <input type="text" id="share-link" value="{{ survey_url }}" readonly onclick="this.select()"
+           aria-label="Participant link" style="max-width:28rem">
+    <button type="button" class="we-btn we-btn-sm we-copy" data-copy-target="#share-link">Copy link</button>
+    <a href="{{ survey_url }}" class="we-btn we-btn-sm we-btn-ghost">Open ↗</a>
+  </p>
+</div>
 
 {% if follows or next_phases %}
-<h2>Phases (longitudinal study)</h2>
-<ul>
-  {% if follows %}<li>Follows: <a href="{% url 'studio:study_overview' slug=follows.slug %}">{{ follows.name }}</a></li>{% endif %}
-  {% for np in next_phases %}<li>Next phase: <a href="{% url 'studio:study_overview' slug=np.slug %}">{{ np.name }}</a>{% if np.phase_gap_hours %} (opens {{ np.phase_gap_hours }}h after the previous phase){% endif %}</li>{% endfor %}
-</ul>
+<div class="we-card">
+  <div class="we-card-header"><h2>Phases (longitudinal study)</h2></div>
+  <ul>
+    {% if follows %}<li>Follows: <a href="{% url 'studio:study_overview' slug=follows.slug %}">{{ follows.name }}</a></li>{% endif %}
+    {% for np in next_phases %}<li>Next phase: <a href="{% url 'studio:study_overview' slug=np.slug %}">{{ np.name }}</a>{% if np.phase_gap_hours %} (opens {{ np.phase_gap_hours }}h after the previous phase){% endif %}</li>{% endfor %}
+  </ul>
+</div>
 {% endif %}
 
-<h2>Compliance &amp; governance</h2>
-<ul>
-  {% if experiment.irb_number %}<li>IRB / ethics #: {{ experiment.irb_number }}</li>{% endif %}
-  {% if experiment.legal_basis %}<li>Legal basis: {{ experiment.get_legal_basis_display }}</li>{% endif %}
-  {% if experiment.data_contact %}<li>Data contact: {{ experiment.data_contact }}</li>{% endif %}
-  <li>Data retention: {% if experiment.retention_days %}{{ experiment.retention_days }} days after submission{% else %}indefinite{% endif %}</li>
-  <li>Current consent version: <code>{{ experiment.consent_version }}</code></li>
-</ul>
+<div class="we-card">
+  <div class="we-card-header"><h2>Compliance &amp; governance</h2></div>
+  <dl>
+    {% if experiment.irb_number %}<dt>IRB / ethics #</dt><dd>{{ experiment.irb_number }}</dd>{% endif %}
+    {% if experiment.legal_basis %}<dt>Legal basis</dt><dd>{{ experiment.get_legal_basis_display }}</dd>{% endif %}
+    {% if experiment.data_contact %}<dt>Data contact</dt><dd>{{ experiment.data_contact }}</dd>{% endif %}
+    <dt>Data retention</dt><dd>{% if experiment.retention_days %}{{ experiment.retention_days }} days after submission{% else %}indefinite{% endif %}</dd>
+    <dt>Consent version</dt><dd><code>{{ experiment.consent_version }}</code></dd>
+  </dl>
+</div>
 
-<h2>Manage</h2>
-<ul>
-  <li>
-    <form method="post" action="{% url 'studio:study_clone' slug=experiment.slug %}" style="display:inline">
+<div class="we-card">
+  <div class="we-card-header"><h2>Manage</h2></div>
+  <div class="we-actions">
+    <form method="post" action="{% url 'studio:study_clone' slug=experiment.slug %}" class="inline-form">
       {% csrf_token %}
-      <button type="submit" class="secondary outline" style="display:inline;width:auto;padding:.25rem .75rem">Duplicate this study</button>
+      <button type="submit" class="we-btn">Duplicate this study</button>
     </form>
-    <small>Creates an editable draft copy you own (stimuli, questions, branding and all).</small>
-  </li>
-  {% if can_edit %}
-  <li>
-    <a href="{% url 'studio:study_build' slug=experiment.slug %}">Build questions (drag &amp; drop)</a>
-    {% if experiment.state != "draft" %} <small>(read-only — only drafts are editable)</small>{% endif %}
-  </li>
-  {% endif %}
-  {% if can_manage %}<li><a href="{% url 'studio:study_access' slug=experiment.slug %}">Collaborators &amp; access</a></li>
-  <li><a href="{% url 'studio:study_webhooks' slug=experiment.slug %}">Webhooks (downstream pipelines)</a></li>{% endif %}
+    {% if can_edit %}
+    <a href="{% url 'studio:study_build' slug=experiment.slug %}" class="we-btn">Build questions</a>
+    <a href="{% url 'studio:stimuli' slug=experiment.slug %}" class="we-btn">Conditions &amp; stimuli</a>
+    {% endif %}
+  </div>
+  <p><small class="we-muted">Duplicating creates an editable draft copy you own (stimuli, questions, branding and all).</small></p>
   {% if show_admin_edit %}
-    <li><a href="{{ admin_change_url }}">Edit conditions &amp; stimuli in admin</a></li>
-    {% if experiment.state == "draft" %}<li><a href="{% url 'admin:experiments_experiment_add_from_bank' slug=experiment.slug %}">Add questions from your bank</a></li>{% endif %}
-  {% elif can_edit %}
-    <li><em>Editing conditions and stimuli currently requires Django admin (staff) access — ask a platform admin to grant it. Question editing is available right here in the builder.</em></li>
+  <p><small>Staff shortcuts: <a href="{{ admin_change_url }}">study settings in admin</a>{% if experiment.state == "draft" %} · <a href="{% url 'admin:experiments_experiment_add_from_bank' slug=experiment.slug %}">add questions from your bank</a>{% endif %}</small></p>
   {% endif %}
-</ul>
+</div>
 {% endblock %}

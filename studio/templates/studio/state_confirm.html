@@ -1,0 +1,81 @@
+{% extends "studio/base.html" %}
+{% block title %}{{ target_display }} · {{ experiment.name }}{% endblock %}
+{% block subnav %}{% include "studio/_study_nav.html" with active_tab="overview" %}{% endblock %}
+{% block content %}
+<div class="we-card we-narrow">
+  <hgroup>
+    <h1>
+      {% if action == "test" %}Start testing
+      {% elif action == "activate" %}Activate this study
+      {% elif action == "close" %}Close this study
+      {% elif action == "reopen" %}Reopen this study
+      {% else %}Back to draft{% endif %}
+    </h1>
+    <p>
+      <span class="we-badge we-badge-{{ experiment.state }}">{{ experiment.get_state_display }}</span>
+      →
+      <span class="we-badge we-badge-{{ target_state }}">{{ target_display }}</span>
+    </p>
+  </hgroup>
+
+  {% if action == "test" %}
+  <p>Test mode lets you and your colleagues rehearse the full participant flow.
+     Responses are marked as previews and kept out of your results; when you
+     activate you can discard or keep them.</p>
+  {% elif action == "activate" %}
+  <p>Going live opens the study to participants at its direct link and starts
+     collecting real data. Structural edits (conditions, stimuli, questions)
+     are locked outside the draft state.</p>
+  {% elif action == "close" %}
+  <p>Closing stops new participants from entering. Collected data stays
+     available in results and exports, and you can reopen later.</p>
+  {% elif action == "reopen" %}
+  <p>Reopening makes the study accept participants again at its direct link.</p>
+  {% else %}
+  <p>Back in draft you can edit conditions, stimuli, and questions again.
+     Test responses stay marked as previews.</p>
+  {% endif %}
+
+  {% if readiness_problems %}
+  <div class="we-alert we-alert-warning" role="alert">
+    <p><strong>Not ready yet:</strong></p>
+    <ul>
+      {% for problem in readiness_problems %}<li>{{ problem }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <dl>
+    <dt>Sessions so far</dt><dd>{{ counts.total_sessions }}</dd>
+    <dt>Completed</dt><dd>{{ counts.completed_sessions }}</dd>
+  </dl>
+
+  <form method="post">
+    {% csrf_token %}
+    {% if offer_test_data_choice %}
+    <fieldset>
+      <legend>Test-phase responses</legend>
+      <label>
+        <input type="radio" name="test_data" value="keep" checked>
+        Keep them — promote test responses into the real dataset
+      </label>
+      <label>
+        <input type="radio" name="test_data" value="purge">
+        Discard them — start the live study with a clean slate
+      </label>
+    </fieldset>
+    {% endif %}
+    <div class="we-actions">
+      <button type="submit" class="we-btn we-btn-primary"
+              {% if readiness_problems and action == "activate" %}disabled{% endif %}>
+        {% if action == "test" %}Start testing
+        {% elif action == "activate" %}Activate study
+        {% elif action == "close" %}Close study
+        {% elif action == "reopen" %}Reopen study
+        {% else %}Return to draft{% endif %}
+      </button>
+      <a href="{% url 'studio:study_overview' slug=experiment.slug %}" class="we-btn we-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

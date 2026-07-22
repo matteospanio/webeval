@@ -1,14 +1,20 @@
 {% extends "studio/base.html" %}
 {% block title %}New study · webeval studio{% endblock %}
 {% block content %}
-<hgroup>
-  <h1>New study</h1>
-  <p>Create a draft study you own. You can configure stimuli and questions next.</p>
-</hgroup>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Create study</button>
-  <a href="{% url 'studio:studies' %}" role="button" class="secondary">Cancel</a>
-</form>
+<div class="we-card we-narrow">
+  <hgroup>
+    <h1>New study</h1>
+    <p>Create a draft study you own. You can configure stimuli and questions next.</p>
+  </hgroup>
+  <form method="post">
+    {% csrf_token %}
+    {% for field in form %}
+      {% include "ui/_field.html" %}
+    {% endfor %}
+    <div class="we-actions">
+      <button type="submit" class="we-btn we-btn-primary">Create study</button>
+      <a href="{% url 'studio:studies' %}" class="we-btn we-btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
 {% endblock %}

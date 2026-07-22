@@ -3,14 +3,14 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article>
+  <article class="we-card we-narrow">
     <h1>Withdraw from this study</h1>
     <p>This will permanently delete the responses you have given so far for
        <strong>{{ experiment.name }}</strong>. This cannot be undone.</p>
-    <form method="post">
+    <form method="post" class="we-actions">
       {% csrf_token %}
-      <button type="submit" class="contrast">Withdraw and delete my data</button>
-      <a href="{% url 'survey:consent' slug=experiment.slug %}" role="button" class="secondary">Cancel</a>
+      <button type="submit" class="we-btn we-btn-danger">Withdraw and delete my data</button>
+      <a href="{% url 'survey:consent' slug=experiment.slug %}" class="we-btn">Cancel</a>
     </form>
   </article>
 {% endblock %}

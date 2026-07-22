@@ -8,18 +8,20 @@
     {% if experiment.thanks_content %}
       {{ experiment.thanks_content|markdown|safe }}
     {% else %}
-      <header>
-        <h1>Thank you</h1>
-      </header>
+      <h1>Thank you</h1>
       <p>
         Your responses have been recorded. Your participation is greatly appreciated.
       </p>
     {% endif %}
     {% if completion_code %}
-    <p class="completion-code">
-      Your completion code: <strong>{{ completion_code }}</strong><br>
-      <small>Copy this code back into the platform you came from to confirm your participation.</small>
-    </p>
+    <div class="completion-code">
+      <span>
+        Your completion code:<br>
+        <code id="completion-code">{{ completion_code }}</code>
+      </span>
+      <button type="button" class="we-btn we-btn-sm we-copy" data-copy-target="#completion-code">Copy code</button>
+    </div>
+    <p><small>Copy this code back into the platform you came from to confirm your participation.</small></p>
     {% endif %}
     {% if next_phase %}
     <section class="next-phase">
@@ -31,7 +33,10 @@
       <p>This study continues with a further phase.</p>
       {% endif %}
       <p>When it's time, return using this link and the <em>same</em> participant code:</p>
-      <p><input type="text" value="{{ next_phase.url }}" readonly onclick="this.select()" style="width:100%"></p>
+      <p>
+        <input type="text" id="next-phase-link" value="{{ next_phase.url }}" readonly onclick="this.select()">
+        <button type="button" class="we-btn we-btn-sm we-copy" data-copy-target="#next-phase-link">Copy link</button>
+      </p>
       {% if next_phase.code %}<p>Your participant code: <strong>{{ next_phase.code }}</strong></p>{% endif %}
     </section>
     {% else %}

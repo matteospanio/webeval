@@ -26,9 +26,25 @@ from .stats import (  # noqa: E402
 )
 
 
+# Theme-neutral chart chrome: mid-tones that stay readable on both the light
+# and dark studio surfaces (the studio wraps charts in a light-surface card),
+# with transparent figure/axes backgrounds so no white box is pasted into a
+# dark page. The admin (light Unfold) is unaffected.
+_CHROME = "#8b8b94"
+
+
 def _svg_from_figure(fig) -> str:
+    fig.patch.set_alpha(0)
+    for ax in fig.get_axes():
+        ax.set_facecolor("none")
+        ax.xaxis.label.set_color(_CHROME)
+        ax.yaxis.label.set_color(_CHROME)
+        ax.title.set_color(_CHROME)
+        ax.tick_params(colors=_CHROME)
+        for spine in ax.spines.values():
+            spine.set_color(_CHROME)
     buf = io.StringIO()
-    fig.savefig(buf, format="svg", bbox_inches="tight")
+    fig.savefig(buf, format="svg", bbox_inches="tight", transparent=True)
     plt.close(fig)
     return buf.getvalue()
 
@@ -46,14 +62,14 @@ def mean_ratings_svg(experiment: Experiment) -> str:
             va="center",
             transform=ax.transAxes,
             fontsize=11,
-            color="#666",
+            color="#8b8b94",
         )
         ax.set_axis_off()
         return _svg_from_figure(fig)
 
     labels = [f"{row['title']} ({row['condition']})" for row in rows]
     means = [row["mean"] for row in rows]
-    ax.barh(labels, means, color="#345")
+    ax.barh(labels, means, color="#6d7fae")
     ax.set_xlabel("Mean rating")
     ax.invert_yaxis()
     ax.spines["top"].set_visible(False)
@@ -72,7 +88,7 @@ def pairwise_win_rates_svg(experiment: Experiment) -> str:
         ax.text(
             0.5, 0.5, "No pairwise data yet",
             ha="center", va="center", transform=ax.transAxes,
-            fontsize=11, color="#666",
+            fontsize=11, color="#8b8b94",
         )
         ax.set_axis_off()
         return _svg_from_figure(fig)
@@ -85,7 +101,7 @@ def pairwise_win_rates_svg(experiment: Experiment) -> str:
     models_sorted = sorted(model_totals, key=model_totals.get, reverse=True)
     values = [model_totals[m] for m in models_sorted]
 
-    ax.barh(models_sorted, values, color="#345")
+    ax.barh(models_sorted, values, color="#6d7fae")
     ax.set_xlabel("Total wins")
     ax.invert_yaxis()
     ax.spines["top"].set_visible(False)
@@ -103,7 +119,7 @@ def bradley_terry_svg(experiment: Experiment) -> str:
         ax.text(
             0.5, 0.5, "No pairwise data yet",
             ha="center", va="center", transform=ax.transAxes,
-            fontsize=11, color="#666",
+            fontsize=11, color="#8b8b94",
         )
         ax.set_axis_off()
         return _svg_from_figure(fig)
@@ -143,7 +159,7 @@ def bradley_terry_svg(experiment: Experiment) -> str:
     ax.set_yticks(y)
     ax.set_yticklabels(models, fontsize=9)
     ax.set_xlabel("Bradley\u2013Terry score (log-strength)")
-    ax.axvline(0, color="#999", linewidth=0.5, linestyle="--")
+    ax.axvline(0, color="#8b8b94", linewidth=0.5, linestyle="--")
     ax.invert_yaxis()
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)

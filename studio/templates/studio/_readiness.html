@@ -1,0 +1,41 @@
+{% comment %}
+  Lifecycle & readiness card. Expects: experiment, readiness_problems,
+  nav_can_manage. Shown on the overview (and reused by the stimuli page).
+  Lifecycle action buttons link to the state-change confirm pages.
+{% endcomment %}
+{% if experiment.state != "active" or nav_can_manage %}
+<div class="we-card readiness">
+  <div class="we-card-header">
+    <h2>Lifecycle</h2>
+    <span class="we-badge we-badge-{{ experiment.state }}">{{ experiment.get_state_display }}</span>
+  </div>
+  {% if experiment.state != "active" and experiment.state != "closed" %}
+    {% if readiness_problems %}
+    <p>Finish these before this study can go live:</p>
+    <ul>
+      {% for problem in readiness_problems %}<li>{{ problem }}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p>✓ This study has everything it needs to go live.</p>
+    {% endif %}
+  {% endif %}
+  {% if nav_can_manage %}
+  <div class="we-actions">
+    {% if experiment.state == "draft" %}
+    <a class="we-btn we-btn-primary" href="{% url 'studio:study_state_change' slug=experiment.slug action='test' %}">Start testing</a>
+    {% if not readiness_problems %}
+    <a class="we-btn" href="{% url 'studio:study_state_change' slug=experiment.slug action='activate' %}">Activate without testing</a>
+    {% endif %}
+    {% elif experiment.state == "test" %}
+    <a class="we-btn we-btn-primary" href="{% url 'studio:study_state_change' slug=experiment.slug action='activate' %}">Activate…</a>
+    <a class="we-btn" href="{% url 'studio:study_state_change' slug=experiment.slug action='draft' %}">Back to draft</a>
+    <a class="we-btn we-btn-ghost" href="{% url 'studio:study_state_change' slug=experiment.slug action='close' %}">Close</a>
+    {% elif experiment.state == "active" %}
+    <a class="we-btn" href="{% url 'studio:study_state_change' slug=experiment.slug action='close' %}">Close study</a>
+    {% elif experiment.state == "closed" %}
+    <a class="we-btn we-btn-primary" href="{% url 'studio:study_state_change' slug=experiment.slug action='reopen' %}">Reopen study</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}

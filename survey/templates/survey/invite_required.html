@@ -3,9 +3,11 @@
 {% block title %}{{ experiment.name }}{% endblock %}
 
 {% block content %}
-  <article style="max-width:32rem;margin:2rem auto;">
+  <article class="we-card we-narrow">
     <h1>Invitation required</h1>
     <p>This study is by invitation only. Please use the personal link you were
        given. If you have already used it, the link may no longer be valid.</p>
+    <p>If you believe you should have access, contact whoever invited you
+       {% if experiment.privacy_contact %} or <strong>{{ experiment.privacy_contact }}</strong>{% endif %}.</p>
   </article>
 {% endblock %}
