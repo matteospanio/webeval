@@ -596,6 +596,10 @@ class Stimulus(models.Model):
         HTML = "html", "HTML snippet"
         EMBED = "embed", "Embedded URL (iframe)"
 
+    # Single source of truth for the FileField that backs each media kind, so
+    # the kind→field mapping isn't re-spelled across save/exports/api.
+    KIND_MEDIA_FIELD = {Kind.AUDIO: "audio", Kind.IMAGE: "image", Kind.VIDEO: "video"}
+
     condition = models.ForeignKey(
         Condition,
         on_delete=models.CASCADE,
@@ -766,13 +770,9 @@ class Stimulus(models.Model):
 
     def _media_field(self):
         """Return the FileField currently holding this stimulus' media, or None."""
-        if self.kind == self.Kind.AUDIO and self.audio:
-            return self.audio
-        if self.kind == self.Kind.IMAGE and self.image:
-            return self.image
-        if self.kind == self.Kind.VIDEO and self.video:
-            return self.video
-        return None
+        attr = self.KIND_MEDIA_FIELD.get(self.kind)
+        media = getattr(self, attr) if attr else None
+        return media or None
 
 
 def _has_path(file_field) -> bool:
@@ -802,7 +802,24 @@ def _safe_duration_seconds(path: str | None) -> float | None:
 # --- Question ----------------------------------------------------------------
 
 
-class Question(models.Model):
+class _ComponentTypeCleanMixin:
+    """Shared ``clean_fields`` for the two models that store a question
+    ``type`` (``Question`` and ``QuestionTemplate``): accept a registered plugin
+    component's type alongside the built-in ``Question.Type.choices`` so
+    ``full_clean()`` doesn't reject it as "not a valid choice" (an unknown type
+    still errors normally)."""
+
+    def clean_fields(self, exclude=None):
+        from experiments.components import is_question_component
+
+        exclude = set(exclude or ())
+        valid = {value for value, _ in Question.Type.choices}
+        if self.type and (self.type in valid or is_question_component(self.type)):
+            exclude.add("type")
+        super().clean_fields(exclude=exclude)
+
+
+class Question(_ComponentTypeCleanMixin, models.Model):
     class Section(models.TextChoices):
         STIMULUS = "stimulus", "Asked per stimulus"
         DEMOGRAPHIC = "demographic", "Post-survey demographics"
@@ -899,19 +916,6 @@ class Question(models.Model):
     @property
     def is_attention_check(self) -> bool:
         return self.attention_expected is not None
-
-    def clean_fields(self, exclude=None):
-        # Accept a registered plugin component's type alongside the built-in
-        # Type.choices — otherwise full_clean() rejects it as "not a valid
-        # choice". We've vouched for the value, so we skip the field's own
-        # choice check for it (an unknown type still errors normally).
-        from experiments.components import is_question_component
-
-        exclude = set(exclude or ())
-        valid = {value for value, _ in self.Type.choices}
-        if self.type and (self.type in valid or is_question_component(self.type)):
-            exclude.add("type")
-        super().clean_fields(exclude=exclude)
 
     def clean(self):
         super().clean()
@@ -1063,39 +1067,45 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
     raise ValidationError({"type": f"unknown question type: {question_type!r}"})
 
 
-def _validate_visible_if(question: "Question") -> None:
-    """Validate a question's skip-logic rule (see experiments.branching)."""
-    cond = question.visible_if or {}
-    if not cond:
-        return
-    if not isinstance(cond, dict):
-        raise ValidationError({"visible_if": "visible_if must be a JSON object."})
-    if "all" in cond and "any" in cond:
-        raise ValidationError(
-            {"visible_if": "Use only one of 'all' or 'any', not both."}
-        )
-    clauses = list(iter_clauses(cond))
+def _validate_rule_shape(rule: dict, field: str) -> list[dict]:
+    """Validate the structure common to ``visible_if`` and ``eligibility_rule``
+    (JSON object, single all/any, ≥1 clause, each clause a well-formed
+    op/value/integer-question dict) and return the clause list. Reference-level
+    checks (which question, section, order) are the caller's — those are where
+    the two rules differ."""
+    if not rule:
+        return []
+    if not isinstance(rule, dict):
+        raise ValidationError({field: f"{field} must be a JSON object."})
+    if "all" in rule and "any" in rule:
+        raise ValidationError({field: "Use only one of 'all' or 'any', not both."})
+    clauses = list(iter_clauses(rule))
     if not clauses:
-        raise ValidationError({"visible_if": "visible_if has no clauses."})
+        raise ValidationError({field: f"{field} has no clauses."})
     for clause in clauses:
         if not isinstance(clause, dict):
-            raise ValidationError({"visible_if": "Each clause must be a JSON object."})
+            raise ValidationError({field: "Each clause must be a JSON object."})
         op = clause.get("op")
         if op not in OPERATORS:
             raise ValidationError(
-                {"visible_if": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
+                {field: f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
             )
         if op not in VALUELESS_OPS and "value" not in clause:
+            raise ValidationError({field: f"Operator {op!r} requires a 'value'."})
+        if not isinstance(clause.get("question"), int):
             raise ValidationError(
-                {"visible_if": f"Operator {op!r} requires a 'value'."}
+                {field: "Each clause needs an integer 'question' id."}
             )
-        ref_id = clause.get("question")
-        if not isinstance(ref_id, int):
-            raise ValidationError(
-                {"visible_if": "Each clause needs an integer 'question' id."}
-            )
-        if not question.experiment_id:
-            continue
+    return clauses
+
+
+def _validate_visible_if(question: "Question") -> None:
+    """Validate a question's skip-logic rule (see experiments.branching)."""
+    clauses = _validate_rule_shape(question.visible_if or {}, "visible_if")
+    if not question.experiment_id:
+        return
+    for clause in clauses:
+        ref_id = clause["question"]
         ref = Question.objects.filter(pk=ref_id).first()
         if ref is None or ref.experiment_id != question.experiment_id:
             raise ValidationError(
@@ -1165,50 +1175,24 @@ def _validate_phase_chain(experiment: "Experiment") -> None:
 
 def _validate_eligibility_rule(experiment: "Experiment") -> None:
     """Validate Experiment.eligibility_rule (the screening pass/fail rule)."""
-    rule = experiment.eligibility_rule or {}
-    if not rule:
+    clauses = _validate_rule_shape(
+        experiment.eligibility_rule or {}, "eligibility_rule"
+    )
+    if not experiment.pk:
         return
-    if not isinstance(rule, dict):
-        raise ValidationError(
-            {"eligibility_rule": "eligibility_rule must be a JSON object."}
-        )
-    if "all" in rule and "any" in rule:
-        raise ValidationError(
-            {"eligibility_rule": "Use only one of 'all' or 'any', not both."}
-        )
-    clauses = list(iter_clauses(rule))
-    if not clauses:
-        raise ValidationError({"eligibility_rule": "eligibility_rule has no clauses."})
     for clause in clauses:
-        if not isinstance(clause, dict):
+        ref = Question.objects.filter(
+            pk=clause["question"], experiment=experiment
+        ).first()
+        if ref is not None and ref.section != Question.Section.SCREENING:
             raise ValidationError(
-                {"eligibility_rule": "Each clause must be a JSON object."}
+                {
+                    "eligibility_rule": (
+                        "Eligibility clauses must reference screening-section "
+                        "questions."
+                    )
+                }
             )
-        op = clause.get("op")
-        if op not in OPERATORS:
-            raise ValidationError(
-                {"eligibility_rule": f"Unknown operator {op!r}; allowed: {sorted(OPERATORS)}."}
-            )
-        if op not in VALUELESS_OPS and "value" not in clause:
-            raise ValidationError(
-                {"eligibility_rule": f"Operator {op!r} requires a 'value'."}
-            )
-        ref_id = clause.get("question")
-        if not isinstance(ref_id, int):
-            raise ValidationError(
-                {"eligibility_rule": "Each clause needs an integer 'question' id."}
-            )
-        if experiment.pk:
-            ref = Question.objects.filter(pk=ref_id, experiment=experiment).first()
-            if ref is not None and ref.section != Question.Section.SCREENING:
-                raise ValidationError(
-                    {
-                        "eligibility_rule": (
-                            "Eligibility clauses must reference screening-section "
-                            "questions."
-                        )
-                    }
-                )
 
 
 # --- Prompt ------------------------------------------------------------------
@@ -1292,7 +1276,7 @@ class Prompt(models.Model):
                 self.duration_seconds = duration
 
 
-class QuestionTemplate(models.Model):
+class QuestionTemplate(_ComponentTypeCleanMixin, models.Model):
     """A reusable, experiment-independent blueprint for a :class:`Question`.
 
     Researchers save questions they reuse often (a standard NPS item, a
@@ -1333,19 +1317,6 @@ class QuestionTemplate(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return self.name
-
-    def clean_fields(self, exclude=None):
-        # Accept a registered plugin component's type alongside the built-in
-        # Type.choices (mirrors Question.clean_fields) — the bank receives
-        # plugin questions via "Save to my question bank", so it must be able
-        # to validate and re-edit them too.
-        from experiments.components import is_question_component
-
-        exclude = set(exclude or ())
-        valid = {value for value, _ in Question.Type.choices}
-        if self.type and (self.type in valid or is_question_component(self.type)):
-            exclude.add("type")
-        super().clean_fields(exclude=exclude)
 
     def clean(self):
         super().clean()

@@ -69,14 +69,8 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
         .prefetch_related("stimuli")
     ):
         for s in stim.stimuli.all().order_by("sort_order", "title"):
-            if s.kind == s.Kind.AUDIO and s.audio:
-                filename = os.path.basename(s.audio.name)
-            elif s.kind == s.Kind.IMAGE and s.image:
-                filename = os.path.basename(s.image.name)
-            elif s.kind == s.Kind.VIDEO and s.video:
-                filename = os.path.basename(s.video.name)
-            else:
-                filename = None
+            media = s._media_field()
+            filename = os.path.basename(media.name) if media else None
             stimuli.append(
                 {
                     "id": s.pk,
@@ -125,12 +119,9 @@ def build_reproducibility_bundle(experiment: Experiment) -> dict[str, Any]:
 
 def _stimulus_media_source(stim):
     """Return (field_file, filename) for the media attached to a stimulus, or (None, None)."""
-    if stim.kind == stim.Kind.AUDIO and stim.audio:
-        return stim.audio, os.path.basename(stim.audio.name)
-    if stim.kind == stim.Kind.IMAGE and stim.image:
-        return stim.image, os.path.basename(stim.image.name)
-    if stim.kind == stim.Kind.VIDEO and stim.video:
-        return stim.video, os.path.basename(stim.video.name)
+    media = stim._media_field()
+    if media:
+        return media, os.path.basename(media.name)
     return None, None
 
 

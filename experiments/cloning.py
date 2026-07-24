@@ -113,12 +113,9 @@ def clone_experiment(
         _copy_fields(stim, new_stim, stimulus_skip)
         new_stim.condition = condition_map[stim.condition_id]
         new_stim.sha256 = ""
-        if stim.kind == Stimulus.Kind.AUDIO:
-            _copy_file(stim.audio, new_stim, "audio")
-        elif stim.kind == Stimulus.Kind.IMAGE:
-            _copy_file(stim.image, new_stim, "image")
-        elif stim.kind == Stimulus.Kind.VIDEO:
-            _copy_file(stim.video, new_stim, "video")
+        media_attr = Stimulus.KIND_MEDIA_FIELD.get(stim.kind)
+        if media_attr:
+            _copy_file(getattr(stim, media_attr), new_stim, media_attr)
         new_stim.save()
 
     question_map: dict[int, int] = {}
