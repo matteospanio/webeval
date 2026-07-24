@@ -1,6 +1,6 @@
 """Bradley-Terry analysis of pairwise comparison data.
 
-Reads a pairwise answers CSV exported from the webeval admin (or fetches the
+Reads a pairwise answers CSV exported from the PANEL admin (or fetches the
 same data over the REST API) and fits a Bradley-Terry model per evaluation
 dimension. Outputs paper-ready ranking tables in plain text and LaTeX.
 
@@ -11,7 +11,7 @@ Usage examples::
 
     # Over the REST API (needs a staff DRF token; mint one with
     #   uv run ./manage.py drf_create_token <staff-username>)
-    WEBEVAL_API_TOKEN=<token> uv run --group analysis python \\
+    PANEL_API_TOKEN=<token> uv run --group analysis python \\
         scripts/analyze_pairwise.py --from-api --experiment my-study
 
     # Write LaTeX to a file
@@ -47,7 +47,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--from-api",
         action="store_true",
-        help="Fetch data from the webeval REST API instead of a CSV file.",
+        help="Fetch data from the PANEL REST API instead of a CSV file.",
     )
     p.add_argument(
         "--experiment",
@@ -56,12 +56,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--api-url",
         default="http://127.0.0.1:8000",
-        help="Base URL of the webeval webapp (default: %(default)s).",
+        help="Base URL of the PANEL webapp (default: %(default)s).",
     )
     p.add_argument(
         "--token",
-        default=os.environ.get("WEBEVAL_API_TOKEN", ""),
-        help="DRF auth token. Defaults to $WEBEVAL_API_TOKEN.",
+        default=os.environ.get("PANEL_API_TOKEN", ""),
+        help="DRF auth token. Defaults to $PANEL_API_TOKEN.",
     )
     p.add_argument(
         "--output-format",
@@ -79,7 +79,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         if not args.experiment:
             p.error("--experiment is required when using --from-api")
         if not args.token:
-            p.error("--token is required (or set WEBEVAL_API_TOKEN) when using --from-api")
+            p.error("--token is required (or set PANEL_API_TOKEN) when using --from-api")
     elif not args.csv_path:
         p.error("a CSV path is required (or use --from-api --experiment <slug>)")
 

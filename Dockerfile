@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Production image for webeval. Build: docker build -t webeval .
+# Production image for PANEL. Build: docker build -t panel .
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \

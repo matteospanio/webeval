@@ -1,4 +1,4 @@
-"""Batch-convert and upload MusicXML stimuli to a webeval experiment.
+"""Batch-convert and upload MusicXML stimuli to a PANEL experiment.
 
 Given a source tree shaped as::
 
@@ -31,7 +31,7 @@ Usage::
         --source ~/Scrivania/generated \\
         --experiment my-study \\
         --duration 20 \\
-        --token <token>        # or set WEBEVAL_API_TOKEN
+        --token <token>        # or set PANEL_API_TOKEN
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def parse_args(argv: list[str] | None = None) -> Args:
         epilog=(
             "Mint a token on the server with\n"
             "  uv run ./manage.py drf_create_token <staff-username>\n"
-            "then pass it via --token or the WEBEVAL_API_TOKEN env var."
+            "then pass it via --token or the PANEL_API_TOKEN env var."
         ),
     )
     p.add_argument("--source", type=Path, required=True,
@@ -77,9 +77,9 @@ def parse_args(argv: list[str] | None = None) -> Args:
     p.add_argument("--experiment", required=True,
                    help="Target experiment slug (must be in DRAFT state).")
     p.add_argument("--api-url", default="http://127.0.0.1:8000",
-                   help="Base URL of the webeval webapp (default: %(default)s).")
-    p.add_argument("--token", default=os.environ.get("WEBEVAL_API_TOKEN", ""),
-                   help="DRF auth token. Defaults to $WEBEVAL_API_TOKEN.")
+                   help="Base URL of the PANEL webapp (default: %(default)s).")
+    p.add_argument("--token", default=os.environ.get("PANEL_API_TOKEN", ""),
+                   help="DRF auth token. Defaults to $PANEL_API_TOKEN.")
     p.add_argument("--duration", type=int, default=20,
                    help="Trim each clip to this many seconds (default: %(default)s).")
     p.add_argument("--musescore", type=Path, default=Path(DEFAULT_MUSESCORE),
@@ -223,7 +223,7 @@ def upload_stimulus(
 
 def run(args: Args) -> int:
     if not args.dry_run and not args.token:
-        sys.exit("error: --token is required (or set WEBEVAL_API_TOKEN).")
+        sys.exit("error: --token is required (or set PANEL_API_TOKEN).")
     if not args.musescore.exists():
         sys.exit(f"error: MuseScore binary not found at {args.musescore}")
     if shutil.which("ffmpeg") is None:
@@ -235,7 +235,7 @@ def run(args: Args) -> int:
         return 0
     print(f"Found {len(jobs)} MusicXML file(s) across {args.source}.")
 
-    workdir = args.workdir or Path(tempfile.mkdtemp(prefix="webeval-stimuli-"))
+    workdir = args.workdir or Path(tempfile.mkdtemp(prefix="panel-stimuli-"))
     workdir.mkdir(parents=True, exist_ok=True)
     cleanup = args.workdir is None and not args.keep_converted
 

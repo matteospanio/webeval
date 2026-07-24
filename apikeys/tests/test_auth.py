@@ -48,7 +48,7 @@ def test_malformed_header_logs_auth_failed():
 def test_unknown_key_logs_auth_failed():
     url = _upload_url()
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION="Token webeval_nonsense")
+    client.credentials(HTTP_AUTHORIZATION="Token panel_nonsense")
     res = client.post(url, {}, format="multipart")
     assert res.status_code == 401
     ev = APIKeyEvent.objects.get()

@@ -1,5 +1,5 @@
 [project]
-name = "webeval"
+name = "panel"
 version = "0.1.0"
 description = "A web app to collect human evaluations of LLM outputs."
 readme = "README.md"

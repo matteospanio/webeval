@@ -1,6 +1,6 @@
 # Installation (local)
 
-Get webeval running on your own machine for development or a small local study. For a public/production server, see [Deployment](deployment.md).
+Get PANEL running on your own machine for development or a small local study. For a public/production server, see [Deployment](deployment.md).
 
 ## Requirements
 
@@ -13,8 +13,8 @@ Everything else (Django, DRF, etc.) is installed for you. SQLite is the default 
 ## Option A — with uv (recommended)
 
 ```bash
-git clone https://github.com/matteospanio/webeval.git
-cd webeval
+git clone https://github.com/matteospanio/panel.git
+cd panel
 
 uv sync                       # create the venv and install dependencies
 cp .env.example .env          # create your local config
@@ -28,8 +28,8 @@ uv run ./manage.py runserver
 The repository ships a pinned `requirements.txt` (exported from the lockfile) for environments without uv:
 
 ```bash
-git clone https://github.com/matteospanio/webeval.git
-cd webeval
+git clone https://github.com/matteospanio/panel.git
+cd panel
 
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate

@@ -1,4 +1,4 @@
-"""Django settings for the webeval project.
+"""Django settings for the PANEL project.
 
 Settings are driven by environment variables (see ``.env.example``). The project
 is a research web app for collecting anonymous human evaluations of LLM-generated
@@ -149,13 +149,13 @@ EMAIL_BACKEND = env(
     "EMAIL_BACKEND",
     default="django.core.mail.backends.console.EmailBackend",
 )
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webeval <no-reply@localhost>")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="PANEL <no-reply@localhost>")
 
 # Absolute base URL for links built outside a request (reserved for future
 # notification hooks; invite links in-app are built from the request host).
 SITE_URL = env("SITE_URL", default="http://127.0.0.1:8000")
 
-# --- webeval-specific ----------------------------------------------------
+# --- PANEL-specific ----------------------------------------------------
 
 # Path to an offline MaxMind GeoLite2-Country.mmdb file. If unset or missing,
 # country-code capture degrades gracefully to None rather than erroring.
@@ -194,8 +194,8 @@ STIMULUS_ALLOWED_VIDEO_EXTENSIONS = ("mp4", "webm", "ogv", "mov", "m4v")
 # ``unfold.admin.ModelAdmin`` / ``unfold.admin.TabularInline`` for the
 # theme to apply consistently; see experiments/admin.py.
 UNFOLD = {
-    "SITE_TITLE": "webeval admin",
-    "SITE_HEADER": "webeval",
+    "SITE_TITLE": "PANEL admin",
+    "SITE_HEADER": "PANEL",
     "SITE_SUBHEADER": "Human evaluation of LLM-generated stimuli",
     "SHOW_HISTORY": True,
     "SIDEBAR": {

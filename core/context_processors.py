@@ -1,8 +1,8 @@
-"""Template context processors for the webeval project.
+"""Template context processors for the PANEL project.
 
 ``admin_summary`` injects a :class:`experiments.stats.GlobalSummary` into
 the template context for every admin page rendered to a staff user. The
-admin index template reads ``webeval_summary`` to render the summary
+admin index template reads ``panel_summary`` to render the summary
 cards at the top of the page.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ def admin_summary(request) -> dict[str, Any]:
     from experiments.stats import global_summary
 
     try:
-        return {"webeval_summary": global_summary()}
+        return {"panel_summary": global_summary()}
     except Exception:
         # Never let a stats helper break the admin.
         return {}

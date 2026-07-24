@@ -1,6 +1,6 @@
 """Per-question descriptive analytics for every question type.
 
-webeval's older analytics were rating-centric (``per_stimulus_mean_ratings``)
+PANEL's older analytics were rating-centric (``per_stimulus_mean_ratings``)
 plus pairwise Bradley-Terry. This module gives **every** question type an
 aggregate summary suitable for online viewing and CSV-free reporting: choice
 distributions, Likert distributions + means, numeric/rating summary stats,

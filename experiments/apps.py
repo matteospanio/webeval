@@ -15,6 +15,6 @@ class ExperimentsConfig(AppConfig):
         from . import components  # noqa: F401
         autodiscover_modules("question_components")
         # The unified plugin surface (@plugin): any installed app may define a
-        # ``webeval_plugins`` module registering plugins of every kind.
+        # ``panel_plugins`` module registering plugins of every kind.
         from . import checks, plugins  # noqa: F401
-        autodiscover_modules("webeval_plugins")
+        autodiscover_modules("panel_plugins")

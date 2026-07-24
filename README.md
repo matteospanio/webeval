@@ -1,4 +1,4 @@
-# webeval
+# PANEL
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
@@ -6,13 +6,13 @@
 ![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC?logo=pytest&logoColor=white)
 ![Modes: standard + pairwise](https://img.shields.io/badge/modes-standard%20%2B%20pairwise-6C5CE7)
 
-**webeval is a self-hosted framework for human evaluation of AI systems.**
+**PANEL is a self-hosted framework for human evaluation of AI systems.**
 
 Run rigorous, privacy-respecting studies where people rate or compare the outputs of LLMs, generative audio/image/video models, text-to-speech, RAG pipelines, agents — or any other AI system — in single-stimulus or pairwise designs, then analyse the results online and pull them out as CSV, JSON, or webhooks.
 
 It is **AI-evaluation-first**, but the survey engine underneath is general: the same building blocks design studies with **non-AI targets** too (media, products, UX research, psychophysics, A/B copy). If you can show it to a person and ask a question about it, you can evaluate it here.
 
-Because you **host it yourself**, participant data never leaves infrastructure you control — a privacy- and compliance-friendly alternative to shipping your evaluation data to a third-party SaaS. webeval ships the features you need to run studies responsibly (consent versioning, data-subject requests, retention, audit trails) — see [GDPR & privacy](#gdpr--privacy).
+Because you **host it yourself**, participant data never leaves infrastructure you control — a privacy- and compliance-friendly alternative to shipping your evaluation data to a third-party SaaS. PANEL ships the features you need to run studies responsibly (consent versioning, data-subject requests, retention, audit trails) — see [GDPR & privacy](#gdpr--privacy).
 
 📚 **[Documentation](docs/README.md)** · [Install](docs/installation.md) · [Deploy on a server](docs/deployment.md) · [Using the app](docs/usage.md) · [Writing plugins](docs/plugins.md) · [GDPR & privacy](docs/gdpr.md)
 
@@ -58,7 +58,7 @@ Studies can be anonymous and single-session, multi-phase/longitudinal with retur
 
 ## GDPR & privacy
 
-webeval is built to be **self-hosted**, so you remain the sole data controller — participant data never leaves infrastructure you run. The platform is designed around data-protection good practice and ships concrete features that help you meet GDPR (and similar) obligations:
+PANEL is built to be **self-hosted**, so you remain the sole data controller — participant data never leaves infrastructure you run. The platform is designed around data-protection good practice and ships concrete features that help you meet GDPR (and similar) obligations:
 
 - **Data minimisation by design.** Participants are anonymous by default (no account). Client IP addresses are used only for an *offline* country lookup and are **never stored** — sessions keep just a coarse device type, browser family, and 2-letter country code. ([survey/metadata.py](survey/metadata.py))
 - **Lawful basis & consent.** Every study records a consent text and a lawful basis (GDPR Art. 6); each session is stamped with a hash of the exact consent wording it agreed to, so data stays tied to its consent version.
@@ -69,11 +69,11 @@ webeval is built to be **self-hosted**, so you remain the sole data controller �
 - **Special-category / free-text care.** Mark free-text questions as containing PII to redact them from exports by default.
 - **Security.** Scoped, hashed, auditable API keys; rate limiting; HTTPS/secure-cookie/HSTS toggles; HMAC-signed webhooks.
 
-> **Compliance is a shared responsibility.** webeval gives you the tooling; whether a given deployment is *compliant* also depends on how you configure and operate it (hosting region, consent wording, retention policy, DPA with any processors, etc.). It is not legal advice. See **[docs/gdpr.md](docs/gdpr.md)** for the full feature-to-article mapping and an operator checklist.
+> **Compliance is a shared responsibility.** PANEL gives you the tooling; whether a given deployment is *compliant* also depends on how you configure and operate it (hosting region, consent wording, retention policy, DPA with any processors, etc.). It is not legal advice. See **[docs/gdpr.md](docs/gdpr.md)** for the full feature-to-article mapping and an operator checklist.
 
 ## Quick Start
 
-> New here? The **[installation guide](docs/installation.md)** walks through local setup and the **[deployment guide](docs/deployment.md)** covers putting webeval on a VPS or other Python host.
+> New here? The **[installation guide](docs/installation.md)** walks through local setup and the **[deployment guide](docs/deployment.md)** covers putting PANEL on a VPS or other Python host.
 
 ### Requirements
 
@@ -211,7 +211,7 @@ The admin UI is built on Django admin with django-unfold and contains the full s
 
 ## Accounts, roles & collaboration
 
-webeval is multi-user. Each study has an **owner**, and access is scoped by role:
+PANEL is multi-user. Each study has an **owner**, and access is scoped by role:
 
 - **Owner** — full control: edit, results/exports, manage collaborators, transfer ownership, lifecycle.
 - **Editor** — edit the study (structure, stimulus/prompt uploads) and view results.
@@ -234,11 +234,11 @@ upgrading is non-breaking.
 Platform admins manage users, groups and the access/audit changelists from the
 Django admin under **Users & access**.
 
-## Extending webeval: plugins
+## Extending PANEL: plugins
 
 > Full guide with worked examples (custom question types, assignment strategies, consuming webhooks): **[docs/plugins.md](docs/plugins.md)**.
 
-New question widgets, assignment strategies, and pairwise strategies are **plugins** — you add them without touching the core. One decorator covers every kind: drop a `webeval_plugins.py` module in any installed app, subclass the matching base class, and decorate it with `@plugin` (the kind is inferred from the base class). `uv run ./manage.py plugins` lists everything installed.
+New question widgets, assignment strategies, and pairwise strategies are **plugins** — you add them without touching the core. One decorator covers every kind: drop a `panel_plugins.py` module in any installed app, subclass the matching base class, and decorate it with `@plugin` (the kind is inferred from the base class). `uv run ./manage.py plugins` lists everything installed.
 
 A question *component* bundles the four things a question type needs (config validation, participant-facing rendering, answer parsing, and a label):
 
@@ -274,7 +274,7 @@ class YesNoComponent(QuestionComponent):
         return True, raw, None
 ```
 
-`ExperimentsConfig.ready()` auto-discovers the module at startup. The new type then works **end-to-end** with no other changes: it appears in the admin question-type dropdown (with a raw-JSON `plugin_config` field), in the question bank, and in the studio drag-&-drop builder palette; renders inside the standard survey page; validates and stores answers like any built-in type; and flows into stats/exports. Built-in types are untouched, and a bad registration fails loudly at startup with a clear `PluginError`. webeval ships one worked example — `constant_sum` (allocate a fixed number of points across items) in [experiments/components.py](experiments/components.py). (The older `question_components.py` + `@question_component` / `register_strategy` paths keep working — see the appendix in [docs/plugins.md](docs/plugins.md).)
+`ExperimentsConfig.ready()` auto-discovers the module at startup. The new type then works **end-to-end** with no other changes: it appears in the admin question-type dropdown (with a raw-JSON `plugin_config` field), in the question bank, and in the studio drag-&-drop builder palette; renders inside the standard survey page; validates and stores answers like any built-in type; and flows into stats/exports. Built-in types are untouched, and a bad registration fails loudly at startup with a clear `PluginError`. PANEL ships one worked example — `constant_sum` (allocate a fixed number of points across items) in [experiments/components.py](experiments/components.py). (The older `question_components.py` + `@question_component` / `register_strategy` paths keep working — see the appendix in [docs/plugins.md](docs/plugins.md).)
 
 ## Project Layout
 
@@ -359,23 +359,23 @@ the standard admin changelists for `APIKey` and `APIKey event`.
 
 The wire format is unchanged — clients keep sending
 `Authorization: Token <key>`. Scripts read the key from
-`WEBEVAL_API_TOKEN`:
+`PANEL_API_TOKEN`:
 
 ```
-export WEBEVAL_API_TOKEN=webeval_…
+export PANEL_API_TOKEN=panel_…
 uv run python scripts/batch_upload_stimuli.py --slug my-study ./clips/
 ```
 
 **Upgrading from `rest_framework.authtoken`**: this release drops the old
 single-token-per-user system. After deploying, any existing
-`WEBEVAL_API_TOKEN` will 401 — log into the admin, create a new key with
+`PANEL_API_TOKEN` will 401 — log into the admin, create a new key with
 the scopes you need, and update your `.env`. The orphaned
 `authtoken_token` SQLite table can be left in place or dropped at your
 leisure.
 
 ## Production deployment
 
-webeval ships a production Docker image and a `docker-compose.yml` (app + Postgres + Redis). The fastest path:
+PANEL ships a production Docker image and a `docker-compose.yml` (app + Postgres + Redis). The fastest path:
 
 ```bash
 cp .env.example .env          # set SECRET_KEY, ALLOWED_HOSTS, SECURE_DEPLOY=True, …

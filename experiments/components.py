@@ -1,6 +1,6 @@
 """Pluggable question-type *components*.
 
-A **component** lets a developer add a brand-new question widget to webeval
+A **component** lets a developer add a brand-new question widget to PANEL
 without editing the core: it bundles the four things a question type needs to
 work end-to-end —
 

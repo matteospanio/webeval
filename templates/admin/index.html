@@ -9,8 +9,8 @@
 {% endblock %}
 
 {% block content %}
-    {% if webeval_summary %}
-    <section class="webeval-summary">
+    {% if panel_summary %}
+    <section class="panel-summary">
         <div class="flex items-center justify-between mb-4 gap-2 flex-wrap">
             <h2 class="font-semibold text-base">At a glance</h2>
             <div class="flex items-center gap-2">
@@ -19,7 +19,7 @@
                     <span class="material-symbols-outlined -ml-0.5">upload</span>
                     Import experiment
                 </a>
-                <a href="{% url 'webeval_database_export' %}"
+                <a href="{% url 'panel_database_export' %}"
                    class="font-medium inline-flex items-center gap-1 rounded-default border border-transparent bg-primary-600 text-white shadow-xs px-3 py-2 text-sm hover:bg-primary-600/80">
                     <span class="material-symbols-outlined -ml-0.5">download</span>
                     Export database
@@ -29,29 +29,29 @@
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
                 <div class="text-xs text-base-500 uppercase tracking-wide">Experiments</div>
-                <div class="text-2xl font-semibold">{{ webeval_summary.total_experiments }}</div>
+                <div class="text-2xl font-semibold">{{ panel_summary.total_experiments }}</div>
                 <div class="text-xs text-base-500">
-                    {{ webeval_summary.drafts }} draft ·
-                    {{ webeval_summary.test }} test ·
-                    {{ webeval_summary.active }} active ·
-                    {{ webeval_summary.closed }} closed
+                    {{ panel_summary.drafts }} draft ·
+                    {{ panel_summary.test }} test ·
+                    {{ panel_summary.active }} active ·
+                    {{ panel_summary.closed }} closed
                 </div>
             </div>
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
                 <div class="text-xs text-base-500 uppercase tracking-wide">Sessions</div>
-                <div class="text-2xl font-semibold">{{ webeval_summary.total_sessions }}</div>
+                <div class="text-2xl font-semibold">{{ panel_summary.total_sessions }}</div>
                 <div class="text-xs text-base-500">started by participants</div>
             </div>
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
                 <div class="text-xs text-base-500 uppercase tracking-wide">Completed</div>
-                <div class="text-2xl font-semibold">{{ webeval_summary.completed_sessions }}</div>
+                <div class="text-2xl font-semibold">{{ panel_summary.completed_sessions }}</div>
                 <div class="text-xs text-base-500">
-                    {% widthratio webeval_summary.completion_rate 1 100 %}% completion rate
+                    {% widthratio panel_summary.completion_rate 1 100 %}% completion rate
                 </div>
             </div>
             <div class="border border-base-200 dark:border-base-800 rounded-md p-4 bg-white dark:bg-base-900">
                 <div class="text-xs text-base-500 uppercase tracking-wide">Answers</div>
-                <div class="text-2xl font-semibold">{{ webeval_summary.total_responses }}</div>
+                <div class="text-2xl font-semibold">{{ panel_summary.total_responses }}</div>
                 <div class="text-xs text-base-500">from completed sessions</div>
             </div>
         </div>

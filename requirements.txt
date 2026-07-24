@@ -276,26 +276,26 @@ django==5.2.13 ; python_full_version < '3.12' \
     # via
     #   django-unfold
     #   djangorestframework
-    #   webeval
+    #   panel
 django==6.0.4 ; python_full_version >= '3.12' \
     --hash=sha256:14359c809fc16e8f81fd2b59d7d348e4d2d799da6840b10522b6edf7b8afc1da \
     --hash=sha256:8cfa2572b3f2768b2e84983cf3c4811877a01edb64e817986ec5d60751c113ac
     # via
     #   django-unfold
     #   djangorestframework
-    #   webeval
+    #   panel
 django-environ==0.13.0 \
     --hash=sha256:37799d14cd78222c6fd8298e48bfe17965ff8e586091ad66a463e52e0e7b799e \
     --hash=sha256:6c401e4c219442c2c4588c2116d5292b5484a6f69163ed09cd41f3943bfb645f
-    # via webeval
+    # via panel
 django-unfold==0.89.0 \
     --hash=sha256:1ecf73d491f089139ddd0f10aea7680fc6db02ed789db04d8c185be33b581593 \
     --hash=sha256:34a88b6bde940af01f6813f8f9d15684a16b5d7749226a4139367c7f988a62f8
-    # via webeval
+    # via panel
 djangorestframework==3.17.1 \
     --hash=sha256:a6def5f447fe78ff853bff1d47a3c59bf38f5434b031780b351b0c73a62db1a5 \
     --hash=sha256:c3c74dd3e83a5a3efc37b3c18d92bd6f86a6791c7b7d4dff62bb068500e76457
-    # via webeval
+    # via panel
 fonttools==4.62.1 \
     --hash=sha256:0aa72c43a601cfa9273bb1ae0518f1acadc01ee181a6fc60cd758d7fdadffc04 \
     --hash=sha256:12859ff0b47dd20f110804c3e0d0970f7b832f561630cd879969011541a464a9 \
@@ -445,7 +445,7 @@ frozenlist==1.8.0 \
 geoip2==5.2.0 \
     --hash=sha256:3d1546fd4eb7cad20445d027d2d9e81d3a71c074e019383f30db5d45e2c23320 \
     --hash=sha256:6c9ded1953f8eb16043ed0a8ea20e6e9524ea7b65eb745724e12490aca44ef00
-    # via webeval
+    # via panel
 idna==3.11 \
     --hash=sha256:771a87f49d9defaf64091e6e6fe9c18d4833f140bd19464795bc32d966ca37ea \
     --hash=sha256:795dafcc9c04ed0c1fb032c2aa73654d8e8c5023a7df64a53f39190ada629902
@@ -556,7 +556,7 @@ kiwisolver==1.5.0 \
 markdown==3.10.2 \
     --hash=sha256:994d51325d25ad8aa7ce4ebaec003febcce822c3f8c911e3b17c52f7f589f950 \
     --hash=sha256:e91464b71ae3ee7afd3017d9f358ef0baf158fd9a298db92f1d4761133824c36
-    # via webeval
+    # via panel
 matplotlib==3.10.8 \
     --hash=sha256:0a33deb84c15ede243aead39f77e990469fff93ad1521163305095b77b72ce4a \
     --hash=sha256:113bb52413ea508ce954a02c10ffd0d565f9c3bc7f2eddc27dfe1731e71c7b5f \
@@ -604,7 +604,7 @@ matplotlib==3.10.8 \
     --hash=sha256:eb3823f11823deade26ce3b9f40dcb4a213da7a670013929f31d5f5ed1055b22 \
     --hash=sha256:efb30e3baaea72ce5928e32bab719ab4770099079d66726a62b11b1ef7273be4 \
     --hash=sha256:f89c151aab2e2e23cb3fe0acad1e8b82841fd265379c4cecd0f3fcb34c15e0f6
-    # via webeval
+    # via panel
 maxminddb==3.1.1 \
     --hash=sha256:023bed7cce27556dcac761be4b41afef168e7603664ac3bfde26f35c01c15393 \
     --hash=sha256:0fa73771e95a1fc4a2c5f3530191473da9eb39ec8301999bd18d9ac6a9becb79 \
@@ -788,7 +788,7 @@ multidict==6.7.1 \
 mutagen==1.47.0 \
     --hash=sha256:719fadef0a978c31b4cf3c956261b3c58b6948b32023078a2117b1de09f0fc99 \
     --hash=sha256:edd96f50c5907a9539d8e5bba7245f62c9f520aef333d13392a79a4f70aca719
-    # via webeval
+    # via panel
 numpy==2.4.4 \
     --hash=sha256:07077278157d02f65c43b1b26a3886bce886f95d20aabd11f87932750dfb14ed \
     --hash=sha256:08f2e31ed5e6f04b118e49821397f12767934cfdd12a1ce86a058f91e004ee50 \
@@ -1089,7 +1089,7 @@ urllib3==2.6.3 \
 user-agents==2.2.0 \
     --hash=sha256:a98c4dc72ecbc64812c4534108806fb0a0b3a11ec3fd1eafe807cee5b0a942e7 \
     --hash=sha256:d36d25178db65308d1458c5fa4ab39c9b2619377010130329f3955e7626ead26
-    # via webeval
+    # via panel
 yarl==1.23.0 \
     --hash=sha256:03214408cfa590df47728b84c679ae4ef00be2428e11630277be0727eba2d7cc \
     --hash=sha256:041b1a4cefacf65840b4e295c6985f334ba83c30607441ae3cf206a0eed1a2e4 \

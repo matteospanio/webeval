@@ -23,7 +23,7 @@ from django.utils import timezone
 from .scopes import SCOPES
 
 KEY_PREFIX_LENGTH = 8
-RAW_KEY_PREFIX = "webeval_"
+RAW_KEY_PREFIX = "panel_"
 
 
 def hash_key(raw: str) -> str:

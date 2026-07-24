@@ -134,13 +134,13 @@ def browser_tmpdir():
 
     Snap-packaged Firefox/Chromium can only see files under ``$HOME`` (not
     ``/tmp``), so ``tmp_path`` is useless for ``<input type="file">`` tests.
-    We allocate a per-test directory under ``$HOME/.webeval-selenium-tmp/``
+    We allocate a per-test directory under ``$HOME/.panel-selenium-tmp/``
     and clean it up afterwards.
     """
     # Must be a non-hidden path inside $HOME: snap-confined Firefox can only
     # read files under the user's home and its `home` interface excludes
     # dotfiles/dotdirs by default, so ~/.cache or ~/.tmp won't work.
-    root = Path.home() / "webeval-selenium-tmp"
+    root = Path.home() / "panel-selenium-tmp"
     root.mkdir(exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix="t", dir=root))
     try:

@@ -2,7 +2,7 @@
 
 Wire-compatible with ``rest_framework.authentication.TokenAuthentication``:
 the ``Authorization: Token <key>`` header format is unchanged, so existing
-scripts keep working as long as their ``WEBEVAL_API_TOKEN`` is regenerated
+scripts keep working as long as their ``PANEL_API_TOKEN`` is regenerated
 from the admin UI.
 
 Every failure path writes an ``APIKeyEvent`` with ``event_type=auth_failed``

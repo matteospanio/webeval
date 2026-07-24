@@ -60,7 +60,7 @@ def test_create_redirects_to_show_key_and_shows_raw_once():
     res = c.get(show_url)
     assert res.status_code == 200
     body = res.content.decode()
-    assert "webeval_" in body
+    assert "panel_" in body
 
     # Second GET does not
     res = c.get(show_url)

@@ -1,6 +1,6 @@
 # Deployment
 
-Put webeval on a server you control. Two supported paths:
+Put PANEL on a server you control. Two supported paths:
 
 - **[A. Docker Compose](#a-docker-compose-easiest)** — one command brings up app + Postgres + Redis. Easiest, and the recommended default.
 - **[B. Manual](#b-manual-vps-gunicorn--postgres--nginx)** — gunicorn + Postgres + nginx on a plain VPS, for when you can't run Docker.
@@ -16,8 +16,8 @@ All production behaviour is environment-driven and **off by default**, so nothin
 The repo ships a production `Dockerfile` and a `docker-compose.yml` (app + Postgres + Redis).
 
 ```bash
-git clone https://github.com/matteospanio/webeval.git
-cd webeval
+git clone https://github.com/matteospanio/panel.git
+cd panel
 cp .env.example .env
 ```
 
@@ -32,7 +32,7 @@ CSRF_TRUSTED_ORIGINS=https://eval.example.org
 POSTGRES_PASSWORD=<a strong password>
 # Optional: email so invitations/notifications actually send
 # EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-# DEFAULT_FROM_EMAIL=webeval <no-reply@example.org>
+# DEFAULT_FROM_EMAIL=PANEL <no-reply@example.org>
 ```
 
 Bring it up:
@@ -60,7 +60,7 @@ To store uploaded media in S3-compatible object storage instead of the `media` v
 
 ```ini
 USE_S3=True
-AWS_STORAGE_BUCKET_NAME=webeval-media
+AWS_STORAGE_BUCKET_NAME=panel-media
 AWS_S3_REGION_NAME=us-east-1
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
@@ -84,9 +84,9 @@ sudo apt install -y python3-venv python3-pip postgresql nginx
 ### 2. App user, code, and dependencies
 
 ```bash
-sudo useradd -m -d /opt/webeval webeval
-sudo -iu webeval
-git clone https://github.com/matteospanio/webeval.git app && cd app
+sudo useradd -m -d /opt/panel panel
+sudo -iu panel
+git clone https://github.com/matteospanio/panel.git app && cd app
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt gunicorn psycopg[binary] whitenoise
 ```
@@ -96,19 +96,19 @@ pip install -r requirements.txt gunicorn psycopg[binary] whitenoise
 ### 3. Database
 
 ```bash
-sudo -u postgres createuser webeval --pwprompt
-sudo -u postgres createdb webeval --owner webeval
+sudo -u postgres createuser panel --pwprompt
+sudo -u postgres createdb panel --owner panel
 ```
 
 ### 4. Configuration
 
-Create `/opt/webeval/app/.env`:
+Create `/opt/panel/app/.env`:
 
 ```ini
 SECRET_KEY=<a long random string>
 DEBUG=False
 ALLOWED_HOSTS=eval.example.org
-DATABASE_URL=postgres://webeval:<password>@localhost:5432/webeval
+DATABASE_URL=postgres://panel:<password>@localhost:5432/panel
 SECURE_DEPLOY=True
 CSRF_TRUSTED_ORIGINS=https://eval.example.org
 USE_WHITENOISE=True
@@ -125,18 +125,18 @@ python manage.py createsuperuser
 
 ### 6. Run gunicorn under systemd
 
-`/etc/systemd/system/webeval.service`:
+`/etc/systemd/system/panel.service`:
 
 ```ini
 [Unit]
-Description=webeval
+Description=PANEL
 After=network.target postgresql.service
 
 [Service]
-User=webeval
-WorkingDirectory=/opt/webeval/app
-EnvironmentFile=/opt/webeval/app/.env
-ExecStart=/opt/webeval/app/.venv/bin/gunicorn core.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 120
+User=panel
+WorkingDirectory=/opt/panel/app
+EnvironmentFile=/opt/panel/app/.env
+ExecStart=/opt/panel/app/.venv/bin/gunicorn core.wsgi:application --bind 127.0.0.1:8000 --workers 3 --timeout 120
 Restart=always
 
 [Install]
@@ -144,12 +144,12 @@ WantedBy=multi-user.target
 ```
 
 ```bash
-sudo systemctl enable --now webeval
+sudo systemctl enable --now panel
 ```
 
 ### 7. nginx + HTTPS
 
-`/etc/nginx/sites-available/webeval`:
+`/etc/nginx/sites-available/panel`:
 
 ```nginx
 server {
@@ -166,7 +166,7 @@ server {
 ```
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/webeval /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/panel /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 sudo apt install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d eval.example.org      # provisions + auto-renews TLS
@@ -184,7 +184,7 @@ The REST API is rate-limited (defaults: 30/min anonymous, 240/min per key; overr
 
 ### Backups
 
-- **Database:** `pg_dump` on a schedule, e.g. `pg_dump -U webeval webeval | gzip > backup-$(date +%F).sql.gz`. Superusers can also download a full JSON dump at `/admin/database-export.json`.
+- **Database:** `pg_dump` on a schedule, e.g. `pg_dump -U panel panel | gzip > backup-$(date +%F).sql.gz`. Superusers can also download a full JSON dump at `/admin/database-export.json`.
 - **Media:** back up `MEDIA_ROOT` (or rely on your object-storage provider's versioning when `USE_S3=True`).
 
 ### Data retention
@@ -192,8 +192,8 @@ The REST API is rate-limited (defaults: 30/min anonymous, 240/min per key; overr
 Schedule the retention sweep so each study's retention window is honoured:
 
 ```bash
-# crontab for the webeval user — nightly at 03:00
-0 3 * * * cd /opt/webeval/app && .venv/bin/python manage.py purge_expired_data
+# crontab for the panel user — nightly at 03:00
+0 3 * * * cd /opt/panel/app && .venv/bin/python manage.py purge_expired_data
 ```
 
 Run `purge_expired_data --dry-run` first to preview. See [GDPR & privacy](gdpr.md).
@@ -205,7 +205,7 @@ git pull
 uv sync --no-dev --group production     # or: pip install -r requirements.txt
 python manage.py migrate
 python manage.py collectstatic --noinput
-sudo systemctl restart webeval          # or: docker compose up --build -d
+sudo systemctl restart panel          # or: docker compose up --build -d
 ```
 
 ### Production checklist

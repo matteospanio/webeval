@@ -1,4 +1,4 @@
-"""End-to-end smoke test for the full webeval pipeline.
+"""End-to-end smoke test for the full PANEL pipeline.
 
 Creates an active experiment via the ORM (as the admin would), simulates a
 participant completing the survey via the Django test client, and verifies

@@ -4,7 +4,7 @@ scipy lives in an optional ``analysis`` extra that isn't installed in the
 default (CI/test) environment, so the p-values here are computed from
 hand-rolled special functions (regularized incomplete beta + gamma, the
 standard Numerical-Recipes formulations). That keeps "ready-to-use
-statistical tests" working everywhere webeval runs.
+statistical tests" working everywhere PANEL runs.
 
 * numeric / rating / likert outcomes across conditions -> one-way ANOVA
   (F-test; for two conditions this equals the pooled t-test).

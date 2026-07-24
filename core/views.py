@@ -47,7 +47,7 @@ def database_export(request) -> HttpResponse:
         stdout=buffer,
     )
     payload = buffer.getvalue().encode("utf-8")
-    filename = "webeval-db-{}.json".format(datetime.utcnow().strftime("%Y%m%d-%H%M%S"))
+    filename = "panel-db-{}.json".format(datetime.utcnow().strftime("%Y%m%d-%H%M%S"))
     response = HttpResponse(payload, content_type="application/json")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     response["Content-Length"] = str(len(payload))

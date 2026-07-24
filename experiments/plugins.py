@@ -1,6 +1,6 @@
 """The unified plugin surface: one decorator, one import, one discovery hook.
 
-webeval is scriptable by design — new question widgets, assignment
+PANEL is scriptable by design — new question widgets, assignment
 strategies, and pairwise strategies plug into the core through registries.
 This module is the single front door to all of them:
 
@@ -23,8 +23,8 @@ needs exactly one import::
         ...
 
 Discovery: :meth:`ExperimentsConfig.ready` calls
-``autodiscover_modules("webeval_plugins")``, so any installed app that
-defines a ``webeval_plugins`` module has its registrations picked up at
+``autodiscover_modules("panel_plugins")``, so any installed app that
+defines a ``panel_plugins`` module has its registrations picked up at
 startup — no core edits. (The older per-kind entry points — a
 ``question_components`` module, ``register_strategy()`` called from
 ``AppConfig.ready`` — keep working forever; this module delegates to those
@@ -261,7 +261,7 @@ class PluginInfo:
     key: str
     label: str
     impl: str  # dotted path of the implementing class
-    builtin: bool  # ships with webeval (vs a third-party registration)
+    builtin: bool  # ships with PANEL (vs a third-party registration)
 
 
 def _label_for(instance: Any) -> str:

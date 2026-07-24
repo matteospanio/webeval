@@ -18,17 +18,17 @@ def _user(username="u") -> User:
 def test_generate_returns_raw_and_hashes_match():
     user = _user()
     key, raw = APIKey.generate(user=user, name="k", scopes=["stimuli:upload"])
-    assert raw.startswith("webeval_")
+    assert raw.startswith("panel_")
     assert len(raw) > 40
     assert key.hashed_key == hash_key(raw)
-    # prefix is the 8 random chars after "webeval_"
-    assert key.prefix == raw[len("webeval_") : len("webeval_") + 8]
+    # prefix is the 8 random chars after "panel_"
+    assert key.prefix == raw[len("panel_") : len("panel_") + 8]
 
 
 def test_generate_prefix_is_first_eight_random_chars():
     user = _user()
     key, raw = APIKey.generate(user=user, name="k", scopes=[])
-    assert key.prefix == raw[len("webeval_") : len("webeval_") + 8]
+    assert key.prefix == raw[len("panel_") : len("panel_") + 8]
 
 
 def test_is_active_reflects_revocation():

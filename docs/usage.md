@@ -1,4 +1,4 @@
-# Using webeval
+# Using PANEL
 
 This walkthrough follows a study from creation to results. There are two surfaces:
 
@@ -34,7 +34,7 @@ Conditions and stimuli (the things participants evaluate) are authored in the Dj
 
 ## 4. Check readiness and go live
 
-The study overview shows a **readiness checklist** — webeval blocks activation until the study is complete enough to collect usable data (≥1 condition, an active stimulus, a per-stimulus question, consent text, …). Switch to **test** to preview, then **activate**.
+The study overview shows a **readiness checklist** — PANEL blocks activation until the study is complete enough to collect usable data (≥1 condition, an active stimulus, a per-stimulus question, consent text, …). Switch to **test** to preview, then **activate**.
 
 ![Study overview with readiness and live results](screenshots/03-study-overview.png)
 
@@ -56,7 +56,7 @@ Beyond a single study, the studio offers a **cross-experiment comparison** table
 
 - **CSV** — long-format answers, wide demographics, completion codes, pairwise answers, and the raw event log (all from the overview; PII redacted unless you opt in).
 - **JSON / REST API** — pull aggregate results or submitted answers programmatically with a scoped [API key](../README.md#api-keys).
-- **Webhooks** — have webeval POST to your pipeline on completion (see [plugins](plugins.md#3-consuming-webhooks)).
+- **Webhooks** — have PANEL POST to your pipeline on completion (see [plugins](plugins.md#3-consuming-webhooks)).
 - **Reproducibility** — printable HTML, JSON, and ZIP archives of the study design.
 
 ## 8. Privacy & data governance

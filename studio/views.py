@@ -886,7 +886,7 @@ def _handle_access_post(request, experiment):
             send_mail(
                 subject=f"You're invited to collaborate on '{experiment.name}'",
                 message=(
-                    f"You've been invited as {invitation.role} on the webeval "
+                    f"You've been invited as {invitation.role} on the PANEL "
                     f"study '{experiment.name}'.\n\n"
                     f"Accept your invitation:\n{link}\n\n"
                     f"This link expires on {invitation.expires_at:%Y-%m-%d}."

@@ -84,12 +84,12 @@ RUNNABLE_STATES: frozenset[str] = frozenset(
 )
 
 
-PARTICIPANT_COOKIE = "webeval_pid"
+PARTICIPANT_COOKIE = "panel_pid"
 PARTICIPANT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 1 year
 
 
 def _session_key(slug: str) -> str:
-    return f"webeval:session:{slug}"
+    return f"panel:session:{slug}"
 
 
 def _load_session(
@@ -439,7 +439,7 @@ def _access_gate(request, experiment: Experiment, slug: str):
     mode = experiment.access_mode
     if mode == Experiment.AccessMode.PUBLIC:
         return None
-    granted_key = f"webeval:access:{slug}"
+    granted_key = f"panel:access:{slug}"
     if request.session.get(granted_key):
         return None
     if mode == Experiment.AccessMode.CODE:
@@ -456,7 +456,7 @@ def _access_gate(request, experiment: Experiment, slug: str):
             ).first()
             if invite is not None:
                 request.session[granted_key] = True
-                request.session[f"webeval:invite:{slug}"] = token
+                request.session[f"panel:invite:{slug}"] = token
                 return None
         ctx = _base_context(experiment, None)
         ctx["progress_percent"] = None
@@ -468,7 +468,7 @@ def _consume_invite(request, experiment: Experiment, slug: str) -> None:
     """Mark the stashed single-use invite token as used (at session creation)."""
     if experiment.access_mode != Experiment.AccessMode.INVITE:
         return
-    token = request.session.get(f"webeval:invite:{slug}")
+    token = request.session.get(f"panel:invite:{slug}")
     if token:
         ParticipantInvite.objects.filter(
             experiment=experiment, token=token, used_at__isnull=True
@@ -486,7 +486,7 @@ def access(request, slug: str):
     if request.method == "POST":
         supplied = (request.POST.get("access_code") or "").strip()
         if experiment.access_code and supplied == experiment.access_code:
-            request.session[f"webeval:access:{slug}"] = True
+            request.session[f"panel:access:{slug}"] = True
             return redirect("survey:consent", slug=slug)
         error = True
     ctx = _base_context(experiment, None)
@@ -512,7 +512,7 @@ def consent(request, slug: str):
 
     # Capture an external/platform id from the configured URL param; stash it in
     # the Django session so it survives the consent GET → POST.
-    ext_key = f"webeval:extid:{slug}"
+    ext_key = f"panel:extid:{slug}"
     if experiment.external_id_param:
         incoming = (request.GET.get(experiment.external_id_param) or "").strip()
         if incoming:
@@ -1474,11 +1474,11 @@ def _finish_session(request, session: ParticipantSession, slug: str):
         ]
     )
     if session.completion_code:
-        request.session[f"webeval:code:{slug}"] = session.completion_code
+        request.session[f"panel:code:{slug}"] = session.completion_code
     if session.resume_token:
-        request.session[f"webeval:token:{slug}"] = session.resume_token
+        request.session[f"panel:token:{slug}"] = session.resume_token
     if session.participant_uid:
-        request.session[f"webeval:uid:{slug}"] = session.participant_uid
+        request.session[f"panel:uid:{slug}"] = session.participant_uid
     request.session.pop(_session_key(slug), None)
     _dispatch_completion_hooks(session)
     return redirect("survey:thanks", slug=slug)
@@ -1499,7 +1499,7 @@ def _dispatch_completion_hooks(session: ParticipantSession) -> None:
     if email:
         try:
             send_mail(
-                subject=f"[webeval] A participant completed '{session.experiment.name}'",
+                subject=f"[PANEL] A participant completed '{session.experiment.name}'",
                 message=(
                     f"A participant just completed '{session.experiment.name}'.\n"
                     f"Session: {session.id}\n"
@@ -1612,9 +1612,9 @@ def withdraw(request, slug: str, token: str):
 @require_http_methods(["GET"])
 def thanks(request, slug: str):
     experiment = get_object_or_404(Experiment, slug=slug)
-    completion_code = request.session.pop(f"webeval:code:{slug}", "")
-    token = request.session.pop(f"webeval:token:{slug}", "")
-    participant_code = request.session.pop(f"webeval:uid:{slug}", "")
+    completion_code = request.session.pop(f"panel:code:{slug}", "")
+    token = request.session.pop(f"panel:token:{slug}", "")
+    participant_code = request.session.pop(f"panel:uid:{slug}", "")
 
     next_phase = experiment.next_phases.order_by("created_at").first()
     next_phase_info = None

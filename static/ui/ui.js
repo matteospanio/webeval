@@ -1,4 +1,4 @@
-// webeval shared UI behaviour: copy-to-clipboard buttons and confirm guards.
+// PANEL shared UI behaviour: copy-to-clipboard buttons and confirm guards.
 // Progressive enhancement only — nothing here is required for any flow to work.
 
 // Copy buttons: <button class="we-copy" data-copy-text="…"> or

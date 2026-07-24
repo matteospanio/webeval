@@ -133,7 +133,7 @@ class TestStaffGating:
         assert response.status_code == 200
         body = response.content.decode()
         # Summary section is injected by core.context_processors.admin_summary.
-        assert "webeval-summary" in body or "At a glance" in body
+        assert "panel-summary" in body or "At a glance" in body
         assert "Experiments" in body
         assert "Sessions" in body
 
@@ -168,8 +168,8 @@ class TestAdminSummaryContextProcessor:
     def test_admin_summary_injected_for_staff_on_admin(self, staff_client):
         response = staff_client.get(reverse("admin:index"))
         assert response.status_code == 200
-        assert "webeval_summary" in response.context
-        summary = response.context["webeval_summary"]
+        assert "panel_summary" in response.context
+        summary = response.context["panel_summary"]
         assert summary is not None
         assert hasattr(summary, "total_experiments")
 

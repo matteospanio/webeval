@@ -5,13 +5,13 @@ services:
   db:
     image: postgres:16
     environment:
-      POSTGRES_DB: webeval
-      POSTGRES_USER: webeval
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-webeval}
+      POSTGRES_DB: panel
+      POSTGRES_USER: panel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-panel}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U webeval"]
+      test: ["CMD-SHELL", "pg_isready -U panel"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -23,7 +23,7 @@ services:
     build: .
     env_file: .env
     environment:
-      DATABASE_URL: postgres://webeval:${POSTGRES_PASSWORD:-webeval}@db:5432/webeval
+      DATABASE_URL: postgres://panel:${POSTGRES_PASSWORD:-panel}@db:5432/panel
       REDIS_URL: redis://redis:6379/0
       USE_WHITENOISE: "True"
     ports:

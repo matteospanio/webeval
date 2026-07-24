@@ -1,6 +1,6 @@
-# Writing plugins & extending webeval
+# Writing plugins & extending PANEL
 
-webeval is built to be extended **without forking the core**. One decorator — `@plugin` — registers your extension with the app; today three plugin *kinds* exist, all served by the same unified surface in [experiments/plugins.py](../experiments/plugins.py):
+PANEL is built to be extended **without forking the core**. One decorator — `@plugin` — registers your extension with the app; today three plugin *kinds* exist, all served by the same unified surface in [experiments/plugins.py](../experiments/plugins.py):
 
 | Kind | Base class | What it adds |
 |---|---|---|
@@ -18,10 +18,10 @@ from experiments.plugins import plugin, QuestionComponent, StrategyBase
 
 ## Where plugin code lives
 
-Drop a **`webeval_plugins.py`** module in any installed Django app — it is auto-imported at startup (`experiments/apps.py` calls `autodiscover_modules("webeval_plugins")` in `ready()`), so registrations are picked up with **no core edits**. One module may register plugins of every kind.
+Drop a **`panel_plugins.py`** module in any installed Django app — it is auto-imported at startup (`experiments/apps.py` calls `autodiscover_modules("panel_plugins")` in `ready()`), so registrations are picked up with **no core edits**. One module may register plugins of every kind.
 
-- Quick in-tree addition: `<yourapp>/webeval_plugins.py`.
-- Reusable extension: make a tiny Django app, put your plugins in its `webeval_plugins.py`, and add the app to `INSTALLED_APPS`.
+- Quick in-tree addition: `<yourapp>/panel_plugins.py`.
+- Reusable extension: make a tiny Django app, put your plugins in its `panel_plugins.py`, and add the app to `INSTALLED_APPS`.
 
 List what's installed at any time:
 
@@ -42,7 +42,7 @@ strategy           balanced_random   ...                            experiments.
 A *component* bundles everything a question type needs: a config schema, a server-side renderer, and an answer parser. Subclass `QuestionComponent` and decorate it.
 
 ```python
-# yourapp/webeval_plugins.py
+# yourapp/panel_plugins.py
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html_join
 
@@ -111,11 +111,11 @@ That's it — the new type now works **end to end** with no other changes:
 | `validate_config(config) -> None` | optional | Raise `ValidationError` on a bad config dict. |
 | `default_config() -> dict` | optional | Starter config for the builder. |
 
-webeval ships a worked example, `ConstantSumComponent` (`constant_sum`: distribute N points across items), in [experiments/components.py](../experiments/components.py).
+PANEL ships a worked example, `ConstantSumComponent` (`constant_sum`: distribute N points across items), in [experiments/components.py](../experiments/components.py).
 
 ### Removing a plugin later
 
-If studies were authored with your type and the plugin app is removed, those questions can no longer render. webeval fails safe: activation is blocked (`readiness_problems`), a Django system check warns on `manage.py check --database default` / `migrate` (`experiments.W001`), and the participant page shows a visible "question type not installed" notice instead of a silent gap. Re-install the plugin or migrate the affected questions.
+If studies were authored with your type and the plugin app is removed, those questions can no longer render. PANEL fails safe: activation is blocked (`readiness_problems`), a Django system check warns on `manage.py check --database default` / `migrate` (`experiments.W001`), and the participant page shows a visible "question type not installed" notice instead of a silent gap. Re-install the plugin or migrate the affected questions.
 
 ---
 
@@ -124,7 +124,7 @@ If studies were authored with your type and the plugin app is removed, those que
 A *strategy* decides which stimuli a participant sees and in what order. It only queries stimuli/conditions — it never touches participant models — so it stays pure and testable.
 
 ```python
-# yourapp/webeval_plugins.py
+# yourapp/panel_plugins.py
 import random
 
 from experiments.plugins import plugin, StrategyBase
@@ -171,7 +171,7 @@ from flask import Flask, request, abort
 app = Flask(__name__)
 SECRET = b"<the per-webhook secret shown in the studio>"
 
-@app.post("/webeval")
+@app.post("/panel")
 def receive():
     body = request.get_data()
     sent = request.headers.get("X-Webhook-Signature", "")
@@ -186,7 +186,7 @@ def receive():
 To **pull** data instead of receiving pushes, use the REST API with a scoped API key:
 
 ```bash
-curl -H "Authorization: Token $WEBEVAL_API_TOKEN" \
+curl -H "Authorization: Token $PANEL_API_TOKEN" \
      https://eval.example.org/api/v1/experiments/<slug>/results/
 ```
 
@@ -224,5 +224,5 @@ The per-kind APIs predate `@plugin` and keep working:
 Two behavioural notes when migrating to `@plugin`:
 
 - The unified path is **stricter**: it rejects duplicate keys registered by different classes (the legacy strategy helpers silently overwrite). If you relied on overwriting, pass `replace=True`.
-- Keep exactly one registration per key: an app that keeps its old `question_components` registration *and* re-registers the same key from a different class in `webeval_plugins` now fails loudly at startup — delete the old one when you migrate.
+- Keep exactly one registration per key: an app that keeps its old `question_components` registration *and* re-registers the same key from a different class in `panel_plugins` now fails loudly at startup — delete the old one when you migrate.
 - A dual-role class (subclassing two bases) must be registered twice with explicit `@plugin(kind=...)` calls.

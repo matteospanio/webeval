@@ -1,4 +1,4 @@
-"""List every installed webeval plugin (``manage.py plugins``)."""
+"""List every installed PANEL plugin (``manage.py plugins``)."""
 from __future__ import annotations
 
 from django.core.management.base import BaseCommand
@@ -8,7 +8,7 @@ from experiments.plugins import _KINDS, installed_plugins
 
 class Command(BaseCommand):
     help = (
-        "List installed webeval plugins: question components, assignment "
+        "List installed PANEL plugins: question components, assignment "
         "strategies, and pairwise strategies (built-ins included)."
     )
 

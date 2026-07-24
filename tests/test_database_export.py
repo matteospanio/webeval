@@ -23,7 +23,7 @@ def staff_client(db):
 
 def test_database_export_requires_staff():
     client = Client()
-    response = client.get(reverse("webeval_database_export"))
+    response = client.get(reverse("panel_database_export"))
     # staff_member_required redirects anonymous/non-staff users to login.
     assert response.status_code in (302, 403)
     assert "/admin/login/" in response.get("Location", "")
@@ -33,17 +33,17 @@ def test_database_export_forbids_non_staff():
     User.objects.create_user("joe", "j@e.org", "pw", is_staff=False)
     client = Client()
     client.login(username="joe", password="pw")
-    response = client.get(reverse("webeval_database_export"))
+    response = client.get(reverse("panel_database_export"))
     assert response.status_code in (302, 403)
 
 
 def test_database_export_streams_dumpdata_json(staff_client):
     ExperimentFactory(slug="export-me", name="Exportable")
-    response = staff_client.get(reverse("webeval_database_export"))
+    response = staff_client.get(reverse("panel_database_export"))
     assert response.status_code == 200
     assert response["Content-Type"].startswith("application/json")
     disposition = response["Content-Disposition"]
-    assert disposition.startswith('attachment; filename="webeval-db-')
+    assert disposition.startswith('attachment; filename="panel-db-')
     assert disposition.endswith('.json"')
 
     payload = json.loads(response.content)
@@ -67,5 +67,5 @@ def test_database_export_streams_dumpdata_json(staff_client):
 def test_export_link_rendered_on_admin_index(staff_client):
     response = staff_client.get("/admin/")
     assert response.status_code == 200
-    export_url = reverse("webeval_database_export")
+    export_url = reverse("panel_database_export")
     assert export_url.encode() in response.content

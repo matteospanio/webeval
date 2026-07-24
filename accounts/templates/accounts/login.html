@@ -1,8 +1,8 @@
 {% extends "studio/base.html" %}
-{% block title %}Log in · webeval{% endblock %}
+{% block title %}Log in · PANEL{% endblock %}
 {% block content %}
 <div class="we-card we-narrow">
-  <hgroup><h1>Log in</h1><p>Sign in to your webeval studio.</p></hgroup>
+  <hgroup><h1>Log in</h1><p>Sign in to your PANEL studio.</p></hgroup>
   {% if form.errors %}<div class="we-alert we-alert-error" role="alert">That username and password didn't match. Please try again.</div>{% endif %}
   <form method="post">
     {% csrf_token %}

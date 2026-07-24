@@ -1,4 +1,4 @@
-"""URL configuration for the webeval project."""
+"""URL configuration for the PANEL project."""
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -13,7 +13,7 @@ urlpatterns = [
     path(
         "admin/database-export.json",
         database_export,
-        name="webeval_database_export",
+        name="panel_database_export",
     ),
     path(
         "admin/api-keys/",

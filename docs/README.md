@@ -1,18 +1,18 @@
-# webeval documentation
+# PANEL documentation
 
-webeval is a **self-hosted framework for human evaluation of AI systems** (and any other targets you can show a person). These guides take you from zero to a running, production-grade evaluation platform.
+PANEL is a **self-hosted framework for human evaluation of AI systems** (and any other targets you can show a person). These guides take you from zero to a running, production-grade evaluation platform.
 
 ## Guides
 
 | Guide | What it covers |
 |---|---|
-| [Installation](installation.md) | Run webeval locally on your machine (uv or pip), in minutes. |
-| [Deployment](deployment.md) | Put webeval on a VPS or any Python host — Docker Compose, or a manual gunicorn + Postgres + nginx setup, with HTTPS. |
+| [Installation](installation.md) | Run PANEL locally on your machine (uv or pip), in minutes. |
+| [Deployment](deployment.md) | Put PANEL on a VPS or any Python host — Docker Compose, or a manual gunicorn + Postgres + nginx setup, with HTTPS. |
 | [Using the app](usage.md) | A walkthrough of the researcher studio and the participant flow, with screenshots. |
 | [Writing plugins & extending](plugins.md) | Add custom question types, assignment strategies, and more — with worked examples. |
 | [GDPR & privacy](gdpr.md) | The data-protection features mapped to GDPR, plus an operator checklist. |
 
-## What webeval is
+## What PANEL is
 
 - **AI-evaluation-first.** Designed for rating and pairwise comparison of model outputs — LLMs, generative audio/image/video, TTS, RAG, agents.
 - **General-purpose underneath.** The same engine runs human-subject research, media/product preference, UX A/B tests, and psychophysics.

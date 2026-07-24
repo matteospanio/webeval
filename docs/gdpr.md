@@ -1,16 +1,16 @@
 # GDPR & privacy
 
-webeval is designed to make running **privacy-respecting** human-evaluation studies straightforward, and to give a self-hosting operator the tools needed to meet GDPR (and comparable regimes such as UK GDPR) obligations.
+PANEL is designed to make running **privacy-respecting** human-evaluation studies straightforward, and to give a self-hosting operator the tools needed to meet GDPR (and comparable regimes such as UK GDPR) obligations.
 
-> **This is not legal advice, and webeval is not "GDPR-certified".** Compliance is a property of *a deployment and how it is operated*, not of software alone. webeval provides the technical building blocks; you are responsible for lawful configuration (hosting region, consent wording, retention policy, processor agreements, responding to requests, etc.). Use the [checklist](#operator-checklist) below.
+> **This is not legal advice, and PANEL is not "GDPR-certified".** Compliance is a property of *a deployment and how it is operated*, not of software alone. PANEL provides the technical building blocks; you are responsible for lawful configuration (hosting region, consent wording, retention policy, processor agreements, responding to requests, etc.). Use the [checklist](#operator-checklist) below.
 
 ## Why self-hosting matters
 
-You host webeval yourself, so **you are the sole data controller**. Participant data is stored in your database and your media storage — it is never transmitted to webeval's authors or any third-party SaaS. That removes an entire class of cross-border-transfer and sub-processor questions that hosted survey platforms raise.
+You host PANEL yourself, so **you are the sole data controller**. Participant data is stored in your database and your media storage — it is never transmitted to PANEL's authors or any third-party SaaS. That removes an entire class of cross-border-transfer and sub-processor questions that hosted survey platforms raise.
 
 ## What participant data is collected
 
-webeval is **data-minimal by default**. For an anonymous study, a `ParticipantSession` stores:
+PANEL is **data-minimal by default**. For an anonymous study, a `ParticipantSession` stores:
 
 - the answers the participant gives;
 - a coarse **device type** (`desktop`/`mobile`/`tablet`) and **browser family** parsed from the User-Agent;
@@ -18,13 +18,13 @@ webeval is **data-minimal by default**. For an anonymous study, a `ParticipantSe
 
 Crucially, the client **IP address is never stored** — it is used only, in-memory, for an *offline* MaxMind country lookup and then discarded ([survey/metadata.py](../survey/metadata.py)). There is no precise geolocation and no stored raw User-Agent.
 
-Optional identifiers appear only if you enable them: a long-lived `webeval_pid` cookie (for duplicate detection / return visits), a participant-entered code (longitudinal studies), or an external platform id such as `PROLIFIC_PID` you pass in the link.
+Optional identifiers appear only if you enable them: a long-lived `panel_pid` cookie (for duplicate detection / return visits), a participant-entered code (longitudinal studies), or an external platform id such as `PROLIFIC_PID` you pass in the link.
 
 > Researcher/operator security logs (access changes, API-key usage, the audit trail) **do** record the IP and User-Agent of *staff* actions — that's deliberate, for accountability of the people running studies, and is separate from participant data.
 
 ## Feature → GDPR mapping
 
-| GDPR principle / right | How webeval supports it |
+| GDPR principle / right | How PANEL supports it |
 |---|---|
 | **Lawful basis** (Art. 6) | Per-study `legal_basis` field (consent, legitimate interest, …) recorded as study metadata. |
 | **Consent** (Arts. 6–7) | A consent step gates every study; each session is stamped with `consent_version` (a hash of the exact consent text), so data stays tied to the wording agreed to even after the text is edited. |
@@ -60,4 +60,4 @@ Optional identifiers appear only if you enable them: a long-lived `webeval_pid` 
 
 ## Cookies
 
-Participant-facing pages use a first-party session cookie (functional) and, when enabled, the long-lived `webeval_pid` identification cookie. Disclose these in your consent/privacy text. The studio/admin use standard Django session + CSRF cookies for authenticated researchers.
+Participant-facing pages use a first-party session cookie (functional) and, when enabled, the long-lived `panel_pid` identification cookie. Disclose these in your consent/privacy text. The studio/admin use standard Django session + CSRF cookies for authenticated researchers.

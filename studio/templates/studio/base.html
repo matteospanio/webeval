@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}webeval studio{% endblock %}</title>
+  <title>{% block title %}PANEL studio{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'ui/tokens.css' %}">
   <link rel="stylesheet" href="{% static 'ui/base.css' %}">
   <link rel="stylesheet" href="{% static 'ui/components.css' %}">
@@ -15,7 +15,7 @@
   <header class="we-topnav">
     <nav class="we-topnav-inner" aria-label="Main">
       <a class="we-topnav-brand we-brandmark" href="{% url 'studio:studies' %}">
-        <span class="we-brandmark-chip" aria-hidden="true">w</span>webeval <span class="we-muted">studio</span>
+        <span class="we-brandmark-chip" aria-hidden="true">P</span>PANEL <span class="we-muted">studio</span>
       </a>
       <ul class="we-topnav-links">
         {% if user.is_authenticated %}
@@ -42,7 +42,7 @@
     {% block content %}{% endblock %}
   </main>
   <footer class="studio-footer">
-    <small>webeval — open-source human-evaluation platform</small>
+    <small>PANEL — open-source human-evaluation platform</small>
   </footer>
   <script type="module" src="{% static 'ui/ui.js' %}"></script>
   {% block scripts %}{% endblock %}

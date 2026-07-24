@@ -15,4 +15,4 @@ staticfiles
 .env
 *.md
 !README.md
-webeval-selenium-tmp
+panel-selenium-tmp
