@@ -18,7 +18,8 @@ import random
 import secrets
 import uuid
 from datetime import timedelta
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Callable
 
 from django.contrib import messages
 from django.core.mail import send_mail
@@ -266,10 +267,6 @@ def _answers_for_section(session, section) -> dict[int, Any]:
     }
 
 
-def _answers_for_demographics(session) -> dict[int, Any]:
-    return _answers_for_section(session, Question.Section.DEMOGRAPHIC)
-
-
 def _visible_with_submitted(request, page_questions, stored):
     """Page questions whose ``visible_if`` holds against stored + just-submitted
     answers, so a hidden question is never required or stored on POST."""
@@ -329,26 +326,20 @@ def _next_renderable_stimulus_page(session, assignments, pages) -> str:
     return "demographics"
 
 
-def _next_renderable_demographic_page(session, pages) -> str:
-    """Advance ``demographic_page_index`` to the next page with a visible
-    question. Returns ``"render"`` or ``"finish"``."""
-    stored = _answers_for_demographics(session)
-    while session.demographic_page_index < len(pages):
-        if any(is_visible(q, stored) for q in pages[session.demographic_page_index]):
+def _next_renderable_page(session, pages, index_attr: str, stored) -> str:
+    """Advance the ``index_attr`` cursor on ``session`` to the next page that has
+    at least one visible question (skipping pages fully hidden by branching).
+    Returns ``"render"`` (cursor points at a renderable page) or ``"finish"``
+    (the section is exhausted). Shared by the screening and demographic
+    single-section flows."""
+    while getattr(session, index_attr) < len(pages):
+        idx = getattr(session, index_attr)
+        if any(is_visible(q, stored) for q in pages[idx]):
             return "render"
-        session.demographic_page_index += 1
+        setattr(session, index_attr, idx + 1)
     return "finish"
 
 
-def _next_renderable_screening_page(session, pages) -> str:
-    """Advance ``screening_page_index`` to the next page with a visible
-    question. Returns ``"render"`` or ``"finish"``."""
-    stored = _answers_for_section(session, Question.Section.SCREENING)
-    while session.screening_page_index < len(pages):
-        if any(is_visible(q, stored) for q in pages[session.screening_page_index]):
-            return "render"
-        session.screening_page_index += 1
-    return "finish"
 
 
 def _ordered_section_questions(
@@ -789,6 +780,86 @@ def _create_session(
 # --- screening / eligibility ------------------------------------------------
 
 
+@dataclass(frozen=True)
+class _PagedSection:
+    """Declarative config for a single-section paged flow (screening or
+    demographics). The engine ``_run_paged_section`` is the one implementation;
+    ``play`` stays bespoke because of its per-stimulus assignment cursors and
+    stimulus-media context."""
+
+    step: str            # ParticipantSession.Step this view serves
+    section: str         # Question.Section it paginates
+    cursor: str          # session integer-cursor attribute name
+    template: str
+    url_name: str        # this view's own URL (for same-page redirects)
+    finish_fn: Callable  # (request, session, slug) when the section is exhausted
+    empty_fn: Callable   # (request, session, slug) when there are no pages
+    log_label: str | None = None  # SurveyEvent.PAGE_SUBMIT label, or None to skip
+
+
+def _section_page_ctx(request, experiment, session, cfg, pages, visible, idx):
+    ctx = _base_context(experiment, session)
+    ctx.update({
+        "page_questions": visible,
+        "is_last_page": idx == len(pages) - 1,
+        "page_number": idx + 1,
+        "page_total": len(pages),
+        "resume_url": _resume_url(request, experiment, session),
+        "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
+    })
+    return ctx
+
+
+def _run_paged_section(request, experiment, session, slug, cfg: _PagedSection):
+    """Shared engine for screening + demographics: guard the step, paginate the
+    section, submit-or-render one page, and advance the cursor over pages hidden
+    by branching."""
+    bounce = _expect_step(session, cfg.step)
+    if bounce:
+        return bounce
+
+    pages = paginate_questions(_ordered_section_questions(experiment, cfg.section))
+    if not pages:
+        return cfg.empty_fn(request, session, slug)
+
+    if request.method == "POST":
+        if getattr(session, cfg.cursor) >= len(pages):
+            return redirect(cfg.url_name, slug=slug)
+        idx = getattr(session, cfg.cursor)
+        stored = _answers_for_section(session, cfg.section)
+        visible = _visible_with_submitted(request, pages[idx], stored)
+        errors, responses = _collect_answers(request, session, visible)
+        if errors:
+            for err in errors:
+                messages.error(request, err)
+            _annotate_submitted(request, visible)
+            ctx = _section_page_ctx(request, experiment, session, cfg, pages, visible, idx)
+            return render(request, cfg.template, ctx, status=400)
+        with transaction.atomic():
+            Response.objects.bulk_create(responses)
+            if cfg.log_label:
+                _log_event(
+                    session, SurveyEvent.Type.PAGE_SUBMIT,
+                    label=cfg.log_label, elapsed_ms=_page_elapsed_ms(request),
+                )
+            setattr(session, cfg.cursor, idx + 1)
+            after = _answers_for_section(session, cfg.section)
+            if _next_renderable_page(session, pages, cfg.cursor, after) == "finish":
+                return cfg.finish_fn(request, session, slug)
+            session.save(update_fields=[cfg.cursor])
+        return redirect(cfg.url_name, slug=slug)
+
+    # GET: advance over pages hidden by branching (or finish the section).
+    stored = _answers_for_section(session, cfg.section)
+    if _next_renderable_page(session, pages, cfg.cursor, stored) == "finish":
+        return cfg.finish_fn(request, session, slug)
+    session.save(update_fields=[cfg.cursor])
+    idx = getattr(session, cfg.cursor)
+    visible = _renderable_questions(pages[idx], _answers_for_section(session, cfg.section))
+    ctx = _section_page_ctx(request, experiment, session, cfg, pages, visible, idx)
+    return render(request, cfg.template, ctx)
+
+
 @require_http_methods(["GET", "POST"])
 def screening(request, slug: str):
     experiment, session = _load_session(request, slug)
@@ -796,68 +867,18 @@ def screening(request, slug: str):
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
-    bounce = _expect_step(session, ParticipantSession.Step.SCREENING)
-    if bounce:
-        return bounce
-
-    pages = paginate_questions(
-        _ordered_section_questions(experiment, Question.Section.SCREENING)
+    return _run_paged_section(
+        request, experiment, session, slug,
+        _PagedSection(
+            step=ParticipantSession.Step.SCREENING,
+            section=Question.Section.SCREENING,
+            cursor="screening_page_index",
+            template="survey/screening.html",
+            url_name="survey:screening",
+            finish_fn=_finish_screening,
+            empty_fn=_advance_past_screening,
+        ),
     )
-    if not pages:
-        return _advance_past_screening(request, session, slug)
-
-    if request.method == "POST":
-        if session.screening_page_index >= len(pages):
-            return redirect("survey:screening", slug=slug)
-        page_questions = pages[session.screening_page_index]
-        is_last_page = session.screening_page_index == len(pages) - 1
-        stored = _answers_for_section(session, Question.Section.SCREENING)
-        visible_questions = _visible_with_submitted(request, page_questions, stored)
-        errors, responses = _collect_answers(
-            request, session, None, visible_questions
-        )
-        if errors:
-            for err in errors:
-                messages.error(request, err)
-            _annotate_submitted(request, visible_questions)
-            ctx = _base_context(experiment, session)
-            ctx.update(
-                {
-                    "page_questions": visible_questions,
-                    "is_last_page": is_last_page,
-                    "page_number": session.screening_page_index + 1,
-                    "page_total": len(pages),
-                }
-            )
-            return render(request, "survey/screening.html", ctx, status=400)
-        with transaction.atomic():
-            Response.objects.bulk_create(responses)
-            session.screening_page_index += 1
-            if _next_renderable_screening_page(session, pages) == "finish":
-                return _finish_screening(request, session, slug)
-            session.save(update_fields=["screening_page_index"])
-        return redirect("survey:screening", slug=slug)
-
-    # GET: advance over screening pages hidden by branching (or finish).
-    if _next_renderable_screening_page(session, pages) == "finish":
-        return _finish_screening(request, session, slug)
-    session.save(update_fields=["screening_page_index"])
-    page_questions = pages[session.screening_page_index]
-    stored = _answers_for_section(session, Question.Section.SCREENING)
-    visible_questions = _renderable_questions(page_questions, stored)
-    is_last_page = session.screening_page_index == len(pages) - 1
-    ctx = _base_context(experiment, session)
-    ctx.update(
-        {
-            "page_questions": visible_questions,
-            "is_last_page": is_last_page,
-            "page_number": session.screening_page_index + 1,
-            "page_total": len(pages),
-            "resume_url": _resume_url(request, experiment, session),
-            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
-        }
-    )
-    return render(request, "survey/screening.html", ctx)
 
 
 def _finish_screening(request, session: ParticipantSession, slug: str):
@@ -1138,7 +1159,7 @@ def _save_page_answers(
     stored = _answers_for_stimulus(session, assignment.stimulus)
     visible_questions = _visible_with_submitted(request, page_questions, stored)
     errors, responses = _collect_answers(
-        request, session, assignment.stimulus, visible_questions
+        request, session, visible_questions, stimulus=assignment.stimulus
     )
     if errors:
         for err in errors:
@@ -1212,9 +1233,14 @@ def _annotate_submitted(request, questions: list[Question]) -> None:
 def _collect_answers(
     request,
     session: ParticipantSession,
-    stimulus: Stimulus | None,
     questions: list[Question],
+    *,
+    stimulus: Stimulus | None = None,
+    pair: "PairAssignment | None" = None,
 ) -> tuple[list[str], list[Response]]:
+    """Read and validate a page of answers, returning (errors, unsaved Response
+    rows). ``stimulus`` (standard flow) or ``pair`` (pairwise flow) ties each
+    answer to its target; both flows are otherwise identical."""
     errors: list[str] = []
     responses: list[Response] = []
     elapsed = _page_elapsed_ms(request)
@@ -1231,6 +1257,7 @@ def _collect_answers(
             Response(
                 session=session,
                 stimulus=stimulus,
+                pair_assignment=pair,
                 question=q,
                 answer_value=json.dumps(value, ensure_ascii=False),
                 elapsed_ms=elapsed,
@@ -1350,29 +1377,38 @@ def pairwise_play(request, slug: str):
     )
     prompt = _prompt_for_pair(experiment, pair)
 
+    # The template context is identical on the POST-error re-render and the GET
+    # render, so build it once.
+    def _pairwise_ctx():
+        ctx = _base_context(experiment, session)
+        ctx.update({
+            "pair": pair,
+            "prompt": prompt,
+            "questions": questions,
+            "is_last_pair": is_last_pair,
+            "has_demographics": has_demographics,
+            "pair_number": session.current_pair_index + 1,
+            "pairs_total": len(pairs),
+            "page_number": session.current_pair_index + 1,
+            "page_total": len(pairs),
+            "page_noun": "Comparison",
+            "show_prompt": any(q.show_prompt for q in questions),
+        })
+        return ctx
+
     if request.method == "POST":
-        errors, responses = _collect_pairwise_answers(
-            request, session, pair, questions
+        errors, responses = _collect_answers(
+            request, session,
+            _visible_with_submitted(request, questions, {}),
+            pair=pair,
         )
         if errors:
             for err in errors:
                 messages.error(request, err)
             _annotate_submitted(request, questions)
-            ctx = _base_context(experiment, session)
-            ctx.update({
-                "pair": pair,
-                "prompt": prompt,
-                "questions": questions,
-                "is_last_pair": is_last_pair,
-                "has_demographics": has_demographics,
-                "pair_number": session.current_pair_index + 1,
-                "pairs_total": len(pairs),
-                "page_number": session.current_pair_index + 1,
-                "page_total": len(pairs),
-                "page_noun": "Comparison",
-                "show_prompt": any(q.show_prompt for q in questions),
-            })
-            return render(request, "survey/pairwise_play.html", ctx, status=400)
+            return render(
+                request, "survey/pairwise_play.html", _pairwise_ctx(), status=400
+            )
 
         with transaction.atomic():
             Response.objects.bulk_create(responses)
@@ -1391,21 +1427,7 @@ def pairwise_play(request, slug: str):
             session.save(update_fields=["current_pair_index"])
         return redirect("survey:pairwise_play", slug=slug)
 
-    ctx = _base_context(experiment, session)
-    ctx.update({
-        "pair": pair,
-        "prompt": prompt,
-        "questions": questions,
-        "is_last_pair": is_last_pair,
-        "has_demographics": has_demographics,
-        "pair_number": session.current_pair_index + 1,
-        "pairs_total": len(pairs),
-        "page_number": session.current_pair_index + 1,
-        "page_total": len(pairs),
-        "page_noun": "Comparison",
-        "show_prompt": any(q.show_prompt for q in questions),
-    })
-    return render(request, "survey/pairwise_play.html", ctx)
+    return render(request, "survey/pairwise_play.html", _pairwise_ctx())
 
 
 def _prompt_for_pair(experiment: Experiment, pair: PairAssignment) -> Prompt | None:
@@ -1422,40 +1444,6 @@ def _prompt_for_pair(experiment: Experiment, pair: PairAssignment) -> Prompt | N
     ).first()
 
 
-def _collect_pairwise_answers(
-    request,
-    session: ParticipantSession,
-    pair: PairAssignment,
-    questions: list[Question],
-) -> tuple[list[str], list[Response]]:
-    # Pairwise shows all of a pair's questions at once, so branching can only
-    # reference same-page answers; respect visibility against what was submitted.
-    questions = _visible_with_submitted(request, questions, {})
-    errors: list[str] = []
-    responses: list[Response] = []
-    elapsed = _page_elapsed_ms(request)
-    for q in questions:
-        answered, value, error = _read_one(request, q)
-        if error is not None:
-            errors.append(f"'{q.prompt}' {error}.")
-            continue
-        if not answered:
-            if q.required:
-                errors.append(f"'{q.prompt}' is required.")
-            continue
-        responses.append(
-            Response(
-                session=session,
-                stimulus=None,
-                pair_assignment=pair,
-                question=q,
-                answer_value=json.dumps(value, ensure_ascii=False),
-                elapsed_ms=elapsed,
-            )
-        )
-    return errors, responses
-
-
 # --- listen duration endpoint ----------------------------------------------
 
 
@@ -1467,7 +1455,7 @@ def _collect_pairwise_answers(
 @csrf_exempt
 @require_POST
 def record_listen(request, slug: str, assignment_id: int):
-    experiment, session = _load_session(request, slug)
+    _, session = _load_session(request, slug)
     if session is None:
         return HttpResponseBadRequest("no session")
     assignment = get_object_or_404(
@@ -1491,7 +1479,7 @@ def record_listen(request, slug: str, assignment_id: int):
 @csrf_exempt
 @require_POST
 def record_listen_pair(request, slug: str, pair_id: int):
-    experiment, session = _load_session(request, slug)
+    _, session = _load_session(request, slug)
     if session is None:
         return HttpResponseBadRequest("no session")
     pair = get_object_or_404(PairAssignment, pk=pair_id, session=session)
@@ -1529,72 +1517,19 @@ def demographics(request, slug: str):
         return _unavailable(request, experiment)
     if session is None:
         return redirect("survey:consent", slug=slug)
-    bounce = _expect_step(session, ParticipantSession.Step.DEMOGRAPHICS)
-    if bounce:
-        return bounce
-
-    questions = _ordered_section_questions(experiment, Question.Section.DEMOGRAPHIC)
-    pages = paginate_questions(questions)
-    if not pages:
-        return _finish_session(request, session, slug)
-
-    # POST submits the page the participant is currently viewing.
-    if request.method == "POST":
-        if session.demographic_page_index >= len(pages):
-            return redirect("survey:demographics", slug=slug)
-        page_questions = pages[session.demographic_page_index]
-        is_last_page = session.demographic_page_index == len(pages) - 1
-        stored = _answers_for_demographics(session)
-        visible_questions = _visible_with_submitted(request, page_questions, stored)
-        errors, responses = _collect_answers(
-            request, session, None, visible_questions
-        )
-        if errors:
-            for err in errors:
-                messages.error(request, err)
-            _annotate_submitted(request, visible_questions)
-            ctx = _base_context(experiment, session)
-            ctx.update(
-                {
-                    "page_questions": visible_questions,
-                    "is_last_page": is_last_page,
-                    "page_number": session.demographic_page_index + 1,
-                    "page_total": len(pages),
-                }
-            )
-            return render(request, "survey/demographics.html", ctx, status=400)
-        with transaction.atomic():
-            Response.objects.bulk_create(responses)
-            _log_event(
-                session, SurveyEvent.Type.PAGE_SUBMIT, label="demographic",
-                elapsed_ms=_page_elapsed_ms(request),
-            )
-            session.demographic_page_index += 1
-            if _next_renderable_demographic_page(session, pages) == "finish":
-                return _finish_session(request, session, slug)
-            session.save(update_fields=["demographic_page_index"])
-        return redirect("survey:demographics", slug=slug)
-
-    # GET: advance over demographic pages hidden by branching (or finish).
-    if _next_renderable_demographic_page(session, pages) == "finish":
-        return _finish_session(request, session, slug)
-    session.save(update_fields=["demographic_page_index"])
-    page_questions = pages[session.demographic_page_index]
-    stored = _answers_for_demographics(session)
-    visible_questions = _renderable_questions(page_questions, stored)
-    is_last_page = session.demographic_page_index == len(pages) - 1
-    ctx = _base_context(experiment, session)
-    ctx.update(
-        {
-            "page_questions": visible_questions,
-            "is_last_page": is_last_page,
-            "page_number": session.demographic_page_index + 1,
-            "page_total": len(pages),
-            "resume_url": _resume_url(request, experiment, session),
-            "withdraw_url": _withdraw_url(request, experiment.slug, session.resume_token),
-        }
+    return _run_paged_section(
+        request, experiment, session, slug,
+        _PagedSection(
+            step=ParticipantSession.Step.DEMOGRAPHICS,
+            section=Question.Section.DEMOGRAPHIC,
+            cursor="demographic_page_index",
+            template="survey/demographics.html",
+            url_name="survey:demographics",
+            finish_fn=_finish_session,
+            empty_fn=_finish_session,
+            log_label="demographic",
+        ),
     )
-    return render(request, "survey/demographics.html", ctx)
 
 
 def _completion_code_for(session: ParticipantSession) -> str:
