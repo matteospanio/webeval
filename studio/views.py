@@ -27,7 +27,13 @@ from django.utils.text import slugify
 from accounts import services
 from accounts.forms import InviteForm
 from accounts.models import AuditEvent, Invitation, Membership
-from accounts.permissions import can_edit, can_manage, can_view, role_for
+from accounts.permissions import (
+    can_edit,
+    can_manage,
+    can_view,
+    role_for,
+    visible_experiment_ids,
+)
 from accounts.roles import Role
 from experiments.analysis import (
     analyse_question,
@@ -94,17 +100,15 @@ def _unique_slug(name: str) -> str:
 
 
 def _visible_experiments(user):
-    ids = set(
-        Membership.objects.filter(user=user).values_list("experiment_id", flat=True)
-    )
-    ids |= set(
-        Experiment.objects.filter(owner=user).values_list("id", flat=True)
-    )
-    return (
-        Experiment.objects.filter(pk__in=ids)
-        .select_related("owner")
-        .order_by("-created_at")
-    )
+    """Studies a user may see in the studio, consistent with the object-level
+    ``can_view`` decision (``accounts.permissions``): superusers see all;
+    everyone else sees owned + collaborating, plus legacy unowned studies for
+    staff. Building the list any other way lets a study a user can open never
+    appear in their list / compare / DSR."""
+    experiments = Experiment.objects.select_related("owner").order_by("-created_at")
+    if getattr(user, "is_superuser", False):
+        return experiments
+    return experiments.filter(pk__in=visible_experiment_ids(user))
 
 
 @login_required

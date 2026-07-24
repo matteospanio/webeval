@@ -52,11 +52,17 @@ class Experiment(models.Model):
         CLOSED = "closed", "Closed"
 
     # Lifecycle transitions allowed when full_clean() is called on an update.
+    # The valid lifecycle transitions (source state → allowed targets). This is
+    # the single source of truth for transition VALIDITY, enforced in clean();
+    # the studio's named actions (studio/views.py::_STATE_ACTIONS: test /
+    # activate / close / reopen / draft) are the UI layer over it, and a test
+    # asserts they never drift from this matrix. Self-transitions are allowed so
+    # a plain save() that doesn't change state never raises.
     _ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-        State.DRAFT: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
-        State.TEST: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
-        State.ACTIVE: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
-        State.CLOSED: {State.DRAFT, State.TEST, State.ACTIVE, State.CLOSED},
+        State.DRAFT: {State.DRAFT, State.TEST, State.ACTIVE},
+        State.TEST: {State.TEST, State.DRAFT, State.ACTIVE, State.CLOSED},
+        State.ACTIVE: {State.ACTIVE, State.CLOSED},
+        State.CLOSED: {State.CLOSED, State.ACTIVE},
     }
 
     class Mode(models.TextChoices):

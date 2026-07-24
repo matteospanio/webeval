@@ -113,3 +113,29 @@ def test_e2e_owner_invites_editor_who_can_edit_via_api():
         format="multipart",
     )
     assert after.status_code == 201, after.content
+
+
+def test_studio_list_matches_can_view_for_staff_and_superuser():
+    """Regression: the studies list must not diverge from the object-level
+    can_view decision. A legacy unowned study is viewable by staff (and any
+    study by a superuser), so it must also appear in their list."""
+    from accounts.permissions import can_view
+    from accounts.tests.factories import SuperUserFactory, UserFactory
+    from studio.views import _visible_experiments
+
+    legacy = ExperimentFactory(owner=None, name="legacy-unowned")
+    owned_by_other = ExperimentFactory(owner=UserFactory(), name="someone-elses")
+
+    staff = StaffUserFactory()
+    superuser = SuperUserFactory()
+
+    # Staff can view the legacy unowned study -> it must be in their list.
+    assert can_view(staff, legacy)
+    staff_ids = {e.id for e in _visible_experiments(staff)}
+    assert legacy.id in staff_ids
+    assert owned_by_other.id not in staff_ids  # owned by someone else, not legacy
+
+    # Superuser can view everything -> the list shows everything.
+    su_ids = {e.id for e in _visible_experiments(superuser)}
+    assert legacy.id in su_ids
+    assert owned_by_other.id in su_ids

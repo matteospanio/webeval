@@ -171,3 +171,16 @@ def test_overview_shows_lifecycle_buttons_for_managers_only():
 
     body = _client(viewer).get(overview).content.decode()
     assert _state_url(exp, "test") not in body
+
+def test_state_actions_match_the_model_transition_matrix():
+    """Every studio lifecycle action must be a transition the model allows —
+    the model's _ALLOWED_TRANSITIONS is the single source of truth for validity
+    and the two must never drift apart."""
+    from studio.views import _STATE_ACTIONS
+
+    for action, (from_states, target) in _STATE_ACTIONS.items():
+        for source in from_states:
+            allowed = Experiment._ALLOWED_TRANSITIONS[source]
+            assert target in allowed, (
+                f"action {action!r}: {source}->{target} not in the model matrix"
+            )
