@@ -12,6 +12,7 @@
           id="stimulus-audio-prompt"
           controls
           preload="auto"
+          data-waveform
           data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
           data-listen-side="prompt"
           data-csrf-token="{{ csrf_token }}"
@@ -31,6 +32,7 @@
               id="stimulus-audio-left"
               controls
               preload="auto"
+              data-waveform
               data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
               data-listen-side="{% if pair.position_a == 'left' %}a{% else %}b{% endif %}"
               data-csrf-token="{{ csrf_token }}"
@@ -56,6 +58,7 @@
               id="stimulus-audio-right"
               controls
               preload="auto"
+              data-waveform
               data-listen-endpoint="{% url 'survey:record_listen_pair' slug=experiment.slug pair_id=pair.id %}"
               data-listen-side="{% if pair.position_a == 'right' %}a{% else %}b{% endif %}"
               data-csrf-token="{{ csrf_token }}"
@@ -130,6 +133,7 @@
     </form>
   </article>
   <script type="module" src="{% static 'survey/js/audio-tracker.js' %}"></script>
+  <script type="module" src="{% static 'survey/js/waveform-player.js' %}"></script>
   <script type="module" src="{% static 'survey/js/key-chord-player.js' %}"></script>
   <script type="module" src="{% static 'survey/js/branching.js' %}"></script>
 {% endblock %}

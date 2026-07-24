@@ -75,6 +75,11 @@ def test_pairwise_audio_flow_renders_prompt_and_completes():
     assert 'id="stimulus-audio-left"' in body
     assert 'id="stimulus-audio-right"' in body
     assert 'data-listen-side="prompt"' in body
+    # Waveform player is progressive enhancement: the audio elements carry the
+    # data-waveform hook AND keep native `controls` as the no-JS fallback.
+    assert "data-waveform" in body
+    assert "controls" in body
+    assert "waveform-player.js" in body
 
     # Find the stimulus question and answer it.
     import re

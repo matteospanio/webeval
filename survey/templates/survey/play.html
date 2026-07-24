@@ -12,6 +12,7 @@
             id="stimulus-audio"
             controls
             preload="auto"
+            data-waveform
             data-listen-endpoint="{% url 'survey:record_listen' slug=experiment.slug assignment_id=assignment.id %}"
             data-csrf-token="{{ csrf_token }}"
           >
@@ -80,5 +81,6 @@
     </form>
   </article>
   <script type="module" src="{% static 'survey/js/audio-tracker.js' %}"></script>
+  <script type="module" src="{% static 'survey/js/waveform-player.js' %}"></script>
   <script type="module" src="{% static 'survey/js/branching.js' %}"></script>
 {% endblock %}

@@ -543,3 +543,58 @@ table.matrix-grid input[type="radio"] {
 .withdraw-link a:hover {
   color: var(--we-danger);
 }
+
+/* --- waveform player + audio comparison rack ------------------------------ */
+
+.we-waveform {
+  display: flex;
+  align-items: center;
+  gap: var(--we-space-3);
+  width: 100%;
+  padding: var(--we-space-3);
+  background: var(--we-surface);
+  border: 1px solid var(--we-border);
+  border-radius: var(--we-radius-md);
+  box-shadow: var(--we-shadow-sm);
+}
+.we-waveform-play {
+  flex: none;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 0.9rem;
+}
+.we-waveform-canvas {
+  flex: 1;
+  height: 3rem;
+  min-width: 0;
+  cursor: pointer;
+}
+.we-waveform-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+  min-width: 5.5ch;
+  text-align: right;
+}
+
+/* Pairwise "rack": reference / A / B as a coherent panel. */
+.pairwise-sample .sample-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--we-space-2);
+  justify-content: center;
+}
+.pairwise-sample .sample-label::before {
+  content: "";
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: var(--we-primary-soft);
+  color: var(--we-primary);
+  border: 1px solid var(--we-primary-border);
+}
