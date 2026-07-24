@@ -63,7 +63,7 @@ from experiments.stats import (
     pairwise_experiment_stats,
     per_stimulus_mean_ratings,
 )
-from survey.models import ParticipantSession, Response
+from survey.models import ParticipantSession
 from survey.views import _withdraw_data
 
 from .forms import ConditionForm, StimulusForm, StudyCreateForm

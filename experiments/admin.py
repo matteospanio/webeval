@@ -37,7 +37,7 @@ from .csv_exports import (
     demographics_csv_response,
     pairwise_answers_csv_response,
 )
-from .data_ops import activate_from_test, purge_participant_data
+from .data_ops import activate_from_test
 from .exports import build_experiment_archive
 from .forms import QuestionAdminForm, QuestionTemplateAdminForm
 from .imports import import_experiment_archive

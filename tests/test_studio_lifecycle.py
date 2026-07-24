@@ -91,7 +91,7 @@ def test_draft_to_test_and_activate_happy_path():
 def test_unwalkable_draft_cannot_start_testing():
     owner = UserFactory()
     exp = ExperimentFactory(owner=owner)  # empty: no conditions/stimuli/questions
-    resp = _client(owner).post(_state_url(exp, "test"), follow=True)
+    _client(owner).post(_state_url(exp, "test"), follow=True)
     exp.refresh_from_db()
     assert exp.state == Experiment.State.DRAFT
 
@@ -100,7 +100,7 @@ def test_activate_blocked_by_readiness_problems():
     owner = UserFactory()
     exp = ExperimentFactory(owner=owner, consent_text="")  # not ready
     ConditionFactory(experiment=exp)
-    resp = _client(owner).post(_state_url(exp, "activate"))
+    _client(owner).post(_state_url(exp, "activate"))
     exp.refresh_from_db()
     assert exp.state == Experiment.State.DRAFT
 

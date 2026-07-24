@@ -13,7 +13,6 @@ from experiments.models import Condition, Experiment, Stimulus
 from experiments.tests.factories import (
     ConditionFactory,
     ExperimentFactory,
-    StimulusFactory,
     TextStimulusFactory,
 )
 
