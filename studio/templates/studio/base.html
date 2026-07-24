@@ -14,7 +14,9 @@
   <a class="skip-link we-visually-hidden-focusable" href="#main">Skip to main content</a>
   <header class="we-topnav">
     <nav class="we-topnav-inner" aria-label="Main">
-      <a class="we-topnav-brand" href="{% url 'studio:studies' %}">webeval studio</a>
+      <a class="we-topnav-brand we-brandmark" href="{% url 'studio:studies' %}">
+        <span class="we-brandmark-chip" aria-hidden="true">w</span>webeval <span class="we-muted">studio</span>
+      </a>
       <ul class="we-topnav-links">
         {% if user.is_authenticated %}
         <li><a href="{% url 'studio:studies' %}"{% if request.resolver_match.url_name == 'studies' %} aria-current="page"{% endif %}>My studies</a></li>

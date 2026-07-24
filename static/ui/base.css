@@ -26,17 +26,18 @@ h1,
 h2,
 h3,
 h4 {
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  font-weight: 680;
   margin: 0 0 var(--we-space-3);
   text-wrap: balance;
+  color: var(--we-text);
 }
 
 h1 { font-size: var(--we-text-2xl); }
-h2 { font-size: var(--we-text-xl); }
-h3 { font-size: var(--we-text-lg); }
-h4 { font-size: var(--we-text-base); }
+h2 { font-size: var(--we-text-xl); letter-spacing: -0.015em; }
+h3 { font-size: var(--we-text-lg); letter-spacing: -0.01em; font-weight: 650; }
+h4 { font-size: var(--we-text-base); letter-spacing: -0.005em; font-weight: 650; }
 
 p {
   margin: 0 0 var(--we-space-4);
@@ -48,10 +49,11 @@ hgroup {
 hgroup > :last-child {
   color: var(--we-text-muted);
   margin: 0;
+  font-size: var(--we-text-base);
 }
 hgroup h1,
 hgroup h2 {
-  margin-bottom: var(--we-space-1);
+  margin-bottom: var(--we-space-2);
 }
 
 a {

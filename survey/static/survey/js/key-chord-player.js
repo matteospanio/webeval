@@ -78,8 +78,8 @@ const playChord = async (rootMidi, quality) => {
 const makeButton = ({ rootLabel, rootMidi, quality }) => {
   const btn = document.createElement("button");
   btn.type = "button";
+  btn.className = "we-btn we-btn-sm";
   btn.textContent = `♪ Reference ${rootLabel} ${quality}`;
-  Object.assign(btn.style, { marginRight: "0.4rem", padding: "0.1rem 0.5rem", fontSize: "0.85rem" });
   btn.addEventListener("click", () => playChord(rootMidi, quality));
   return btn;
 };
@@ -89,8 +89,7 @@ if (promptEl) {
   const keys = detectKeys(promptEl.textContent ?? "");
   if (keys.length) {
     const wrap = document.createElement("div");
-    wrap.className = "chord-buttons";
-    wrap.style.marginTop = "0.4rem";
+    wrap.className = "chord-buttons we-actions";
     wrap.append(...keys.map(makeButton));
     promptEl.after(wrap);
   }

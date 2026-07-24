@@ -5,7 +5,16 @@
 
 {% block content %}
   <article>
-    <p class="we-muted"><small>Informed consent</small></p>
+    <hgroup>
+      <h1>{{ experiment.name }}</h1>
+      <p>Informed consent</p>
+    </hgroup>
+
+    <div class="we-chips">
+      <span class="we-chip">🕐 Takes a few minutes</span>
+      <span class="we-chip">🔒 Anonymous</span>
+      <span class="we-chip">✋ You can withdraw anytime</span>
+    </div>
 
     <section class="consent-text">
       <div>{{ consent_first|markdown|safe }}</div>

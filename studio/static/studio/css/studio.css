@@ -117,9 +117,6 @@ body {
   padding: var(--we-space-4);
   margin-bottom: var(--we-space-4);
 }
-.qresult h4 {
-  margin-bottom: var(--we-space-2);
-}
 table.dist {
   font-size: var(--we-text-sm);
 }
@@ -150,9 +147,6 @@ table.dist td {
   font-variant-numeric: tabular-nums;
   color: var(--we-text-muted);
   font-size: var(--we-text-sm);
-}
-.numeric-stats strong {
-  color: var(--we-text);
 }
 .qcompare {
   font-size: var(--we-text-sm);

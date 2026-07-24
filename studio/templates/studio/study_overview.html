@@ -9,26 +9,23 @@
 
 {% include "studio/_readiness.html" %}
 
-<div class="overview-grid">
-  <div class="we-card">
-    <div class="we-card-header"><h2>Participation</h2></div>
-    <dl>
-      <dt>Consent page views</dt><dd>{{ counts.consent_page_views }}</dd>
-      <dt>Started</dt><dd>{{ counts.total_sessions }}</dd>
-      <dt>Completed</dt><dd>{{ counts.completed_sessions }}</dd>
-      <dt>Dropped out</dt><dd>{{ counts.abandoned_sessions }}</dd>
-      <dt>Completion rate</dt><dd>{% widthratio counts.completion_rate 1 100 %}%</dd>
-      {% if mean_listen_ms %}<dt>Mean listen</dt><dd>{{ mean_listen_ms|floatformat:0 }} ms</dd>{% endif %}
-    </dl>
-  </div>
-  <div class="we-card chart-card">
-    <div class="we-card-header"><h2>Results</h2></div>
-    {% if counts.completed_sessions %}
-    <img src="{% url 'studio:chart' slug=experiment.slug %}" alt="Results chart">
-    {% else %}
-    <p class="we-muted">The chart appears once the first session is completed.</p>
-    {% endif %}
-  </div>
+<h2>Participation</h2>
+<div class="we-stat-grid">
+  <div class="we-stat"><div class="we-stat-value">{{ counts.total_sessions }}</div><div class="we-stat-label">Started</div></div>
+  <div class="we-stat"><div class="we-stat-value">{{ counts.completed_sessions }}</div><div class="we-stat-label">Completed</div></div>
+  <div class="we-stat we-stat-accent"><div class="we-stat-value">{% widthratio counts.completion_rate 1 100 %}%</div><div class="we-stat-label">Completion rate</div></div>
+  <div class="we-stat"><div class="we-stat-value">{{ counts.abandoned_sessions }}</div><div class="we-stat-label">Dropped out</div></div>
+  <div class="we-stat"><div class="we-stat-value">{{ counts.consent_page_views }}</div><div class="we-stat-label">Consent views</div></div>
+  {% if mean_listen_ms %}<div class="we-stat"><div class="we-stat-value">{{ mean_listen_ms|floatformat:0 }}</div><div class="we-stat-label">Mean listen (ms)</div></div>{% endif %}
+</div>
+
+<div class="we-card chart-card">
+  <div class="we-card-header"><h2>Results</h2></div>
+  {% if counts.completed_sessions %}
+  <img src="{% url 'studio:chart' slug=experiment.slug %}" alt="Results chart">
+  {% else %}
+  <p class="we-muted">The chart appears once the first session is completed.</p>
+  {% endif %}
 </div>
 
 <section class="overview-section">

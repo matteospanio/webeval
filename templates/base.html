@@ -25,7 +25,7 @@
   <header class="survey-header">
     <div class="survey-header-inner">
       <strong class="survey-brand">
-        {% if experiment.brand_logo %}<img src="{{ experiment.brand_logo.url }}" alt="{{ brand|default:'Study' }}" class="survey-logo">{% else %}{{ brand|default:"Study" }}{% endif %}
+        {% if experiment.brand_logo %}<img src="{{ experiment.brand_logo.url }}" alt="{{ brand|default:'Study' }}" class="survey-logo">{% else %}<span class="we-brandmark"><span class="we-brandmark-chip" aria-hidden="true">{{ brand|default:"S"|first }}</span>{{ brand|default:"Study" }}</span>{% endif %}
       </strong>
       {% block tagline %}{% endblock %}
       {% if step_label %}

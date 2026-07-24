@@ -10,25 +10,33 @@
   color-scheme: light dark;
 
   /* color — light */
-  --we-bg: #fafafa;
+  --we-bg: #f7f8f8;
   --we-surface: #ffffff;
-  --we-surface-2: #f4f4f5;
-  --we-border: #e4e4e7;
-  --we-border-strong: #d4d4d8;
-  --we-text: #18181b;
-  --we-text-muted: #52525b;
-  --we-text-faint: #a1a1aa;
+  --we-surface-2: #f1f3f3;
+  --we-border: #e3e6e6;
+  --we-border-strong: #cfd4d4;
+  --we-text: #131a1a;
+  --we-text-muted: #55605f;
+  --we-text-faint: #94a09f;
 
-  --we-primary: #4f46e5;
+  /* accent — a scientific teal (seed = teal-600). One override rebrands. */
+  --we-primary: #0d9488;
+  --we-primary-strong: #0f766e;
   --we-primary-contrast: #ffffff;
-  --we-primary-hover: color-mix(in srgb, var(--we-primary) 85%, black);
-  --we-primary-soft: color-mix(in srgb, var(--we-primary) 9%, var(--we-surface));
-  --we-primary-border: color-mix(in srgb, var(--we-primary) 35%, var(--we-border));
+  --we-primary-hover: color-mix(in srgb, var(--we-primary) 88%, black);
+  --we-primary-soft: color-mix(in srgb, var(--we-primary) 10%, var(--we-surface));
+  --we-primary-border: color-mix(in srgb, var(--we-primary) 32%, var(--we-border));
+  --we-primary-gradient: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--we-primary) 82%, white),
+    var(--we-primary)
+  );
+  --we-primary-glow: color-mix(in srgb, var(--we-primary) 28%, transparent);
 
   --we-danger: #dc2626;
   --we-danger-soft: #fef2f2;
-  --we-success: #16a34a;
-  --we-success-soft: #f0fdf4;
+  --we-success: #12996b;
+  --we-success-soft: #eefaf4;
   --we-warning: #b45309;
   --we-warning-soft: #fffbeb;
 
@@ -43,6 +51,7 @@
   --we-text-lg: 1.125rem;
   --we-text-xl: 1.375rem;
   --we-text-2xl: 1.75rem;
+  --we-text-3xl: 2.25rem;
   --we-leading: 1.6;
 
   /* space (4px grid) */
@@ -55,44 +64,61 @@
   --we-space-7: 3rem;
   --we-space-8: 4rem;
 
-  /* radius / shadow / z */
-  --we-radius-sm: 4px;
-  --we-radius-md: 8px;
-  --we-radius-lg: 12px;
+  /* radius */
+  --we-radius-sm: 6px;
+  --we-radius-md: 10px;
+  --we-radius-lg: 14px;
   --we-radius-full: 999px;
-  --we-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
-  --we-shadow-md: 0 2px 8px rgb(0 0 0 / 0.08);
-  --we-focus-ring: 0 0 0 3px color-mix(in srgb, var(--we-primary) 35%, transparent);
+
+  /* elevation — layered, slightly tinted with the ink colour */
+  --we-shadow-sm: 0 1px 2px rgb(15 30 30 / 0.06);
+  --we-shadow-md: 0 4px 12px -2px rgb(15 30 30 / 0.10),
+    0 2px 4px -2px rgb(15 30 30 / 0.06);
+  --we-shadow-lg: 0 12px 32px -8px rgb(15 30 30 / 0.16);
+
+  /* motion */
+  --we-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --we-transition: 160ms var(--we-ease);
+
+  --we-focus-ring: 0 0 0 3px var(--we-primary-glow);
   --we-z-nav: 100;
   --we-z-tooltip: 200;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --we-bg: #111113;
-    --we-surface: #1a1a1e;
-    --we-surface-2: #232329;
-    --we-border: #2e2e35;
-    --we-border-strong: #3f3f46;
-    --we-text: #ededef;
-    --we-text-muted: #a1a1aa;
-    --we-text-faint: #6e6e76;
+    --we-bg: #0c1211;
+    --we-surface: #131a19;
+    --we-surface-2: #1b2423;
+    --we-border: #263130;
+    --we-border-strong: #37413f;
+    --we-text: #e9eeed;
+    --we-text-muted: #9aa6a4;
+    --we-text-faint: #667170;
 
-    --we-primary: #818cf8;
-    --we-primary-contrast: #15151a;
-    --we-primary-hover: color-mix(in srgb, var(--we-primary) 85%, white);
-    --we-primary-soft: color-mix(in srgb, var(--we-primary) 14%, var(--we-surface));
-    --we-primary-border: color-mix(in srgb, var(--we-primary) 40%, var(--we-border));
+    --we-primary: #2dd4bf;
+    --we-primary-strong: #5eead4;
+    --we-primary-contrast: #06201d;
+    --we-primary-hover: color-mix(in srgb, var(--we-primary) 88%, white);
+    --we-primary-soft: color-mix(in srgb, var(--we-primary) 15%, var(--we-surface));
+    --we-primary-border: color-mix(in srgb, var(--we-primary) 36%, var(--we-border));
+    --we-primary-gradient: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--we-primary) 78%, white),
+      var(--we-primary)
+    );
+    --we-primary-glow: color-mix(in srgb, var(--we-primary) 32%, transparent);
 
     --we-danger: #f87171;
     --we-danger-soft: #2a1616;
-    --we-success: #4ade80;
-    --we-success-soft: #14261a;
+    --we-success: #34d399;
+    --we-success-soft: #10261e;
     --we-warning: #fbbf24;
     --we-warning-soft: #2a2210;
 
-    --we-shadow-sm: none;
-    --we-shadow-md: 0 2px 8px rgb(0 0 0 / 0.4);
+    --we-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --we-shadow-md: 0 4px 14px -2px rgb(0 0 0 / 0.5);
+    --we-shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.6);
   }
 }
 
@@ -102,5 +128,6 @@
   *::after {
     transition: none !important;
     animation: none !important;
+    scroll-behavior: auto !important;
   }
 }

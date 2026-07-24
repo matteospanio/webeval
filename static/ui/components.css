@@ -6,37 +6,59 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
   font: inherit;
-  font-weight: 500;
+  font-weight: 550;
   font-size: var(--we-text-sm);
   line-height: 1.2;
   color: var(--we-text);
   background: var(--we-surface);
   border: 1px solid var(--we-border-strong);
   border-radius: var(--we-radius-sm);
-  padding: 0.45rem 0.9rem;
+  padding: 0.5rem 0.95rem;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
-  transition: background 0.12s ease-out, border-color 0.12s ease-out,
-    color 0.12s ease-out;
+  box-shadow: var(--we-shadow-sm);
+  transition: background var(--we-transition), border-color var(--we-transition),
+    color var(--we-transition), box-shadow var(--we-transition),
+    transform var(--we-transition);
 }
 .we-btn:hover:not(:disabled) {
   background: var(--we-surface-2);
   color: var(--we-text);
   text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: var(--we-shadow-md);
+}
+.we-btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--we-shadow-sm);
 }
 
 .we-btn-primary {
   color: var(--we-primary-contrast);
   background: var(--we-primary);
-  border-color: var(--we-primary);
+  background-image: var(--we-primary-gradient);
+  border-color: transparent;
 }
 .we-btn-primary:hover:not(:disabled) {
   color: var(--we-primary-contrast);
   background: var(--we-primary-hover);
-  border-color: var(--we-primary-hover);
+  border-color: transparent;
+  box-shadow: var(--we-shadow-md), 0 0 0 1px var(--we-primary-glow);
+}
+
+.we-icon {
+  width: 1.05em;
+  height: 1.05em;
+  flex: none;
+  vertical-align: -0.15em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .we-btn-danger {
@@ -82,10 +104,19 @@
 .we-card {
   background: var(--we-surface);
   border: 1px solid var(--we-border);
-  border-radius: var(--we-radius-md);
+  border-radius: var(--we-radius-lg);
   box-shadow: var(--we-shadow-sm);
   padding: var(--we-space-5);
   margin-bottom: var(--we-space-5);
+  transition: box-shadow var(--we-transition), transform var(--we-transition),
+    border-color var(--we-transition);
+}
+/* Interactive cards (links / rows) lift on hover as a house style. */
+a.we-card:hover,
+.we-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--we-shadow-md);
+  border-color: var(--we-primary-border);
 }
 .we-card-header {
   display: flex;
@@ -194,30 +225,7 @@
   background: var(--we-primary-soft);
 }
 
-/* --- breadcrumbs / nav --------------------------------------------------- */
-
-.we-breadcrumbs ul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--we-space-1);
-  list-style: none;
-  margin: 0 0 var(--we-space-4);
-  padding: 0;
-  font-size: var(--we-text-sm);
-  color: var(--we-text-muted);
-}
-.we-breadcrumbs li + li::before {
-  content: "›";
-  margin-inline: var(--we-space-2);
-  color: var(--we-text-faint);
-}
-.we-breadcrumbs a {
-  color: inherit;
-  text-decoration: none;
-}
-.we-breadcrumbs a:hover {
-  color: var(--we-primary);
-}
+/* --- subnav (study tabs) ------------------------------------------------- */
 
 .we-subnav {
   display: flex;
@@ -264,14 +272,17 @@
 
 .we-progress {
   width: 100%;
-  height: 4px;
+  height: 6px;
   background: var(--we-surface-2);
   overflow: hidden;
 }
 .we-progress-fill {
   height: 100%;
   background: var(--we-primary);
-  transition: width 0.3s ease-out;
+  background-image: var(--we-primary-gradient);
+  border-radius: 0 var(--we-radius-full) var(--we-radius-full) 0;
+  box-shadow: 0 0 8px var(--we-primary-glow);
+  transition: width 0.4s var(--we-ease);
 }
 .we-steps {
   display: flex;
@@ -385,4 +396,89 @@
   font-size: var(--we-text-sm);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* --- brand monogram ------------------------------------------------------- */
+
+.we-brandmark {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--we-space-2);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--we-text);
+  text-decoration: none;
+}
+.we-brandmark:hover {
+  color: var(--we-text);
+  text-decoration: none;
+}
+.we-brandmark-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 7px;
+  background: var(--we-primary);
+  background-image: var(--we-primary-gradient);
+  color: var(--we-primary-contrast);
+  font-weight: 800;
+  font-size: 0.95rem;
+  box-shadow: var(--we-shadow-sm), inset 0 1px 0 rgb(255 255 255 / 0.25);
+}
+
+/* --- KPI stat tiles ------------------------------------------------------- */
+
+.we-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--we-space-3);
+  margin-bottom: var(--we-space-5);
+}
+.we-stat {
+  background: var(--we-surface);
+  border: 1px solid var(--we-border);
+  border-radius: var(--we-radius-md);
+  box-shadow: var(--we-shadow-sm);
+  padding: var(--we-space-4);
+}
+.we-stat-value {
+  font-size: var(--we-text-3xl);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--we-text);
+}
+.we-stat-label {
+  margin-top: var(--we-space-1);
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+}
+.we-stat-accent {
+  background: var(--we-primary-soft);
+  border-color: var(--we-primary-border);
+}
+.we-stat-accent .we-stat-value {
+  color: var(--we-primary);
+}
+
+/* --- trust chips (participant consent) ------------------------------------ */
+
+.we-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--we-space-2);
+  margin: var(--we-space-4) 0;
+}
+.we-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  font-size: var(--we-text-sm);
+  color: var(--we-text-muted);
+  background: var(--we-surface-2);
+  border: 1px solid var(--we-border);
+  border-radius: var(--we-radius-full);
 }
