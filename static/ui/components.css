@@ -426,6 +426,12 @@ a.we-card:hover,
   font-size: 0.95rem;
   box-shadow: var(--we-shadow-sm), inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
+.we-brandmark-logo {
+  background: #0b1220;
+  background-image: none;
+  object-fit: cover;
+  box-shadow: var(--we-shadow-sm);
+}
 
 /* --- KPI stat tiles ------------------------------------------------------- */
 

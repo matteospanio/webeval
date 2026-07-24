@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="{% static 'ui/base.css' %}">
   <link rel="stylesheet" href="{% static 'ui/components.css' %}">
   <link rel="stylesheet" href="{% static 'studio/css/studio.css' %}">
+  <link rel="icon" type="image/png" href="{% static 'img/logo.png' %}">
   {% block extra_head %}{% endblock %}
 </head>
 <body>
@@ -15,7 +16,7 @@
   <header class="we-topnav">
     <nav class="we-topnav-inner" aria-label="Main">
       <a class="we-topnav-brand we-brandmark" href="{% url 'studio:studies' %}">
-        <span class="we-brandmark-chip" aria-hidden="true">P</span>PANEL <span class="we-muted">studio</span>
+        <img class="we-brandmark-chip we-brandmark-logo" src="{% static 'img/logo.png' %}" alt="" width="26" height="26">PANEL <span class="we-muted">studio</span>
       </a>
       <ul class="we-topnav-links">
         {% if user.is_authenticated %}

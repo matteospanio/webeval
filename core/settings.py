@@ -8,6 +8,7 @@ symbolic music; see ``README.md`` for the product requirements.
 from pathlib import Path
 
 import environ
+from django.templatetags.static import static
 from django.urls import reverse_lazy
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -197,6 +198,7 @@ UNFOLD = {
     "SITE_TITLE": "PANEL admin",
     "SITE_HEADER": "PANEL",
     "SITE_SUBHEADER": "Human evaluation of LLM-generated stimuli",
+    "SITE_ICON": lambda request: static("img/logo.png"),
     "SHOW_HISTORY": True,
     "SIDEBAR": {
         "show_search": True,

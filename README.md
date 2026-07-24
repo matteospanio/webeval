@@ -1,4 +1,10 @@
-# PANEL
+<p align="center">
+  <img src="static/img/logo.png" alt="PANEL logo" width="160">
+</p>
+
+<h1 align="center">PANEL</h1>
+
+<p align="center"><em>Platform for ANnotation &amp; EvaLuation</em></p>
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)
 ![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB?logo=python&logoColor=white)
