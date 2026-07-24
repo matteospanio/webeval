@@ -46,7 +46,6 @@ from experiments.branching import (
     is_visible,
     referenced_question_ids,
 )
-from experiments.components import get_question_component, is_question_component
 from experiments.models import (
     Experiment,
     ParticipantInvite,
@@ -137,109 +136,23 @@ def _unavailable(request, experiment: Experiment):
     )
 
 
-def _serialise_answer(question: Question, raw_value: Any) -> Any:
-    """Coerce a POSTed string into a typed answer according to question type."""
-    if question.type == Question.Type.RATING:
-        return int(raw_value)
-    if question.type == Question.Type.LIKERT:
-        return int(raw_value)
-    if question.type == Question.Type.CHOICE:
-        if isinstance(raw_value, list):
-            return raw_value
-        return str(raw_value)
-    return str(raw_value)
-
-
 def _read_one(request, question: Question) -> tuple[bool, Any, str | None]:
     """Read one question's answer from POST.
 
     Returns ``(answered, value, error)``: whether any input was given, the
-    serialisable typed value, and a human-readable problem (or None). Shared by
-    the standard and pairwise answer collectors so every question type behaves
-    identically across both flows.
+    serialisable typed value, and a human-readable problem (or None). Every
+    type — built-in or plugin — parses through its component
+    (``experiments.question_types.resolve_component``), so the standard and
+    pairwise flows behave identically. An unregistered (orphaned) type reads as
+    unanswered; the widget shows a "not installed" notice and readiness blocks
+    activation on such types.
     """
-    t = question.type
-    if is_question_component(t):
-        return get_question_component(t).read_answer(request.POST, question)
-    if t == Question.Type.MATRIX:
-        return _read_matrix(request, question)
-    if t == Question.Type.RANKING:
-        return _read_ranking(request, question)
-    if t == Question.Type.CHOICE and (question.config or {}).get("multi"):
-        raw_list = request.POST.getlist(f"q_{question.pk}")
-        if not raw_list:
-            return False, None, None
-        return True, list(raw_list), None
-    raw = request.POST.get(f"q_{question.pk}")
-    if raw is None or raw == "":
-        return False, None, None
-    if t == Question.Type.NUMERIC:
-        return _read_numeric(question, raw)
-    try:
-        return True, _serialise_answer(question, raw), None
-    except (TypeError, ValueError):
-        return True, None, "has an invalid value"
+    from experiments.question_types import resolve_component
 
-
-def _read_numeric(question: Question, raw: str) -> tuple[bool, Any, str | None]:
-    cfg = question.config or {}
-    try:
-        value: float | int = float(raw)
-    except (TypeError, ValueError):
-        return True, None, "must be a number"
-    if cfg.get("integer"):
-        if value != int(value):
-            return True, None, "must be a whole number"
-        value = int(value)
-    low = cfg.get("min")
-    high = cfg.get("max")
-    if low is not None and value < low:
-        return True, None, f"must be at least {low}"
-    if high is not None and value > high:
-        return True, None, f"must be at most {high}"
-    return True, value, None
-
-
-def _read_matrix(request, question: Question) -> tuple[bool, Any, str | None]:
-    cfg = question.config or {}
-    rows = cfg.get("rows") or []
-    columns = set(cfg.get("columns") or [])
-    answer: dict[str, str] = {}
-    answered_any = False
-    for i, row in enumerate(rows):
-        val = request.POST.get(f"q_{question.pk}_r{i}")
-        if val:
-            answered_any = True
-            if val not in columns:
-                return True, None, "has an invalid value"
-            answer[row] = val
-    if not answered_any:
-        return False, None, None
-    if question.required and len(answer) != len(rows):
-        return True, None, "needs an answer in every row"
-    return True, answer, None
-
-
-def _read_ranking(request, question: Question) -> tuple[bool, Any, str | None]:
-    cfg = question.config or {}
-    items = cfg.get("items") or []
-    n = len(items)
-    ranks: dict[int, int] = {}
-    answered_any = False
-    for i in range(n):
-        val = request.POST.get(f"q_{question.pk}_i{i}")
-        if val:
-            answered_any = True
-            try:
-                ranks[i] = int(val)
-            except (TypeError, ValueError):
-                return True, None, "has an invalid rank"
-    if not answered_any:
-        return False, None, None
-    if len(ranks) != n or sorted(ranks.values()) != list(range(1, n + 1)):
-        return True, None, "needs a unique rank for every item"
-    ordered = [items[i] for i, _ in sorted(ranks.items(), key=lambda kv: kv[1])]
-    return True, ordered, None
+    component = resolve_component(question.type)
+    if component is not None:
+        return component.read_answer(request.POST, question)
+    return False, None, None
 
 
 def _answers_for_stimulus(session, stimulus) -> dict[int, Any]:

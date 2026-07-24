@@ -591,28 +591,22 @@ def stimulus_delete(request, slug, pk):
 # --- drag-&-drop question builder ------------------------------------------
 
 
-_BUILTIN_DEFAULT_CONFIG = {
-    "rating": {"min": 0, "max": 100, "step": 1},
-    "choice": {"choices": ["Option 1", "Option 2"], "multi": False},
-    "text": {"max_length": 500},
-    "likert": {
-        "steps": 5,
-        "labels": ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"],
-    },
-    "numeric": {},
-    "matrix": {"rows": ["Row 1"], "columns": ["Column 1", "Column 2"]},
-    "ranking": {"items": ["Item 1", "Item 2"]},
-}
+def _builtin_default_config():
+    # Built-in seed configs live on the components now (question_types).
+    from experiments.question_types import builtin_default_config
+
+    return builtin_default_config()
 
 
 def _palette() -> list[dict]:
     """Question types offered in the builder: built-ins + registered plugins."""
+    _builtin_defaults = _builtin_default_config()
     palette = [
         {
             "type": value,
             "label": label,
             "plugin": False,
-            "default_config": _BUILTIN_DEFAULT_CONFIG.get(value, {}),
+            "default_config": _builtin_defaults.get(value, {}),
         }
         for value, label in Question.Type.choices
     ]

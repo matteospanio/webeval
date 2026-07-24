@@ -938,133 +938,14 @@ def _validate_question_config(question_type: str, config: dict[str, Any]) -> Non
                 )
             }
         )
+    # Every type — built-in or plugin — validates its own config via its
+    # component (experiments.question_types.resolve_component).
+    from experiments.question_types import resolve_component
 
-    if question_type == Question.Type.RATING:
-        required_keys = {"min", "max", "step"}
-        missing = required_keys - config.keys()
-        if missing:
-            raise ValidationError(
-                {"config": f"rating questions require keys {sorted(required_keys)}; missing {sorted(missing)}."}
-            )
-        try:
-            low = int(config["min"])
-            high = int(config["max"])
-            step = int(config["step"])
-        except (TypeError, ValueError) as exc:
-            raise ValidationError({"config": "rating min/max/step must be integers."}) from exc
-        if step <= 0:
-            raise ValidationError({"config": "rating step must be positive."})
-        if low >= high:
-            raise ValidationError({"config": "rating min must be strictly less than max."})
-        for label_key in ("min_label", "max_label"):
-            if label_key in config and not isinstance(config[label_key], str):
-                raise ValidationError(
-                    {"config": f"rating {label_key!r} must be a string if present."}
-                )
-        return
-
-    if question_type == Question.Type.CHOICE:
-        choices = config.get("choices")
-        if not isinstance(choices, list) or not choices:
-            raise ValidationError(
-                {"config": "choice questions require a non-empty 'choices' list."}
-            )
-        if not all(isinstance(c, str) and c for c in choices):
-            raise ValidationError({"config": "every choice must be a non-empty string."})
-        return
-
-    if question_type == Question.Type.TEXT:
-        max_length = config.get("max_length")
-        if not isinstance(max_length, int) or max_length <= 0:
-            raise ValidationError(
-                {"config": "text questions require a positive integer 'max_length'."}
-            )
-        return
-
-    if question_type == Question.Type.LIKERT:
-        steps = config.get("steps")
-        if not isinstance(steps, int) or not (2 <= steps <= 11):
-            raise ValidationError(
-                {"config": "likert questions require an integer 'steps' between 2 and 11."}
-            )
-        labels = config.get("labels")
-        if not isinstance(labels, list) or len(labels) != steps:
-            raise ValidationError(
-                {"config": f"likert questions require a 'labels' list of exactly {steps} strings."}
-            )
-        if not all(isinstance(lb, str) and lb for lb in labels):
-            raise ValidationError(
-                {"config": "every likert label must be a non-empty string."}
-            )
-        return
-
-    if question_type == Question.Type.NUMERIC:
-        for key in ("min", "max"):
-            if key in config:
-                val = config[key]
-                if isinstance(val, bool) or not isinstance(val, (int, float)):
-                    raise ValidationError(
-                        {"config": f"numeric {key!r} must be a number."}
-                    )
-        low = config.get("min")
-        high = config.get("max")
-        if low is not None and high is not None and low >= high:
-            raise ValidationError(
-                {"config": "numeric 'min' must be less than 'max'."}
-            )
-        if "integer" in config and not isinstance(config["integer"], bool):
-            raise ValidationError(
-                {"config": "numeric 'integer' must be true or false."}
-            )
-        if "unit" in config and not isinstance(config["unit"], str):
-            raise ValidationError({"config": "numeric 'unit' must be a string."})
-        return
-
-    if question_type == Question.Type.MATRIX:
-        rows = config.get("rows")
-        columns = config.get("columns")
-        if (
-            not isinstance(rows, list)
-            or not rows
-            or not all(isinstance(r, str) and r for r in rows)
-        ):
-            raise ValidationError(
-                {"config": "matrix questions require a non-empty 'rows' list of strings."}
-            )
-        if len(set(rows)) != len(rows):
-            raise ValidationError({"config": "matrix 'rows' must be distinct."})
-        if (
-            not isinstance(columns, list)
-            or not columns
-            or not all(isinstance(c, str) and c for c in columns)
-        ):
-            raise ValidationError(
-                {"config": "matrix questions require a non-empty 'columns' list of strings."}
-            )
-        return
-
-    if question_type == Question.Type.RANKING:
-        items = config.get("items")
-        if (
-            not isinstance(items, list)
-            or len(items) < 2
-            or not all(isinstance(i, str) and i for i in items)
-        ):
-            raise ValidationError(
-                {"config": "ranking questions require an 'items' list of at least two strings."}
-            )
-        if len(set(items)) != len(items):
-            raise ValidationError({"config": "ranking 'items' must be distinct."})
-        return
-
-    # Plugin question-type components validate their own config shape.
-    from experiments.components import get_question_component, is_question_component
-
-    if is_question_component(question_type):
-        get_question_component(question_type).validate_config(config)
-        return
-
-    raise ValidationError({"type": f"unknown question type: {question_type!r}"})
+    component = resolve_component(question_type)
+    if component is None:
+        raise ValidationError({"type": f"unknown question type: {question_type!r}"})
+    component.validate_config(config)
 
 
 def _validate_rule_shape(rule: dict, field: str) -> list[dict]:
