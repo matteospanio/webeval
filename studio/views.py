@@ -53,7 +53,8 @@ from experiments.csv_exports import (
     pairwise_answers_csv_response,
 )
 from experiments.exports import build_experiment_archive
-from experiments.models import Experiment, Question, Webhook
+from experiments.models import Condition, Experiment, Question, Stimulus, Webhook
+from experiments.queries import real_responses
 from experiments.readiness import readiness_problems
 from experiments.stats import (
     bradley_terry_analysis,
@@ -87,6 +88,15 @@ def _study_nav_context(request, experiment) -> dict:
         "nav_can_edit": can_edit(request.user, experiment),
         "nav_can_manage": can_manage(request.user, experiment),
     }
+
+
+def _audit(request, experiment, target, *, action=AuditEvent.Action.EDIT, **extra):
+    """Thin wrapper over ``services.record_audit`` that fills in the actor and
+    request from the studio request (every studio mutation records one)."""
+    services.record_audit(
+        experiment, action, actor=request.user, target=target,
+        request=request, **extra,
+    )
 
 
 def _unique_slug(name: str) -> str:
@@ -219,11 +229,7 @@ def compare(request):
             {
                 "experiment": exp,
                 "counts": counts,
-                "responses": Response.objects.filter(
-                    session__experiment=exp,
-                    session__submitted_at__isnull=False,
-                    session__is_preview=False,
-                ).count(),
+                "responses": real_responses(exp).count(),
                 "headline": _headline_metric(exp),
             }
         )
@@ -337,32 +343,20 @@ _STATE_ACTIONS = {
 
 
 def _activate_from_test(request, experiment):
-    """TEST→ACTIVE with the purge-or-promote choice, mirroring the admin
-    activate view: preview data is either purged or promoted into the real
-    dataset, and both the purge and the activation are audited."""
-    from experiments.data_ops import purge_participant_data
+    """TEST→ACTIVE with the purge-or-promote choice. The data handling is
+    shared with the admin activate view via ``data_ops.activate_from_test``;
+    the audit trail + messaging stay here."""
+    from experiments.data_ops import activate_from_test
 
-    purge = request.POST.get("test_data") == "purge"
-    if purge:
-        purged = purge_participant_data(experiment)
-        services.record_audit(
-            experiment, AuditEvent.Action.PURGE, actor=request.user,
-            target="test-phase data", request=request, sessions=purged.sessions,
-        )
-    else:
-        ParticipantSession.objects.filter(
-            experiment=experiment, is_preview=True
-        ).update(is_preview=False)
-    experiment.state = Experiment.State.ACTIVE
-    # The confirm page the user just submitted IS the confirmation the model
-    # guard asks for (same bypass the admin activate view uses).
-    experiment._activate_confirmed = True
-    experiment.save(update_fields=["state"])
-    services.record_audit(
-        experiment, AuditEvent.Action.ACTIVATE, actor=request.user,
-        target=experiment.slug, request=request,
+    purged = activate_from_test(
+        experiment, purge=request.POST.get("test_data") == "purge"
     )
-    if purge:
+    if purged is not None:
+        _audit(request, experiment, "test-phase data",
+               action=AuditEvent.Action.PURGE, sessions=purged.sessions)
+    _audit(request, experiment, experiment.slug,
+           action=AuditEvent.Action.ACTIVATE)
+    if purged is not None:
         messages.success(
             request,
             f"Activated '{experiment.name}' and removed the test-phase data "
@@ -421,11 +415,7 @@ def study_state_change(request, slug, action):
                     messages.error(request, msg)
             return redirect(request.path)
         experiment.save(update_fields=["state"])
-        services.record_audit(
-            experiment, AuditEvent.Action.EDIT, actor=request.user,
-            target="state", request=request,
-            from_state=old_state, to_state=target,
-        )
+        _audit(request, experiment, "state", from_state=old_state, to_state=target)
         messages.success(
             request,
             f"'{experiment.name}' is now {experiment.get_state_display().lower()}.",
@@ -490,8 +480,6 @@ def stimuli_overview(request, slug):
 
 @login_required
 def condition_edit(request, slug, pk=None):
-    from experiments.models import Condition
-
     experiment = _editable_study_or_404(request, slug)
     instance = (
         get_object_or_404(Condition, pk=pk, experiment=experiment)
@@ -504,11 +492,8 @@ def condition_edit(request, slug, pk=None):
         form = ConditionForm(request.POST, instance=instance)
         if form.is_valid():
             form.save()
-            services.record_audit(
-                experiment, AuditEvent.Action.EDIT, actor=request.user,
-                target="condition", request=request,
-                name=form.instance.name, created=pk is None,
-            )
+            _audit(request, experiment, "condition",
+                   name=form.instance.name, created=pk is None)
             messages.success(
                 request,
                 f"Condition '{form.instance.name}' "
@@ -531,8 +516,6 @@ def condition_edit(request, slug, pk=None):
 
 @login_required
 def condition_delete(request, slug, pk):
-    from experiments.models import Condition
-
     experiment = _editable_study_or_404(request, slug)
     if request.method != "POST":
         return redirect("studio:stimuli", slug=slug)
@@ -541,18 +524,13 @@ def condition_delete(request, slug, pk):
     condition = get_object_or_404(Condition, pk=pk, experiment=experiment)
     name = condition.name
     condition.delete()
-    services.record_audit(
-        experiment, AuditEvent.Action.EDIT, actor=request.user,
-        target="condition", request=request, name=name, deleted=True,
-    )
+    _audit(request, experiment, "condition", name=name, deleted=True)
     messages.success(request, f"Condition '{name}' and its stimuli were deleted.")
     return redirect("studio:stimuli", slug=slug)
 
 
 @login_required
 def stimulus_edit(request, slug, pk=None):
-    from experiments.models import Stimulus
-
     experiment = _editable_study_or_404(request, slug)
     instance = (
         get_object_or_404(Stimulus, pk=pk, condition__experiment=experiment)
@@ -567,12 +545,9 @@ def stimulus_edit(request, slug, pk=None):
         )
         if form.is_valid():
             form.save()
-            services.record_audit(
-                experiment, AuditEvent.Action.EDIT, actor=request.user,
-                target="stimulus", request=request,
-                title=form.instance.title or str(form.instance.pk),
-                kind=form.instance.kind, created=pk is None,
-            )
+            _audit(request, experiment, "stimulus",
+                   title=form.instance.title or str(form.instance.pk),
+                   kind=form.instance.kind, created=pk is None)
             messages.success(
                 request,
                 f"Stimulus {'created' if pk is None else 'updated'}.",
@@ -600,8 +575,6 @@ def stimulus_edit(request, slug, pk=None):
 
 @login_required
 def stimulus_delete(request, slug, pk):
-    from experiments.models import Stimulus
-
     experiment = _editable_study_or_404(request, slug)
     if request.method != "POST":
         return redirect("studio:stimuli", slug=slug)
@@ -610,10 +583,7 @@ def stimulus_delete(request, slug, pk):
     stimulus = get_object_or_404(Stimulus, pk=pk, condition__experiment=experiment)
     title = stimulus.title or str(stimulus.pk)
     stimulus.delete()
-    services.record_audit(
-        experiment, AuditEvent.Action.EDIT, actor=request.user,
-        target="stimulus", request=request, title=title, deleted=True,
-    )
+    _audit(request, experiment, "stimulus", title=title, deleted=True)
     messages.success(request, f"Stimulus '{title}' was deleted.")
     return redirect("studio:stimuli", slug=slug)
 
@@ -755,10 +725,7 @@ def study_build_save(request, slug):
             if pk not in kept_ids:
                 q.delete()
 
-    services.record_audit(
-        experiment, AuditEvent.Action.EDIT, actor=request.user,
-        target="questions", request=request, count=len(prepared),
-    )
+    _audit(request, experiment, "questions", count=len(prepared))
     # ids are returned in posted order so the builder can adopt them on the
     # new cards (a second save then updates instead of re-creating).
     return JsonResponse(
@@ -844,10 +811,7 @@ def study_webhooks(request, slug):
             event = request.POST.get("event") or Webhook.Event.SESSION_COMPLETED
             if url and event in dict(Webhook.Event.choices):
                 Webhook.objects.create(experiment=experiment, url=url, event=event)
-                services.record_audit(
-                    experiment, AuditEvent.Action.EDIT, actor=request.user,
-                    target="webhook", request=request,
-                )
+                _audit(request, experiment, "webhook")
                 messages.success(request, "Webhook added.")
             else:
                 messages.error(request, "Enter a valid URL and event.")
@@ -1026,11 +990,8 @@ def _include_pii(request) -> bool:
 
 
 def _audit_export(request, experiment, target):
-    services.record_audit(
-        experiment, AuditEvent.Action.EXPORT,
-        actor=request.user, target=target, request=request,
-        include_pii=_include_pii(request),
-    )
+    _audit(request, experiment, target, action=AuditEvent.Action.EXPORT,
+           include_pii=_include_pii(request))
 
 
 @login_required

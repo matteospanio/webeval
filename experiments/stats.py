@@ -16,7 +16,9 @@ import numpy as np
 from django.db.models import Count
 
 from experiments.models import Experiment, Question, Stimulus
-from survey.models import PairAssignment, ParticipantSession, Response
+from survey.models import ParticipantSession, Response
+
+from experiments.queries import real_pair_assignments, real_responses, real_sessions
 
 
 @dataclass
@@ -104,12 +106,7 @@ def experiment_counts(experiment: Experiment) -> ExperimentCounts:
 
 def mean_listen_duration_ms(experiment: Experiment) -> float | None:
     """Mean ``listen_duration_ms`` across completed sessions, or None if empty."""
-    qs = (
-        ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False, is_preview=False
-        )
-        .values("assignments__listen_duration_ms")
-    )
+    qs = real_sessions(experiment).values("assignments__listen_duration_ms")
     values = [
         row["assignments__listen_duration_ms"]
         for row in qs
@@ -118,6 +115,24 @@ def mean_listen_duration_ms(experiment: Experiment) -> float | None:
     if not values:
         return None
     return float(mean(values))
+
+
+def resolve_winner(pair, answer) -> tuple[str, str] | None:
+    """Map a pairwise choice answer to ``(winner_model, loser_model)`` condition
+    names, or ``None`` for any non-A/B answer.
+
+    ``"A"`` always denotes the sample shown on the **left**; ``pair.position_a``
+    says whether ``stimulus_a``'s condition is the left or right one. Shared by
+    the win-count and Bradley–Terry aggregations so the resolution can't drift.
+    """
+    model_a = pair.stimulus_a.condition.name
+    model_b = pair.stimulus_b.condition.name
+    left, right = (model_a, model_b) if pair.position_a == "left" else (model_b, model_a)
+    if answer == "A":
+        return left, right
+    if answer == "B":
+        return right, left
+    return None
 
 
 @dataclass
@@ -129,11 +144,7 @@ class PairwiseCounts:
 
 def pairwise_experiment_stats(experiment: Experiment) -> PairwiseCounts:
     """Aggregate pairwise stats: how many pairs shown, per-model win rates."""
-    pairs = PairAssignment.objects.filter(
-        session__experiment=experiment,
-        session__submitted_at__isnull=False,
-        session__is_preview=False,
-    ).select_related(
+    pairs = real_pair_assignments(experiment).select_related(
         "stimulus_a__condition", "stimulus_b__condition"
     )
 
@@ -150,15 +161,10 @@ def pairwise_experiment_stats(experiment: Experiment) -> PairwiseCounts:
 
         for resp in pa.responses.select_related("question"):
             prompt = resp.question.prompt[:80]
-            answer = resp.get_answer()
-            # answer is "A" or "B" for pairwise choice questions
-            if answer == "A":
-                # A is the left stimulus
-                winner = model_a if pa.position_a == "left" else model_b
-            elif answer == "B":
-                winner = model_b if pa.position_a == "left" else model_a
-            else:
+            outcome = resolve_winner(pa, resp.get_answer())
+            if outcome is None:
                 continue
+            winner, _loser = outcome
             wins.setdefault(winner, {})
             wins[winner][prompt] = wins[winner].get(prompt, 0) + 1
 
@@ -317,11 +323,7 @@ def bradley_terry_analysis(experiment: Experiment) -> BradleyTerryStats:
     per evaluation question.
     """
     pairs = (
-        PairAssignment.objects.filter(
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            session__is_preview=False,
-        )
+        real_pair_assignments(experiment)
         .select_related("stimulus_a__condition", "stimulus_b__condition")
         .prefetch_related("responses__question")
     )
@@ -343,16 +345,10 @@ def bradley_terry_analysis(experiment: Experiment) -> BradleyTerryStats:
             qid = resp.question_id
             if qid not in question_labels:
                 question_labels[qid] = resp.question.prompt[:80]
-            answer = resp.get_answer()
-            if answer == "A":
-                winner = model_a if pa.position_a == "left" else model_b
-                loser = model_b if pa.position_a == "left" else model_a
-            elif answer == "B":
-                winner = model_b if pa.position_a == "left" else model_a
-                loser = model_a if pa.position_a == "left" else model_b
-            else:
+            outcome = resolve_winner(pa, resp.get_answer())
+            if outcome is None:
                 continue
-            comparisons.setdefault(qid, []).append((winner, loser))
+            comparisons.setdefault(qid, []).append(outcome)
 
     if not models_set:
         return BradleyTerryStats()
@@ -414,12 +410,8 @@ def per_stimulus_mean_ratings(experiment: Experiment) -> list[dict[str, Any]]:
 
     rows: list[dict[str, Any]] = []
     for stim in stimuli:
-        responses = Response.objects.filter(
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            session__is_preview=False,
-            stimulus=stim,
-            question__in=rating_questions,
+        responses = real_responses(
+            experiment, stimulus=stim, question__in=rating_questions
         ).values_list("answer_value", flat=True)
         numeric: list[float] = []
         for raw in responses:

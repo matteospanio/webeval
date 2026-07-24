@@ -22,7 +22,7 @@ from statistics import mean, median, pstdev
 from typing import Any
 
 from experiments.models import Experiment, Question
-from survey.models import Response
+from experiments.queries import decoded_answers, real_responses
 
 
 @dataclass
@@ -40,19 +40,10 @@ class QuestionResult:
 
 def _answer_values(experiment: Experiment, question: Question) -> list[Any]:
     """Decoded answers for a question across real (submitted, non-preview) sessions."""
-    raws = Response.objects.filter(
-        question=question,
-        session__experiment=experiment,
-        session__submitted_at__isnull=False,
-        session__is_preview=False,
-    ).values_list("answer_value", flat=True)
-    values: list[Any] = []
-    for raw in raws:
-        try:
-            values.append(json.loads(raw))
-        except (TypeError, ValueError):
-            continue
-    return values
+    raws = real_responses(experiment, question=question).values_list(
+        "answer_value", flat=True
+    )
+    return decoded_answers(raws)
 
 
 def _numeric_stats(values: list[Any]) -> dict | None:
@@ -89,12 +80,8 @@ def _distribution_rows(counts: Counter, labels: list[str], total: int) -> list[d
 
 def _median_response_time_ms(experiment: Experiment, question: Question) -> float | None:
     times = list(
-        Response.objects.filter(
-            question=question,
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            session__is_preview=False,
-            elapsed_ms__isnull=False,
+        real_responses(
+            experiment, question=question, elapsed_ms__isnull=False
         ).values_list("elapsed_ms", flat=True)
     )
     return median(times) if times else None
@@ -255,12 +242,9 @@ def _segment_label(segment_by: str, raw_seg) -> str:
 
 def _segmented_values(experiment, question, segment_by) -> dict[str, list[Any]]:
     field = _SEGMENTS[segment_by][0]
-    raws = Response.objects.filter(
-        question=question,
-        session__experiment=experiment,
-        session__submitted_at__isnull=False,
-        session__is_preview=False,
-    ).values_list("answer_value", field)
+    raws = real_responses(experiment, question=question).values_list(
+        "answer_value", field
+    )
     groups: dict[str, list[Any]] = {}
     for raw, seg in raws:
         try:

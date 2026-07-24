@@ -18,7 +18,9 @@ import csv
 from django.http import HttpResponse
 
 from experiments.models import Experiment, Question
-from survey.models import ParticipantSession, Response, SurveyEvent
+from survey.models import Response, SurveyEvent
+
+from experiments.queries import real_responses, real_sessions
 
 
 ANSWER_FIELDNAMES = [
@@ -59,12 +61,7 @@ def write_answers_csv(
     writer.writeheader()
 
     rows = (
-        Response.objects.filter(
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            session__is_preview=False,
-            stimulus__isnull=False,
-        )
+        real_responses(experiment, stimulus__isnull=False)
         .select_related("session", "stimulus", "stimulus__condition", "question")
         .order_by("session__id", "stimulus__sort_order", "question__sort_order")
     )
@@ -74,11 +71,8 @@ def write_answers_csv(
     # Pre-compute assignment listen durations per (session, stimulus) so we
     # don't issue one query per row.
     assignment_map: dict[tuple[str, int], int] = {}
-    for sess_id, stim_id, ms in (
-        ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False, is_preview=False
-        )
-        .values_list("id", "assignments__stimulus_id", "assignments__listen_duration_ms")
+    for sess_id, stim_id, ms in real_sessions(experiment).values_list(
+        "id", "assignments__stimulus_id", "assignments__listen_duration_ms"
     ):
         if stim_id is not None:
             assignment_map[(str(sess_id), stim_id)] = ms or 0
@@ -128,9 +122,7 @@ def write_demographics_csv(
     writer = csv.DictWriter(response, fieldnames=fieldnames)
     writer.writeheader()
 
-    sessions = ParticipantSession.objects.filter(
-        experiment=experiment, submitted_at__isnull=False, is_preview=False
-    ).order_by("started_at")
+    sessions = real_sessions(experiment).order_by("started_at")
     if exclude_flagged:
         sessions = sessions.filter(flags=[])
     for session in sessions:
@@ -184,12 +176,7 @@ def iter_pairwise_answers(experiment: Experiment):
     row-shaping logic in a single helper keeps those two consumers in sync.
     """
     rows = (
-        Response.objects.filter(
-            session__experiment=experiment,
-            session__submitted_at__isnull=False,
-            session__is_preview=False,
-            pair_assignment__isnull=False,
-        )
+        real_responses(experiment, pair_assignment__isnull=False)
         .select_related(
             "session",
             "pair_assignment",
@@ -271,11 +258,7 @@ def write_completion_codes_csv(
     """One row per completed session for crowdsourcing payment reconciliation."""
     writer = csv.DictWriter(response, fieldnames=COMPLETION_CODE_FIELDNAMES)
     writer.writeheader()
-    for s in (
-        ParticipantSession.objects.filter(
-            experiment=experiment, submitted_at__isnull=False, is_preview=False
-        ).order_by("started_at")
-    ):
+    for s in real_sessions(experiment).order_by("started_at"):
         writer.writerow(
             {
                 "session_id": str(s.id),

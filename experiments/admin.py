@@ -37,7 +37,7 @@ from .csv_exports import (
     demographics_csv_response,
     pairwise_answers_csv_response,
 )
-from .data_ops import purge_participant_data
+from .data_ops import activate_from_test, purge_participant_data
 from .exports import build_experiment_archive
 from .forms import QuestionAdminForm, QuestionTemplateAdminForm
 from .imports import import_experiment_archive
@@ -561,29 +561,17 @@ class ExperimentAdmin(OwnerScopedAdminMixin, UnfoldModelAdmin):
                     level=messages.ERROR,
                 )
                 return HttpResponseRedirect(request.path)
-            purge = request.POST.get("purge") == "on"
-            purged_counts = None
-            if purge:
-                purged_counts = purge_participant_data(experiment)
+            # Shared with the studio lifecycle view so the purge-or-promote
+            # data handling can never drift between the two entry points.
+            purged_counts = activate_from_test(
+                experiment, purge=request.POST.get("purge") == "on"
+            )
+            if purged_counts is not None:
                 record_audit(
                     experiment, AuditEvent.Action.PURGE, actor=request.user,
                     target="test-phase data", request=request,
                     sessions=purged_counts.sessions,
                 )
-            else:
-                # Keep test-phase data: promote those preview sessions into the
-                # real dataset so they count in stats and exports.
-                from survey.models import ParticipantSession
-
-                ParticipantSession.objects.filter(
-                    experiment=experiment, is_preview=True
-                ).update(is_preview=False)
-            experiment.state = Experiment.State.ACTIVE
-            # Bypass the clean() guard that blocks direct TEST→ACTIVE via
-            # the normal change form: we've just walked the user through
-            # the confirmation page, so the transition is intentional.
-            experiment._activate_confirmed = True
-            experiment.save(update_fields=["state"])
             record_audit(
                 experiment, AuditEvent.Action.ACTIVATE, actor=request.user,
                 target=experiment.slug, request=request,

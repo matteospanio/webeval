@@ -54,3 +54,27 @@ def purge_participant_data(experiment: Experiment) -> PurgeCounts:
         sessions.delete()
 
     return counts
+
+
+def activate_from_test(experiment: Experiment, *, purge: bool) -> PurgeCounts | None:
+    """Promote a TEST experiment to ACTIVE, handling its preview data.
+
+    When ``purge`` is true the test-phase data is deleted (returns the
+    :class:`PurgeCounts`); otherwise the preview sessions are promoted into the
+    real dataset (``is_preview=False``) and ``None`` is returned. Bypasses the
+    ``clean()`` TEST→ACTIVE guard via ``_activate_confirmed`` because the caller
+    has already walked the user through an explicit confirmation. The audit
+    trail is the caller's responsibility (``experiments`` must not import
+    ``accounts``); both the studio view and the admin activate view call this so
+    the data handling can never drift between them.
+    """
+    with transaction.atomic():
+        purged = purge_participant_data(experiment) if purge else None
+        if not purge:
+            ParticipantSession.objects.filter(
+                experiment=experiment, is_preview=True
+            ).update(is_preview=False)
+        experiment.state = Experiment.State.ACTIVE
+        experiment._activate_confirmed = True
+        experiment.save(update_fields=["state"])
+    return purged

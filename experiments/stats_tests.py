@@ -21,7 +21,7 @@ from collections import Counter
 from statistics import mean
 
 from experiments.models import Experiment, Question
-from survey.models import Response
+from experiments.queries import real_responses
 
 _TINY = 1e-300
 _EPS = 1e-14
@@ -183,12 +183,8 @@ def chi_square_test(observed: list[list[int]]) -> dict | None:
 
 
 def _grouped_answers(experiment: Experiment, question: Question) -> dict[str, list]:
-    rows = Response.objects.filter(
-        question=question,
-        session__experiment=experiment,
-        session__submitted_at__isnull=False,
-        session__is_preview=False,
-        stimulus__isnull=False,
+    rows = real_responses(
+        experiment, question=question, stimulus__isnull=False
     ).values_list("stimulus__condition__name", "answer_value")
     groups: dict[str, list] = {}
     for cond, raw in rows:

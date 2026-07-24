@@ -28,6 +28,18 @@ from .csv_exports import iter_pairwise_answers
 from .models import Condition, Experiment, Prompt, Stimulus
 
 
+def _experiment_or_deny(request, slug, *, require=can_view, verb="access"):
+    """Fetch an experiment (404 if absent) and enforce an object-level
+    permission, raising DRF ``PermissionDenied`` otherwise. Collapses the
+    fetch-then-check pattern repeated across the API endpoints."""
+    experiment = get_object_or_404(Experiment, slug=slug)
+    if not require(request.user, experiment):
+        raise PermissionDenied(
+            f"Your API key's user does not have {verb} access to this experiment."
+        )
+    return experiment
+
+
 class StimulusUploadSerializer(serializers.Serializer):
     condition = serializers.CharField(max_length=200)
     prompt_group = serializers.CharField(
@@ -88,11 +100,7 @@ class StimulusUploadView(LogAPIKeyUsageMixin, APIView):
     permission_classes = [HasScope("stimuli:upload")]
 
     def post(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not can_edit(request.user, experiment):
-            raise PermissionDenied(
-                "Your API key's user does not have edit access to this experiment."
-            )
+        experiment = _experiment_or_deny(request, slug, require=can_edit, verb="edit")
         if experiment.state != Experiment.State.DRAFT:
             return Response(
                 {
@@ -194,11 +202,7 @@ class PromptUploadView(LogAPIKeyUsageMixin, APIView):
     permission_classes = [HasScope("prompts:upload")]
 
     def post(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not can_edit(request.user, experiment):
-            raise PermissionDenied(
-                "Your API key's user does not have edit access to this experiment."
-            )
+        experiment = _experiment_or_deny(request, slug, require=can_edit, verb="edit")
         if experiment.state != Experiment.State.DRAFT:
             return Response(
                 {
@@ -278,11 +282,7 @@ class PairwiseAnswersView(LogAPIKeyUsageMixin, APIView):
     permission_classes = [HasScope("pairwise-answers:read")]
 
     def get(self, request, slug: str):
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not can_view(request.user, experiment):
-            raise PermissionDenied(
-                "Your API key's user does not have access to this experiment."
-            )
+        experiment = _experiment_or_deny(request, slug)
         return Response(list(iter_pairwise_answers(experiment)))
 
 
@@ -297,21 +297,12 @@ class AnswersView(LogAPIKeyUsageMixin, APIView):
     permission_classes = [HasScope("answers:read")]
 
     def get(self, request, slug: str):
-        from survey.models import Response as SurveyResponse
+        from experiments.queries import real_responses
 
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not can_view(request.user, experiment):
-            raise PermissionDenied(
-                "Your API key's user does not have access to this experiment."
-            )
+        experiment = _experiment_or_deny(request, slug)
         include_pii = request.query_params.get("include_pii") in ("1", "true", "on")
         rows = (
-            SurveyResponse.objects.filter(
-                session__experiment=experiment,
-                session__submitted_at__isnull=False,
-                session__is_preview=False,
-                stimulus__isnull=False,
-            )
+            real_responses(experiment, stimulus__isnull=False)
             .select_related("session", "stimulus__condition", "question")
             .order_by("session__id", "stimulus__sort_order", "question__sort_order")
         )
@@ -349,11 +340,7 @@ class ResultsView(LogAPIKeyUsageMixin, APIView):
 
         from experiments.analysis import experiment_question_analysis
 
-        experiment = get_object_or_404(Experiment, slug=slug)
-        if not can_view(request.user, experiment):
-            raise PermissionDenied(
-                "Your API key's user does not have access to this experiment."
-            )
+        experiment = _experiment_or_deny(request, slug)
         return Response(
             [asdict(r) for r in experiment_question_analysis(experiment)]
         )
